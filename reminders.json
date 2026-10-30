@@ -20,5 +20,16 @@
     "repeat": "none",
     "completed": true,
     "created_at": 1793354223.0463545
+  },
+  {
+    "id": "timer_0b73ce",
+    "type": "timer",
+    "content": "出去玩",
+    "target_time": 1793354929.2727299,
+    "target_time_str": "2026-10-30 18:08:49",
+    "display_str": "0分10秒倒计时: 出去玩",
+    "repeat": "none",
+    "completed": true,
+    "created_at": 1793354919.272779
   }
 ]

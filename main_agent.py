@@ -15,6 +15,7 @@ import sound_effects
 from face_tracker import FaceTracker
 from idle_fsm import IdleFSM
 from skill_manager import SkillManager
+from evolution_engine import EvolutionEngine
 
 def parse_llm_json(content: str, reasoning: str = "") -> dict:
     """
@@ -163,6 +164,9 @@ def on_hardware_alarm(rem):
     hal.display_face(eyes.render_eyes("NORMAL"))
 
 skill_mgr.register_trigger_callback(on_hardware_alarm)
+
+# 初始化元认知自进化中枢 (生物钟作息学习 + 海马体夜间反思)
+evolution_engine = EvolutionEngine(memory_manager=mem, skill_manager=skill_mgr)
 api_key = cfg.get("api_key", "")
 base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
 llm_model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
@@ -318,8 +322,12 @@ def process_interaction(user_text: str):
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             }
+            # 记录作息时间戳并融合生物钟/反思画像
+            evolution_engine.record_interaction()
+            augmented_sys = evolution_engine.augment_prompt_with_evolution(sys_prompt)
+
             # 组装包含记忆档案与短期历史的消息链
-            messages = mem.get_messages_for_llm(user_text, sys_prompt)
+            messages = mem.get_messages_for_llm(user_text, augmented_sys)
             payload = {
                 "model": llm_model,
                 "messages": messages,

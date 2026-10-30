@@ -24,6 +24,7 @@
    * 语音合成与音画同步引擎 (`tts_engine.py`)
    * 双层认知与持久化记忆中枢 (`memory_manager.py`)
    * 轻量技能与动作自进化中枢 (`skill_manager.py`)
+   * 元认知自进化与海马体反思中枢 (`evolution_engine.py`)
    * 具身交互多模态主中枢 (`main_agent.py`)
    * 3D WebGL 浏览器仿真系统 (`web_simulator.html` & `web_sim_server.py`)
    * 局域网远程代播服务 (`remote_server.py`)
@@ -739,8 +740,31 @@ class SkillManager:
             return self.evolve_action(args.get("name"), args.get("keyframes"), args.get("description"))
 ```
 
-### 11. 具身多模态交互主中枢 (`main_agent.py`)
-整合感知、认知中枢、P0~P3 生体灵动中枢、Skill 技能调用、大模型推理与音画同步执行的完整事件主循环：
+### 11. 元认知自进化与海马体反思中枢 (`evolution_engine.py`)
+赋予机器人长期自我学习主人生活规律与深度情感沉淀的仿生机制：
+- **生物钟作息自学习 (Circadian Tracker)**:
+  - 自动打点每日互动时间分布（`circadian_profile.json`），精准归纳主人通常的早起时间、午后犯困时间与深夜睡前时间；
+  - 在闲置或特定作息节点，自适应触发针对性具身关怀（如 14:00 提醒喝水活动、23:00 催促早睡）。
+- **海马体夜间反思与记忆升华 (Nightly Reflection)**:
+  - 模拟人类深度睡眠中的记忆固化过程，异步调用轻量云端推理，过滤日常琐碎对话，浓缩提炼出 1~2 条深层长效事实（如身体不适、饮食忌口、正在冲刺的交付任务）永久融入 `memory.json`；
+  - 沉淀次日清晨主动关怀切入点，并自主对自身陪伴性格进行温和微调。
+- **晨间管家首次问候反射 (Morning Briefing Workflow)**:
+  - 每天早晨（06:00~11:00）主人的第一声问候触发专属晨报反射：自动串联温暖问候、昨夜关怀追问与今日闹钟日程汇总播报。
+
+```python
+# evolution_engine.py 核心反思与提示词增强
+class EvolutionEngine:
+    def trigger_reflection(self, api_key: str, base_url: str, model: str) -> dict:
+        # 回顾最近 12 轮短时对话，云端提炼深层认知事实
+        # 写入 memory.json 的 daily_reflection 与 facts
+        # ...
+    def augment_prompt_with_evolution(self, base_prompt: str) -> str:
+        # 动态拼装：主人推算作息 + 昨日反思成果 + 晨间首次问候指示
+        # ...
+```
+
+### 12. 具身多模态交互主中枢 (`main_agent.py`)
+整合感知、认知中枢、P0~P3 生体灵动中枢、Skill 技能调用、元认知自进化、大模型推理与音画同步执行的完整事件主循环：
 
 ```python
 # 运行具身主中枢
@@ -754,7 +778,7 @@ python3 main_agent.py
 - **高弹性 5 级 JSON 解析容错**: 彻底解决 SenseNova / DeepSeek 等大模型偶发输出 Markdown 代码块、思考推理过程或纯文本时的解析崩溃，保证 100% 稳定生成连续动作链。
 - **音视频时钟对齐**: 边讲话边根据真实音频时长自适应拉伸肢体动作与面部表情。
 
-### 12. 3D WebGL 浏览器仿真系统 (`web_simulator.html` & `web_sim_server.py`)
+### 13. 3D WebGL 浏览器仿真系统 (`web_simulator.html` & `web_sim_server.py`)
 无需任何物理硬件，直接在 PC 浏览器中进行全交互仿真：
 1. **启动仿真服务器**:
    ```bash
@@ -766,12 +790,13 @@ python3 main_agent.py
    - **面部 3D 动态材质贴合**: 2.4寸 ST7789 屏幕作为动态 CanvasTexture 直接贴合在 3D 头部正面，随头部俯仰旋转实时呈现 12 款微表情、高光与眨眼；右下角提供可折叠画中画特写。
    - **视觉注视追踪开关**: 顶部状态栏提供 `[👁️ 注视追踪: 关/开]` 一键切换，开启后支持鼠标视线追踪或摄像头人脸追踪。
    - **闹钟日程与自进化动作看板**: 实时展示正在倒计时中的定时器与闹钟，支持一键取消；展示机器人自主进化出的新动作徽章，支持点击演练。
+   - **🌱 元认知自进化看板**: 展示根据真实互动统计推算的主人作息规律画像（早起/犯困/睡前），展示最近夜间反思摘要，支持一键触发记忆升华反思。
    - **到点主动打断抢占弹窗**: 闹钟到点时，3D 机器人猛然惊醒抬头、播放唤醒和弦音并全屏弹出打断提醒与语音播报。
    - **麦克风语音直连**: 点击麦克风说话，前端直录 16kHz PCM，后端自动调用百度 ASR 转写。
    - **高拟真 Edge-TTS 广播**: 后端下发语音，前端网页高保真播放，并实现毫秒级动作同步。
    - **记忆看板**: 实时展示主人档案、偏好事实集、亲密等级与对话轮次。
 
-### 13. 局域网远程代播服务 (`remote_server.py`)
+### 14. 局域网远程代播服务 (`remote_server.py`)
 ```python
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks
@@ -815,7 +840,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-### 14. OTA 自动化静默升级 (`ota_updater.py`)
+### 15. OTA 自动化静默升级 (`ota_updater.py`)
 ```python
 import os
 import subprocess

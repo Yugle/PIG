@@ -13,6 +13,7 @@ import sound_effects
 from face_tracker import FaceTracker
 from idle_fsm import IdleFSM
 from skill_manager import SkillManager
+from evolution_engine import EvolutionEngine
 
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -20,6 +21,7 @@ mem = MemoryManager()
 face_tracker = FaceTracker(enabled=False)
 idle_fsm = IdleFSM()
 skill_mgr = SkillManager(storage_dir=DIRECTORY)
+evolution_engine = EvolutionEngine(DIRECTORY, memory_manager=mem, skill_manager=skill_mgr)
 
 # 待派发给前端 Web 仿真视窗的到点闹钟事件队列
 pending_web_alarms = []
@@ -164,6 +166,19 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "ok", "events": events}, ensure_ascii=False).encode("utf-8"))
             return
 
+        # 获取生物钟作息与反思元认知数据
+        if self.path == "/api/circadian":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            data = {
+                "status": "ok",
+                "circadian": evolution_engine.circadian_data,
+                "reflection": mem.long_term_data.get("daily_reflection", {})
+            }
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            return
+
         # 获取非语言萌趣程序化音效流
         if self.path.startswith("/api/sounds"):
             from urllib.parse import parse_qs, urlparse
@@ -277,7 +292,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             with open(in_file, "wb") as f:
                 f.write(raw_audio)
 
-            # ffmpeg 自动识别浏览器录音格式 (webm/wav/ogg/mp4) 并转成 16k 单声道 wav
             try:
                 subprocess.run(
                     ["ffmpeg", "-y", "-i", in_file, "-ar", "16000", "-ac", "1", wav_file],
@@ -297,6 +311,19 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "text": text}, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 手动/夜间触发海马体深度记忆升华反思
+        if self.path == "/api/reflection/trigger":
+            cfg = load_config()
+            api_key = cfg.get("api_key", "")
+            base_url = cfg.get("base_url", "https://token.sensenova.cn/v1")
+            model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
+            res = evolution_engine.trigger_reflection(api_key, base_url, model)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
             return
 
         if self.path == "/api/chat":
@@ -395,8 +422,12 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json"
                     }
+                    # 记录作息时间戳并融合生物钟/反思画像
+                    evolution_engine.record_interaction()
+                    augmented_sys = evolution_engine.augment_prompt_with_evolution(sys_prompt)
+
                     # 组装带记忆的系统提示词与上下文
-                    messages = mem.get_messages_for_llm(user_text, sys_prompt)
+                    messages = mem.get_messages_for_llm(user_text, augmented_sys)
                     payload = {
                         "model": model,
                         "messages": messages,

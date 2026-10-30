@@ -553,6 +553,18 @@
           </div>
         </div>
 
+        <!-- 🌱 元认知自进化与海马体反思 (Evolution & Reflection) -->
+        <div class="control-section">
+          <div class="section-title">
+            <span>🌱 元认知自进化看板</span>
+            <button class="btn" style="padding:2px 8px; font-size:0.7rem; color:#a371f7; border-color:rgba(163, 113, 247, 0.4); background:rgba(163, 113, 247, 0.1);" onclick="triggerNightlyReflection()" id="reflectBtn">🌙 触发记忆升华反思</button>
+          </div>
+          <div style="font-size:0.78rem; display:flex; flex-direction:column; gap:6px; color:var(--text-sub); background:#161b22; padding:6px 10px; border-radius:6px; border:1px solid #30363d;">
+            <div>🕒 <strong style="color:var(--cyan);">推算作息习惯</strong>: <span id="habitsDesc" style="color:var(--text-main);">09:00 起床 · 14:00 易疲劳 · 23:00 睡前</span></div>
+            <div>🧠 <strong style="color:#a371f7;">最近记忆升华</strong>: <span id="reflectionDesc" style="color:#7ee787;">尚未进行夜间反思</span></div>
+          </div>
+        </div>
+
         <!-- 具身对话 -->
         <div class="control-section" style="flex:1;">
           <div class="section-title">具身伴侣对话与 TTS 语音</div>
@@ -1486,6 +1498,53 @@
     setInterval(pollAlarmEvents, 1000);
     fetchReminders();
     fetchEvolvedActions();
+
+    // ==========================================
+    // 2.8 🌱 生物钟作息与海马体反思管理
+    // ==========================================
+    async function fetchCircadianAndReflection() {
+      try {
+        const resp = await fetch("/api/circadian");
+        if (resp.ok) {
+          const data = await resp.json();
+          const habits = (data.circadian && data.circadian.learned_habits) || { wake_hour: 9, slump_hour: 14, sleep_hour: 23 };
+          document.getElementById("habitsDesc").innerText = `${habits.wake_hour}:00 起床 · ${habits.slump_hour}:00 易疲劳 · ${habits.sleep_hour}:00 睡前`;
+
+          const ref = data.reflection;
+          if (ref && ref.summary) {
+            document.getElementById("reflectionDesc").innerText = `[${ref.date || ''}] ${ref.summary} (重点: ${ref.next_day_care || '自然相伴'})`;
+          }
+        }
+      } catch (e) {
+        console.warn("拉取生物钟数据失败:", e);
+      }
+    }
+
+    async function triggerNightlyReflection() {
+      const btn = document.getElementById("reflectBtn");
+      btn.innerText = "⏳ 正在海马体反思升华...";
+      btn.disabled = true;
+
+      try {
+        const resp = await fetch("/api/reflection/trigger", { method: "POST" });
+        const data = await resp.json();
+        if (data.status === "ok" && data.result) {
+          alert(`✨ 【夜间记忆升华反思完成】\n• 认知提炼: ${data.result.reflection_summary}\n• 永久事实新增: ${data.result.new_facts && data.result.new_facts.length ? data.result.new_facts.join('、') : '保持现状'}\n• 明日关怀重点: ${data.result.next_day_care}\n• 性格微调导向: ${data.result.persona_adaptation}`);
+          updateMemoryBadge();
+          fetchCircadianAndReflection();
+        } else {
+          alert("反思未生成新记忆或对话轮次不足: " + (data.msg || "无变更"));
+        }
+      } catch (e) {
+        alert("反思请求异常: " + e.message);
+      } finally {
+        btn.innerText = "🌙 触发记忆升华反思";
+        btn.disabled = false;
+      }
+    }
+
+    setInterval(fetchCircadianAndReflection, 5000);
+    fetchCircadianAndReflection();
         fetchReminders();
         fetchEvolvedActions();
       } catch (err) {
@@ -1688,6 +1747,53 @@
     setInterval(pollAlarmEvents, 1000);
     fetchReminders();
     fetchEvolvedActions();
+
+    // ==========================================
+    // 2.8 🌱 生物钟作息与海马体反思管理
+    // ==========================================
+    async function fetchCircadianAndReflection() {
+      try {
+        const resp = await fetch("/api/circadian");
+        if (resp.ok) {
+          const data = await resp.json();
+          const habits = (data.circadian && data.circadian.learned_habits) || { wake_hour: 9, slump_hour: 14, sleep_hour: 23 };
+          document.getElementById("habitsDesc").innerText = `${habits.wake_hour}:00 起床 · ${habits.slump_hour}:00 易疲劳 · ${habits.sleep_hour}:00 睡前`;
+
+          const ref = data.reflection;
+          if (ref && ref.summary) {
+            document.getElementById("reflectionDesc").innerText = `[${ref.date || ''}] ${ref.summary} (重点: ${ref.next_day_care || '自然相伴'})`;
+          }
+        }
+      } catch (e) {
+        console.warn("拉取生物钟数据失败:", e);
+      }
+    }
+
+    async function triggerNightlyReflection() {
+      const btn = document.getElementById("reflectBtn");
+      btn.innerText = "⏳ 正在海马体反思升华...";
+      btn.disabled = true;
+
+      try {
+        const resp = await fetch("/api/reflection/trigger", { method: "POST" });
+        const data = await resp.json();
+        if (data.status === "ok" && data.result) {
+          alert(`✨ 【夜间记忆升华反思完成】\n• 认知提炼: ${data.result.reflection_summary}\n• 永久事实新增: ${data.result.new_facts && data.result.new_facts.length ? data.result.new_facts.join('、') : '保持现状'}\n• 明日关怀重点: ${data.result.next_day_care}\n• 性格微调导向: ${data.result.persona_adaptation}`);
+          updateMemoryBadge();
+          fetchCircadianAndReflection();
+        } else {
+          alert("反思未生成新记忆或对话轮次不足: " + (data.msg || "无变更"));
+        }
+      } catch (e) {
+        alert("反思请求异常: " + e.message);
+      } finally {
+        btn.innerText = "🌙 触发记忆升华反思";
+        btn.disabled = false;
+      }
+    }
+
+    setInterval(fetchCircadianAndReflection, 5000);
+    fetchCircadianAndReflection();
 
     // ==========================================
     // 3. 麦克风录音与百度 ASR 语音识别
