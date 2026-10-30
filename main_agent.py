@@ -56,16 +56,18 @@ tts = TTSEngine(
     api_key=cfg.get("custom_tts_api_key", "")
 )
 
-# 初始化 OpenAI 兼容大模型客户端
-try:
-    from openai import OpenAI
-    client = OpenAI(
-        api_key=cfg.get("api_key", "sk-mock"),
-        base_url=cfg.get("base_url", "https://api.deepseek.com")
-    )
-except ImportError:
-    client = None
-    print("⚠️ openai 库未安装，大模型思考推理功能将受限")
+import requests
+
+# 初始化 OpenAI 兼容大模型客户端 (优先 requests，降级支持 openai sdk)
+api_key = cfg.get("api_key", "")
+base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
+llm_model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
+client = None
+
+if api_key and "YOUR_LLM_API_KEY" not in api_key:
+    print(f"🧠 [大脑初始化] 已配置大模型: {llm_model} @ {base_url}")
+else:
+    print("ℹ️ [大脑初始化] 未检测到有效 API Key，将使用本地规则模式")
 
 # 音频与唤醒词模块初始化
 has_mic = False
@@ -136,26 +138,44 @@ def process_interaction(user_text: str):
     pan = 90
     tilt = 90
 
-    if client and cfg.get("api_key") and "YOUR_LLM_API_KEY" not in cfg.get("api_key"):
+    if api_key and "YOUR_LLM_API_KEY" not in api_key:
         try:
-            resp = client.chat.completions.create(
-                model=cfg.get("llm_model", "deepseek-chat"),
-                messages=[
+            url = f"{base_url}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": llm_model,
+                "messages": [
                     {"role": "system", "content": sys_prompt},
                     {"role": "user", "content": user_text}
-                ],
-                response_format={"type": "json_object"}
-            )
-            raw_content = resp.choices[0].message.content
-            res = json.loads(raw_content)
+                ]
+            }
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            if response.status_code == 200:
+                resp_json = response.json()
+                raw_content = resp_json["choices"][0]["message"]["content"].strip()
 
-            reply_text = res.get("reply", reply_text)
-            emotion = res.get("emotion", "NORMAL")
-            action = res.get("action", "NONE")
-            pan = res.get("pan", 90)
-            tilt = res.get("tilt", 90)
+                # 清理可能包含的 markdown 语法块 ```json ... ```
+                if raw_content.startswith("```"):
+                    raw_content = raw_content.split("```")[1]
+                    if raw_content.startswith("json"):
+                        raw_content = raw_content[4:]
+                    raw_content = raw_content.strip()
+
+                res = json.loads(raw_content)
+                reply_text = res.get("reply", reply_text)
+                emotion = res.get("emotion", "NORMAL")
+                action = res.get("action", "NONE")
+                pan = res.get("pan", 90)
+                tilt = res.get("tilt", 90)
+            else:
+                print(f"⚠️ [LLM 响应异常状态码 {response.status_code}]: {response.text}")
+                reply_text = "网络信号有些微弱，我没听清呢。"
+                emotion = "CONFUSED"
         except Exception as e:
-            print(f"⚠️ [LLM 推理异常]: {e}")
+            print(f"⚠️ [LLM 推理解析异常]: {e}")
             reply_text = "刚才信号闪了一下，我开小差了。"
             emotion = "CONFUSED"
     else:

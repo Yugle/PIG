@@ -773,7 +773,7 @@
       }
     }
 
-    function sendChat() {
+    async function sendChat() {
       const input = document.getElementById("chatInput");
       const text = input.value.trim();
       if (!text) return;
@@ -785,46 +785,37 @@
       userDiv.innerText = text;
       chatLogs.appendChild(userDiv);
 
-      // 规则决策/大模型交互
-      setTimeout(() => {
-        let reply = "我在听呢，有什么问题尽管问我吧！";
-        let action = "NONE";
-        let emotion = "NORMAL";
-        let pan = 90;
-        let tilt = 90;
+      const botDiv = document.createElement("div");
+      botDiv.className = "msg bot";
+      botDiv.innerText = "💭 商汤日日新大模型正在思考...";
+      chatLogs.appendChild(botDiv);
+      chatLogs.scrollTop = chatLogs.scrollHeight;
 
-        if (text.includes("你好") || text.includes("嗨") || text.includes("小猪")) {
-          reply = "主人你好呀！今天心情怎么样？很高兴见到你！";
-          emotion = "HAPPY";
-          action = "NOD";
-          tilt = 80;
-        } else if (text.includes("难过") || text.includes("累") || text.includes("不")) {
-          reply = "抱抱你，别难过啦，无论怎样我都会一直陪着你的。";
-          emotion = "CONFUSED";
-          action = "SHAKE";
-        } else if (text.includes("真棒") || text.includes("喜欢") || text.includes("可爱")) {
-          reply = "嘿嘿，听到你夸我，我的芯片温度都升高啦！";
-          emotion = "HAPPY";
-          action = "NOD";
-        } else if (text.includes("谁") || text.includes("介绍")) {
-          reply = "我是基于树莓派 3 的桌面具身 AI 伴侣机器人，具备二轴灵巧脖子和动态面部表情哦！";
-          emotion = "SURPRISED";
-          action = "LOOK_UP";
-        } else {
-          reply = `收到你的话啦："${text}"，我正在通过 3D 仿真大脑与你互动。`;
-          emotion = "HAPPY";
-        }
+      try {
+        const resp = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: text })
+        });
+        const res = await resp.json();
 
-        const botDiv = document.createElement("div");
-        botDiv.className = "msg bot";
-        botDiv.innerText = reply;
-        chatLogs.appendChild(botDiv);
+        botDiv.innerText = res.reply || "收到啦！";
         chatLogs.scrollTop = chatLogs.scrollHeight;
 
-        triggerAction(action);
-        setEmotion(emotion);
-        speakText(reply);
-      }, 350);
+        if (res.pan && res.tilt) {
+          updateAngles(res.pan, res.tilt);
+        }
+        if (res.action && res.action !== "NONE") {
+          triggerAction(res.action);
+        }
+        if (res.emotion) {
+          setEmotion(res.emotion);
+        }
+        speakText(res.reply);
+      } catch (err) {
+        botDiv.innerText = "网络异常，未能连接到大模型。";
+        console.error(err);
+      }
     }
 
     // 动画主循环
