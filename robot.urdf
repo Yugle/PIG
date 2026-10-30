@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<robot name="desktop_robot">
+  <!-- 底座固定于环境 -->
+  <link name="base_link">
+    <visual>
+      <geometry><mesh filename="1_desktop_base_stand.stl" scale="0.001 0.001 0.001"/></geometry>
+      <material name="white"><color rgba="0.9 0.9 0.9 1.0"/></material>
+    </visual>
+    <collision>
+      <geometry><mesh filename="1_desktop_base_stand.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.15"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <!-- 水平旋转关节 (Yaw) -->
+  <joint name="neck_yaw_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="neck_link"/>
+    <origin xyz="0 0 0.025" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.22" upper="1.22" effort="0.25" velocity="3.0"/>
+  </joint>
+
+  <!-- 机械颈 -->
+  <link name="neck_link">
+    <visual>
+      <geometry><mesh filename="2_articulated_neck_joint.stl" scale="0.001 0.001 0.001"/></geometry>
+      <material name="dark_grey"><color rgba="0.25 0.25 0.25 1.0"/></material>
+    </visual>
+    <collision>
+      <geometry><mesh filename="2_articulated_neck_joint.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.03"/>
+      <inertia ixx="0.00003" ixy="0" ixz="0" iyy="0.00003" iyz="0" izz="0.00003"/>
+    </inertial>
+  </link>
+
+  <!-- 俯仰旋转关节 (Pitch) -->
+  <joint name="head_pitch_joint" type="revolute">
+    <parent link="neck_link"/>
+    <child link="head_link"/>
+    <origin xyz="0 0 0.018" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.52" upper="0.52" effort="0.25" velocity="3.0"/>
+  </joint>
+
+  <!-- 机器人头部与传感器 -->
+  <link name="head_link">
+    <visual>
+      <geometry><mesh filename="3_robot_head_face.stl" scale="0.001 0.001 0.001"/></geometry>
+      <material name="white"><color rgba="0.95 0.95 0.95 1.0"/></material>
+    </visual>
+    <collision>
+      <geometry><mesh filename="3_robot_head_face.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.08"/>
+      <inertia ixx="0.00006" ixy="0" ixz="0" iyy="0.00006" iyz="0" izz="0.00006"/>
+    </inertial>
+  </link>
+</robot>

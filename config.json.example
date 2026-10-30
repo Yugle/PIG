@@ -1,0 +1,13 @@
+{
+  "api_key": "YOUR_LLM_API_KEY",
+  "base_url": "https://api.deepseek.com",
+  "llm_model": "deepseek-chat",
+  "tts_mode": "edge",
+  "custom_voice_id": "",
+  "custom_tts_api_key": "",
+  "pan_pin": 18,
+  "tilt_pin": 13,
+  "wakeword_model": "hey_jarvis",
+  "wakeword_threshold": 0.5,
+  "simulation": false
+}

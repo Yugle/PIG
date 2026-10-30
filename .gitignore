@@ -1,0 +1,25 @@
+# Python & Virtualenv
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Configuration (contains API keys)
+config.json
+!config.json.example
+
+# Temporary media files
+*.wav
+*.mp3
+*.jpg
+*.jpeg
+*.png
+/tmp/
+
+# Logs
+*.log

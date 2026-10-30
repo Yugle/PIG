@@ -1,0 +1,25 @@
+# Core Agent & LLM
+openai>=1.12.0
+requests>=2.31.0
+numpy>=1.24.0
+pillow>=10.0.0
+
+# Voice Perception & TTS
+edge-tts>=6.1.10
+pygame>=2.5.0
+pyaudio>=0.2.14
+openwakeword>=0.5.0
+
+# Remote API Server
+fastapi>=0.110.0
+uvicorn>=0.28.0
+pydantic>=2.6.0
+
+# PC Simulation Mode (Optional for Sim-to-Real)
+# mujoco>=3.1.0
+# opencv-python>=4.9.0
+
+# Raspberry Pi Physical Mode (Install on Raspberry Pi)
+# pigpio
+# luma.lcd>=2.9.0
+# spidev>=3.6
