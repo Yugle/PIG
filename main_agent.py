@@ -159,7 +159,7 @@ def process_interaction(user_text: str):
 {{
   "reply": "你说话的内容 (口语化、亲切真诚，适合语音播报，建议 {max_len} 字以内，如主人需要详细解答可适当展开)",
   "action": "NOD | SHAKE | NONE",
-  "emotion": "NORMAL | HAPPY | CONFUSED | SAD | ANGRY",
+  "emotion": "NORMAL | HAPPY | LOVE | WINK | CONFUSED | THINKING | SURPRISED | SLEEPY | DIZZY | SAD | ANGRY",
   "pan": 90,
   "tilt": 90
 }}
@@ -167,7 +167,7 @@ def process_interaction(user_text: str):
 - pan: 水平头部朝向 [30, 150]，90 为正中
 - tilt: 俯仰头部朝向 [70, 110]，90 为平视，80 为轻微抬头看人
 - action: NOD(点头认同), SHAKE(摇头否认), NONE(静止)
-- emotion: 表情类型
+- emotion: 表情类型 (根据语境选择最符合的表情：例如夸奖/表达爱意选 LOVE，调皮选 WINK，思考选 THINKING，疲倦选 SLEEPY，转头/被逗晕选 DIZZY)
 """
 
     reply_text = "我在听呢，有什么我可以帮你的吗？"

@@ -448,13 +448,19 @@
         <!-- 切换表情 -->
         <div class="control-section">
           <div class="section-title">动态表情切换</div>
-          <div class="btn-grid">
-            <button class="btn" onclick="setEmotion('NORMAL')">😊 常规 (NORMAL)</button>
-            <button class="btn" onclick="setEmotion('HAPPY')">😄 开心 (HAPPY)</button>
-            <button class="btn" onclick="setEmotion('CONFUSED')">🤔 困惑 (CONFUSED)</button>
-            <button class="btn" onclick="setEmotion('BLINK')">😉 眨眼 (BLINK)</button>
-            <button class="btn" onclick="setEmotion('ANGRY')">😡 愤怒 (ANGRY)</button>
-            <button class="btn" onclick="setEmotion('SURPRISED')">😳 吃惊 (SURPRISED)</button>
+          <div class="btn-grid" style="grid-template-columns: repeat(3, 1fr);">
+            <button class="btn" onclick="setEmotion('NORMAL')">😊 常规</button>
+            <button class="btn" onclick="setEmotion('HAPPY')">😄 开心</button>
+            <button class="btn" onclick="setEmotion('LOVE')">❤️ 爱意</button>
+            <button class="btn" onclick="setEmotion('WINK')">😉 眨眼</button>
+            <button class="btn" onclick="setEmotion('CONFUSED')">🤔 困惑</button>
+            <button class="btn" onclick="setEmotion('THINKING')">🧐 思考</button>
+            <button class="btn" onclick="setEmotion('SURPRISED')">😳 吃惊</button>
+            <button class="btn" onclick="setEmotion('SLEEPY')">😴 困倦</button>
+            <button class="btn" onclick="setEmotion('DIZZY')">🌀 眩晕</button>
+            <button class="btn" onclick="setEmotion('SAD')">🥺 委屈</button>
+            <button class="btn" onclick="setEmotion('ANGRY')">😡 愤怒</button>
+            <button class="btn" onclick="setEmotion('BLINK')">😑 闭目</button>
           </div>
         </div>
 
@@ -557,6 +563,67 @@
           eyeCtx.fill();
           eyeCtx.fillStyle = eyeColor;
         });
+      } else if (emotion === "LOVE") {
+        // 粉红桃心
+        eyeCtx.fillStyle = "#ff4d8d";
+        [lx, rx].forEach(cx => {
+          eyeCtx.beginPath();
+          eyeCtx.arc(cx - 15, cy - 10, 16, Math.PI, 0, false);
+          eyeCtx.arc(cx + 15, cy - 10, 16, Math.PI, 0, false);
+          eyeCtx.lineTo(cx, cy + 30);
+          eyeCtx.closePath();
+          eyeCtx.fill();
+          // 小高光
+          eyeCtx.fillStyle = "#ffffff";
+          eyeCtx.beginPath();
+          eyeCtx.ellipse(cx - 15, cy - 12, 4, 4, 0, 0, Math.PI * 2);
+          eyeCtx.fill();
+          eyeCtx.fillStyle = "#ff4d8d";
+        });
+      } else if (emotion === "WINK") {
+        // 左眼笑眼，右眼睁眼
+        eyeCtx.lineWidth = 14;
+        eyeCtx.strokeStyle = eyeColor;
+        eyeCtx.lineCap = "round";
+        eyeCtx.beginPath();
+        eyeCtx.arc(lx, cy + 10, 36, Math.PI * 1.15, Math.PI * 1.85, false);
+        eyeCtx.stroke();
+        roundRect(eyeCtx, rx - 36, cy - 50, 72, 100, 22, true);
+        eyeCtx.fillStyle = "#ffffff";
+        eyeCtx.beginPath();
+        eyeCtx.ellipse(rx - 14, cy - 30, 8, 8, 0, 0, Math.PI * 2);
+        eyeCtx.fill();
+      } else if (emotion === "SLEEPY") {
+        // 困倦微眯
+        [lx, rx].forEach(cx => {
+          roundRect(eyeCtx, cx - 32, cy + 10, 64, 10, 4, true);
+        });
+        eyeCtx.fillStyle = "#00e5ff";
+        eyeCtx.font = "bold 20px monospace";
+        eyeCtx.fillText("z", rx + 20, cy - 40);
+        eyeCtx.font = "bold 26px monospace";
+        eyeCtx.fillText("Z", rx + 32, cy - 65);
+      } else if (emotion === "DIZZY") {
+        // 螺旋圈圈眼
+        eyeCtx.strokeStyle = "#ffb020";
+        eyeCtx.lineWidth = 6;
+        [lx, rx].forEach(cx => {
+          [34, 22, 10].forEach(r => {
+            eyeCtx.beginPath();
+            eyeCtx.arc(cx, cy, r, 0, Math.PI * 1.7, false);
+            eyeCtx.stroke();
+          });
+        });
+      } else if (emotion === "THINKING") {
+        // 向上思考
+        [lx, rx].forEach(cx => {
+          roundRect(eyeCtx, cx - 36, cy - 30, 72, 80, 18, true);
+          eyeCtx.fillStyle = "#ffffff";
+          eyeCtx.beginPath();
+          eyeCtx.ellipse(cx + 8, cy - 14, 10, 10, 0, 0, Math.PI * 2);
+          eyeCtx.fill();
+          eyeCtx.fillStyle = eyeColor;
+        });
       }
     }
 
@@ -581,13 +648,27 @@
       drawEyes(emo);
     }
 
-    // 随机自然眨眼
+    // 随机生命体征：自然眨眼 + 视线微动跳跃 (Saccades)
     setInterval(() => {
-      if (currentEmotion === "NORMAL" && Math.random() < 0.35) {
-        drawEyes("BLINK");
-        setTimeout(() => drawEyes("NORMAL"), 180);
+      if (currentEmotion === "NORMAL") {
+        const rand = Math.random();
+        if (rand < 0.4) {
+          // 眨眼
+          drawEyes("BLINK");
+          setTimeout(() => drawEyes("NORMAL"), 180);
+        } else if (rand < 0.7) {
+          // 灵巧小眼神注视偏移
+          lookOffset.x = (Math.random() - 0.5) * 24;
+          lookOffset.y = (Math.random() - 0.5) * 16;
+          drawEyes("NORMAL");
+          setTimeout(() => {
+            lookOffset.x = 0;
+            lookOffset.y = 0;
+            drawEyes("NORMAL");
+          }, 1400);
+        }
       }
-    }, 2800);
+    }, 2600);
 
     drawEyes("NORMAL");
 
