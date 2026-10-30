@@ -4,6 +4,7 @@ import json
 import time
 import wave
 import signal
+import math
 
 from eye_renderer import EyeRenderer
 from tts_engine import TTSEngine
@@ -244,48 +245,64 @@ def process_interaction(user_text: str):
             reply_text = f"收到：{user_text}"
             behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
 
-    import threading
+    # 1. 预先合成语音并精准获取音频毫秒级时长 (真实硬件核心保障)
+    audio_path, total_dur = tts.synthesize(reply_text)
+    print(f"🔊 [TTS 准备就绪，音频实测总长: {total_dur:.2f}秒]: {reply_text}")
 
-    # 并行启动语音播放线程 (音画同步)
-    tts_thread = threading.Thread(target=tts.speak, args=(reply_text,))
-    tts_thread.start()
+    # 2. 启动异步无阻塞播放
+    tts.play_async(audio_path, total_dur)
 
-    # 具身多时序连招同步执行
+    # 3. 将真实音频总长等分给各个动作阶段，确保每个动作在播放中平滑展开
+    if not behaviors:
+        behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 80}]
+
+    stage_dur = max(0.4, total_dur / len(behaviors))
+
     p_val, t_val = 90, 90
     for b in behaviors:
         p_val = b.get("pan", 90)
         t_val = b.get("tilt", 90)
-        emo_val = b.get("emotion", "NORMAL")
+        emo_val = b.get("emotion", "HAPPY")
         act_val = b.get("action", "NONE")
-        delay_ms = b.get("delay", 700)
 
-        print(f"🤖 [时序动作] 转向 Pan={p_val}°, Tilt={t_val}°, 表情={emo_val}, 动作={act_val}")
+        print(f"🤖 [硬件时序动作] Pan={p_val}°, Tilt={t_val}°, 表情={emo_val}, 动作={act_val} (维持 {stage_dur:.2f}s)")
         hal.set_angles(p_val, t_val)
         hal.display_face(eyes.render_eyes(emo_val))
 
+        # 特征动作执行
         if act_val == "NOD":
-            hal.set_angles(p_val, 75)
-            hal.set_angles(p_val, 95)
+            hal.set_angles(p_val, max(60, t_val - 14))
+            time.sleep(0.18)
+            hal.set_angles(p_val, min(120, t_val + 14))
+            time.sleep(0.18)
             hal.set_angles(p_val, t_val)
         elif act_val == "SHAKE":
-            hal.set_angles(p_val - 20, t_val)
-            hal.set_angles(p_val + 20, t_val)
+            hal.set_angles(max(30, p_val - 18), t_val)
+            time.sleep(0.16)
+            hal.set_angles(min(150, p_val + 18), t_val)
+            time.sleep(0.16)
             hal.set_angles(p_val, t_val)
+        elif act_val == "LOOK_UP":
+            hal.set_angles(p_val, 70)
+        elif act_val == "SURPRISE":
+            hal.set_angles(p_val, 75)
 
-        time.sleep(delay_ms / 1000.0)
+        # 在该情绪阶段内，跟随语调保持自然微点头起伏，直到该阶段时长耗尽
+        start_stage = time.time()
+        phase = 0.0
+        while (time.time() - start_stage < stage_dur) and tts.is_playing():
+            phase += 0.5
+            hal.set_angles(p_val, t_val + math.sin(phase) * 2.2, smooth=False)
+            time.sleep(0.12)
 
-    # 若动作做完但语音仍在继续播放，保持自然的说话微抬头律动，直至语音彻底结束
-    while tts_thread.is_alive():
-        hal.set_angles(p_val, t_val - 2)
-        time.sleep(0.18)
-        if not tts_thread.is_alive():
-            break
-        hal.set_angles(p_val, t_val + 2)
-        time.sleep(0.18)
+    # 4. 音频若尚未彻底播完，保持平滑律动持续至最后一毫秒
+    phase = 0.0
+    while tts.is_playing():
+        phase += 0.5
+        hal.set_angles(p_val, t_val + math.sin(phase) * 2.0, smooth=False)
+        time.sleep(0.12)
 
-    tts_thread.join()
-
-    # 语音与动作全部完成，归位待机
+    # 5. 音频结束瞬间，才归位复位
     time.sleep(0.2)
     hal.display_face(eyes.render_eyes("NORMAL"))
     hal.set_angles(90, 90)
