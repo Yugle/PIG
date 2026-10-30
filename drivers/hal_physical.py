@@ -1,7 +1,7 @@
 import time
 import subprocess
 from PIL import Image
-from hal_base import BaseRobotHAL
+from .hal_base import BaseRobotHAL
 
 try:
     import pigpio

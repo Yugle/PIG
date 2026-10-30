@@ -7,21 +7,24 @@ import requests
 import subprocess
 import threading
 from datetime import datetime
-from asr_engine import BaiduASR
-from memory_manager import MemoryManager
-import sound_effects
-from face_tracker import FaceTracker
-from idle_fsm import IdleFSM
-from skill_manager import SkillManager
-from evolution_engine import EvolutionEngine
+from drivers.asr_engine import BaiduASR
+from core.memory_manager import MemoryManager
+import core.sound_effects as sound_effects
+from core.face_tracker import FaceTracker
+from core.idle_fsm import IdleFSM
+from core.skill_manager import SkillManager
+from core.evolution_engine import EvolutionEngine
 
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
-mem = MemoryManager()
+DATA_DIR = os.path.join(DIRECTORY, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+mem = MemoryManager(memory_file=os.path.join(DATA_DIR, "memory.json"))
 face_tracker = FaceTracker(enabled=False)
 idle_fsm = IdleFSM()
-skill_mgr = SkillManager(storage_dir=DIRECTORY)
-evolution_engine = EvolutionEngine(DIRECTORY, memory_manager=mem, skill_manager=skill_mgr)
+skill_mgr = SkillManager(storage_dir=DATA_DIR)
+evolution_engine = EvolutionEngine(DATA_DIR, memory_manager=mem, skill_manager=skill_mgr)
 
 # 待派发给前端 Web 仿真视窗的到点闹钟事件队列
 pending_web_alarms = []
@@ -110,9 +113,18 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
     def do_GET(self):
-        if self.path == "/" or self.path == "":
-            self.path = "/web_simulator.html"
-            return super().do_GET()
+        if self.path in ["/", "", "/web_simulator.html", "/simulator/web_simulator.html"]:
+            html_path = os.path.join(DIRECTORY, "simulator", "web_simulator.html")
+            if os.path.exists(html_path):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                with open(html_path, "rb") as f:
+                    self.wfile.write(f.read())
+                return
+            else:
+                self.send_error(404, "HTML simulator page not found")
+                return
 
         # 获取记忆中枢档案状态
         if self.path == "/api/memory":

@@ -15,7 +15,11 @@ from typing import Dict, List, Optional, Any
 import requests
 
 class EvolutionEngine:
-    def __init__(self, storage_dir=".", memory_manager=None, skill_manager=None):
+    def __init__(self, storage_dir=None, memory_manager=None, skill_manager=None):
+        if storage_dir is None:
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            storage_dir = os.path.join(project_root, "data")
+        os.makedirs(storage_dir, exist_ok=True)
         self.storage_dir = storage_dir
         self.memory = memory_manager
         self.skills = skill_manager

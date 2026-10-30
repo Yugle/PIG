@@ -1,7 +1,7 @@
 import os
 import time
 import math
-from hal_base import BaseRobotHAL
+from .hal_base import BaseRobotHAL
 from PIL import Image
 
 try:

@@ -10,7 +10,8 @@ import wave
 import struct
 import threading
 
-SOUNDS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "sounds")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SOUNDS_DIR = os.path.join(PROJECT_ROOT, "assets", "sounds")
 
 def ensure_sound_assets():
     """自动生成 5 款高品质 16kHz WAV 萌趣音频文件"""

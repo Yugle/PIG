@@ -13,22 +13,26 @@
 5. [软硬件解耦与统一抽象层 (HAL)](#五软硬件解耦与统一抽象层-hal)
 6. [仿真环境管线搭建 (MuJoCo + URDF)](#六仿真环境管线搭建-mujoco--urdf)
 7. [树莓派环境配置与排坑指南](#七树莓派环境配置与排坑指南)
-8. [核心工程代码实现](#八核心工程代码实现)
+   * 一键全自动初始化脚本 (`scripts/setup_raspberry_pi.sh`)
+   * 硬件链路端到端自检诊断工具 (`scripts/test_hardware.py`)
+   * 音频输入设备 (麦克风) 排坑排查
+8. [核心工程代码与目录架构](#八核心工程代码与目录架构)
+   * 项目模块分层架构与目录树
    * 配置文件 (`config.json`)
-   * 硬件驱动层 (`hal_physical.py` & `hal_simulation.py`)
-   * 12 款拟真眼部微表情系统 (`eye_renderer.py`)
-   * 程序化非语言萌趣音效库 (`sound_effects.py`)
-   * 人脸视觉注视追踪中枢 (`face_tracker.py`)
-   * 闲置自主生命体征状态机 (`idle_fsm.py`)
-   * 百度语音识别与动态 VAD 切音 (`asr_engine.py`)
-   * 语音合成与音画同步引擎 (`tts_engine.py`)
-   * 双层认知与持久化记忆中枢 (`memory_manager.py`)
-   * 轻量技能与动作自进化中枢 (`skill_manager.py`)
-   * 元认知自进化与海马体反思中枢 (`evolution_engine.py`)
+   * 硬件驱动层 (`drivers/hal_physical.py` & `drivers/hal_simulation.py`)
+   * 12 款拟真眼部微表情系统 (`drivers/eye_renderer.py`)
+   * 程序化非语言萌趣音效库 (`core/sound_effects.py`)
+   * 人脸视觉注视追踪中枢 (`core/face_tracker.py`)
+   * 闲置自主生命体征状态机 (`core/idle_fsm.py`)
+   * 百度语音识别与动态 VAD 切音 (`drivers/asr_engine.py`)
+   * 语音合成与音画同步引擎 (`drivers/tts_engine.py`)
+   * 双层认知与持久化记忆中枢 (`core/memory_manager.py`)
+   * 轻量技能与动作自进化中枢 (`core/skill_manager.py`)
+   * 元认知自进化与海马体反思中枢 (`core/evolution_engine.py`)
    * 具身交互多模态主中枢 (`main_agent.py`)
-   * 3D WebGL 浏览器仿真系统 (`web_simulator.html` & `web_sim_server.py`)
-   * 局域网远程代播服务 (`remote_server.py`)
-   * OTA 自动化静默升级 (`ota_updater.py`)
+   * 3D WebGL 浏览器仿真系统 (`simulator/web_simulator.html` & `web_sim_server.py`)
+   * 局域网远程代播服务 (`services/remote_server.py`)
+   * OTA 自动化静默升级 (`services/ota_updater.py`)
 9. [系统守护与保活部署 (systemd)](#九系统守护与保活部署-systemd)
 
 ---
@@ -312,24 +316,39 @@ class SimulationRobotHAL(BaseRobotHAL):
 
 ## 七、树莓派环境配置与排坑指南
 
-### 1. 系统底层服务初始化
+针对树莓派 3 (1GB RAM) 的硬件限制，本项目提供了全自动化的装机脚本与硬件自检工具，彻底避免手动配置容易漏步骤的问题。
+
+### 1. 一键全自动初始化脚本 (`scripts/setup_raspberry_pi.sh`)
+
+此脚本自动完成以下配置：
+- 使能树莓派硬件 SPI 接口（供 2.4寸 ST7789 屏幕使用）
+- 更新软件源并安装底层系统依赖（`pigpio`, `libportaudio2`, `portaudio19-dev`, `alsa-utils`, `fswebcam`, `ffmpeg` 等）
+- 自动注册并开机自启 `pigpiod` 守护服务（树莓派 3 必须使用硬件 DMA 定时器输出精确 PWM，彻底消除舵机高频抖动）
+- 配置 Python 虚拟环境与核心库（若无 venv 则自动创建），安装 `requirements.txt`
+- 检查并引导创建 `config.json` 模板
+
+在树莓派终端中直接运行：
 ```bash
-# 启用硬件接口并安装依赖
-sudo raspi-config nonint do_spi 0
-sudo raspi-config nonint do_i2c 0
-
-sudo apt update && sudo apt install -y \
-    python3-pip python3-dev pigpio python3-pigpio \
-    portaudio19-dev libasound2-dev alsa-utils fswebcam git
-
-# 必须启用 pigpiod 精确 PWM 硬件控制（消除 SG90 抽搐现象）
-sudo systemctl enable pigpiod && sudo systemctl start pigpiod
-
-# 安装核心依赖
-pip3 install openai openwakeword pyaudio edge-tts pygame pillow numpy fastapi uvicorn requests
+chmod +x scripts/setup_raspberry_pi.sh
+./scripts/setup_raspberry_pi.sh
 ```
 
-### 2. 音频输入设备 (麦克风) 排坑排查
+### 2. 硬件链路端到端自检诊断工具 (`scripts/test_hardware.py`)
+
+在运行主程序前，执行自检脚本可快速定位所有接线或驱动故障（用时仅约 10 秒）：
+```bash
+python3 scripts/test_hardware.py
+```
+**自动检测项**：
+1. `pigpiod` 守护进程是否正常启动并支持通信
+2. 水平 (Pan) 和俯仰 (Tilt) 舵机是否能平滑归中并在安全角度区间摆动
+3. ST7789 SPI 液晶屏幕是否能成功点亮并循环显示红/绿/蓝/白全屏彩条
+4. 3.5mm 音频接口与音箱是否能发出 440Hz 纯音并正常播放
+5. USB 麦克风是否能录制 16kHz 16-bit 单声道音频，并实时计算环境噪音均方根能量 (RMS)
+
+---
+
+### 3. 音频输入设备 (麦克风) 手动排坑
 USB 麦克风插入后，需获取正确的 ALSA 硬件卡号：
 ```bash
 arecord -l
@@ -349,9 +368,52 @@ ctl.!default {
 
 ---
 
-## 八、核心工程代码实现
+## 八、核心工程代码与目录架构
 
-### 1. 全局配置文件 (`config.json`)
+### 1. 项目模块分层架构与目录树
+
+本项目遵循清晰的四层解耦架构，保证在低算力树莓派 3 上的极低资源占用与高容错性：
+
+```text
+pig/
+├── main_agent.py          # 具身多模态主程序 (语音唤醒/感知/决策/执行闭环)
+├── web_sim_server.py      # 3D 仿真 Web 服务器与可视化控制台 (端口 8090)
+├── config.json            # 核心配置 (API Key, 舵机引脚, 外设参数)
+├── requirements.txt       # Python 依赖清单
+├── core/                  # 认知与智能决策中枢
+│   ├── memory_manager.py  # 双层记忆中枢 (短期上下文 + 长期持久化画像)
+│   ├── skill_manager.py   # 技能与动作进化管理器 (闹钟/倒计时/自定义动作)
+│   ├── evolution_engine.py# 元认知进化中枢 (生物钟追踪 + 夜间反思整理 + 晨间关怀)
+│   ├── idle_fsm.py        # 自主生命体征状态机 (微动/呼吸/走神/发呆)
+│   ├── face_tracker.py    # 视觉注视追踪 (人脸检测与视线跟随)
+│   └── sound_effects.py   # 程序化非语言情绪音效库
+├── drivers/               # 硬件驱动与抽象层 (HAL)
+│   ├── hal_base.py        # 统一硬件抽象基类
+│   ├── hal_physical.py    # 树莓派 3 物理机驱动 (pigpio + ST7789 SPI + OpenCV)
+│   ├── hal_simulation.py  # PC 端仿真驱动 (MuJoCo 物理引擎)
+│   ├── eye_renderer.py    # 12 款拟真卡通大眼表情渲染器
+│   ├── asr_engine.py      # 百度高精语音识别与能量 VAD 引擎
+│   └── tts_engine.py      # Edge-TTS 高拟真语音合成与音画同步引擎
+├── data/                  # 持久化存储与学习沉淀 (原子级写防掉电损坏)
+│   ├── memory.json        # 长期记忆 (用户画像、性格偏好、亲密度)
+│   ├── reminders.json     # 定时器、闹钟与日程提醒列表
+│   ├── evolved_actions.json # 机器人自主学会的新动作序列
+│   └── circadian_profile.json # 作息生物钟统计 (睡眠/清醒/精力低谷时段)
+├── simulator/             # 仿真与 3D 渲染资产
+│   ├── web_simulator.html # Three.js 3D 交互式模拟器 (全功能眼球/舵机/对话)
+│   ├── robot.urdf         # URDF 运动学拓扑模型
+│   └── scene.xml          # MuJoCo 仿真物理场景
+├── services/              # 辅助服务
+│   ├── remote_server.py   # 局域网 HTTP API 交互与远程控制服务
+│   └── ota_updater.py     # Git 静默 OTA 自动更新
+└── scripts/               # 运维与诊断脚本
+    ├── setup_raspberry_pi.sh # 树莓派一键全自动装机与外设初始化脚本
+    ├── test_hardware.py   # 硬件链路 10 秒全功能自动体检工具
+    ├── test_face.py       # 表情离线渲染测试
+    └── test_hal.py        # 硬件抽象层离线测试
+```
+
+### 2. 全局配置文件 (`config.json`)
 ```json
 {
   "api_key": "YOUR_LLM_API_KEY",

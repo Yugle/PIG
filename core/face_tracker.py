@@ -10,7 +10,8 @@ import os
 import cv2
 import numpy as np
 
-MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "face_detection_yunet_2023mar.onnx")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "face_detection_yunet_2023mar.onnx")
 
 class FaceTracker:
     def __init__(self, enabled: bool = False, input_size=(320, 240)):

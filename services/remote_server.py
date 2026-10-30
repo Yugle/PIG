@@ -1,11 +1,14 @@
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from eye_renderer import EyeRenderer
-from tts_engine import TTSEngine
+from drivers.eye_renderer import EyeRenderer
+from drivers.tts_engine import TTSEngine
 
 # 自动加载 HAL
 is_raspberry_pi = False
@@ -18,10 +21,10 @@ if os.path.exists("/proc/device-tree/model"):
         pass
 
 if is_raspberry_pi:
-    from hal_physical import PhysicalRobotHAL as RobotHAL
+    from drivers.hal_physical import PhysicalRobotHAL as RobotHAL
     hal = RobotHAL()
 else:
-    from hal_simulation import SimulationRobotHAL as RobotHAL
+    from drivers.hal_simulation import SimulationRobotHAL as RobotHAL
     hal = RobotHAL()
 
 eyes = EyeRenderer(240, 320)

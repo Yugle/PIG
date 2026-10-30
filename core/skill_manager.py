@@ -16,7 +16,11 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Callable, Any
 
 class SkillManager:
-    def __init__(self, storage_dir="."):
+    def __init__(self, storage_dir=None):
+        if storage_dir is None:
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            storage_dir = os.path.join(project_root, "data")
+        os.makedirs(storage_dir, exist_ok=True)
         self.storage_dir = storage_dir
         self.reminders_path = os.path.join(storage_dir, "reminders.json")
         self.actions_path = os.path.join(storage_dir, "evolved_actions.json")

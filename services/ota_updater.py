@@ -7,7 +7,7 @@ def auto_upgrade(repo_dir=None):
     检查远程 Git 仓库更新，自动拉取并重启 systemd 守护服务
     """
     if repo_dir is None:
-        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     os.chdir(repo_dir)
     print(f"📡 [OTA] 检查远端代码更新 (工作目录: {repo_dir})...")

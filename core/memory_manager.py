@@ -12,7 +12,8 @@ class MemoryManager:
 
     def __init__(self, memory_file=None, max_history_turns=6):
         if memory_file is None:
-            memory_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memory.json")
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            memory_file = os.path.join(project_root, "data", "memory.json")
         self.memory_file = memory_file
         self.max_history_turns = max_history_turns
 

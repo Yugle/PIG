@@ -7,15 +7,15 @@ import signal
 import math
 import re
 
-from eye_renderer import EyeRenderer
-from tts_engine import TTSEngine
-from asr_engine import BaiduASR
-from memory_manager import MemoryManager
-import sound_effects
-from face_tracker import FaceTracker
-from idle_fsm import IdleFSM
-from skill_manager import SkillManager
-from evolution_engine import EvolutionEngine
+from drivers.eye_renderer import EyeRenderer
+from drivers.tts_engine import TTSEngine
+from drivers.asr_engine import BaiduASR
+from core.memory_manager import MemoryManager
+import core.sound_effects as sound_effects
+from core.face_tracker import FaceTracker
+from core.idle_fsm import IdleFSM
+from core.skill_manager import SkillManager
+from core.evolution_engine import EvolutionEngine
 
 def parse_llm_json(content: str, reasoning: str = "") -> dict:
     """
@@ -109,12 +109,12 @@ else:
 # 选择加载物理驱动或仿真驱动
 if is_raspberry_pi and not cfg.get("simulation", False):
     print("🚀 [环境识别] 检测到树莓派硬件环境，加载物理 HAL 驱动...")
-    from hal_physical import PhysicalRobotHAL as RobotHAL
+    from drivers.hal_physical import PhysicalRobotHAL as RobotHAL
     hal = RobotHAL(pan_pin=cfg.get("pan_pin", 18), tilt_pin=cfg.get("tilt_pin", 13))
 else:
     print("💻 [环境识别] 加载 PC 仿真 HAL 驱动...")
-    from hal_simulation import SimulationRobotHAL as RobotHAL
-    scene_file = os.path.join(os.path.dirname(__file__), "scene.xml")
+    from drivers.hal_simulation import SimulationRobotHAL as RobotHAL
+    scene_file = os.path.join(os.path.dirname(__file__), "simulator", "scene.xml")
     hal = RobotHAL(model_path=scene_file)
 
 eyes = EyeRenderer(240, 320)
@@ -132,8 +132,11 @@ if cfg.get("baidu_api_key") and cfg.get("baidu_secret_key"):
     asr_engine = BaiduASR(cfg["baidu_api_key"], cfg["baidu_secret_key"])
     print("🎙️ [ASR 初始化] 百度智能云语音识别已就绪")
 
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
 # 初始化两级记忆中枢 (短期上下文 + 长期持久化画像)
-mem = MemoryManager()
+mem = MemoryManager(memory_file=os.path.join(DATA_DIR, "memory.json"))
 print(f"🧠 [记忆中枢] 已加载主人档案: {mem.long_term_data.get('user_name', '主人')} (亲密指数: Lv.{mem.long_term_data.get('intimacy_level', 1)})")
 
 # 初始化自主生命体征状态机与人脸视觉注视追踪器
@@ -142,7 +145,7 @@ face_tracker = FaceTracker(enabled=cfg.get("face_tracking", False))
 print(f"👁️ [视觉追踪] 人脸注视追踪初始化状态: {'ON (开启)' if face_tracker.enabled else 'OFF (关闭)'}")
 
 # 初始化技能与自进化动作调度中枢
-skill_mgr = SkillManager()
+skill_mgr = SkillManager(storage_dir=DATA_DIR)
 
 def on_hardware_alarm(rem):
     """物理机闹钟/日程到点主动抢占播报"""
@@ -166,7 +169,7 @@ def on_hardware_alarm(rem):
 skill_mgr.register_trigger_callback(on_hardware_alarm)
 
 # 初始化元认知自进化中枢 (生物钟作息学习 + 海马体夜间反思)
-evolution_engine = EvolutionEngine(memory_manager=mem, skill_manager=skill_mgr)
+evolution_engine = EvolutionEngine(DATA_DIR, memory_manager=mem, skill_manager=skill_mgr)
 api_key = cfg.get("api_key", "")
 base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
 llm_model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
@@ -380,11 +383,18 @@ def process_interaction(user_text: str):
             else:
                 print(f"⚠️ [LLM 响应异常状态码 {response.status_code}]: {response.text}")
                 reply_text = "网络信号有些微弱，我没听清呢。"
-                behaviors = [{"emotion": "CONFUSED", "action": "NONE", "pan": 90, "tilt": 90}]
+                behaviors = [{"emotion": "CONFUSED", "action": "NONE", "pan": 90, "tilt": 90, "delay": 600}]
+        except requests.exceptions.RequestException as net_err:
+            print(f"⚠️ [网络连接异常]: {net_err}")
+            reply_text = "主人，我的网络信号似乎断开啦，先待机等你连上Wi-Fi哟~"
+            behaviors = [
+                {"emotion": "CONFUSED", "action": "SHAKE", "pan": 90, "tilt": 85, "delay": 600},
+                {"emotion": "SAD", "action": "NONE", "pan": 90, "tilt": 95, "delay": 700}
+            ]
         except Exception as e:
             print(f"⚠️ [LLM 推理解析异常]: {e}")
-            reply_text = "刚才信号闪了一下，我开小差了。"
-            behaviors = [{"emotion": "CONFUSED", "action": "NONE", "pan": 90, "tilt": 90}]
+            reply_text = "刚才脑筋闪了一下，我们重来一次吧！"
+            behaviors = [{"emotion": "CONFUSED", "action": "NONE", "pan": 90, "tilt": 90, "delay": 600}]
     else:
         # Mock 规则匹配
         if "你好" in user_text or "嗨" in user_text:
