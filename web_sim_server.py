@@ -238,8 +238,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_POST()
 
 def run_server():
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("", PORT), CustomHandler) as httpd:
+    http.server.ThreadingHTTPServer.allow_reuse_address = True
+    with http.server.ThreadingHTTPServer(("", PORT), CustomHandler) as httpd:
         print("="*60)
         print("🚀 [Web 3D 仿真工作台已就绪]")
         print(f"👉 本地访问地址: http://localhost:{PORT}")
