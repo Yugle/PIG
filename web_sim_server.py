@@ -318,8 +318,12 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
             current_time_str = f"{now_dt.strftime('%Y-%m-%d %H:%M:%S')} ({weekdays[now_dt.weekday()]})"
 
+            known_actions = skill_mgr.list_evolved_actions()
+            actions_desc = ", ".join([f"{k}({v.get('description', '')})" for k, v in known_actions.items()]) if known_actions else "暂无自创动作"
+
             sys_prompt = f"""你是桌面的具身实体机器人搭子。根据主人的话，输出富有真实生命体征、连续起伏的肢体语言与回答。
 当前系统时间为：{current_time_str}。
+你已永久掌握的自进化动作库包括：【{actions_desc}】。
 
 严格输出 JSON 结构，不要包含任何 markdown 或其他文本：
 {{
@@ -339,7 +343,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
   }}
 }}
 说明：
-- behaviors: 输出 1 到 3 个连续递进的动作表情时序步骤！
+- behaviors: 输出 1 到 3 个连续递进的动作表情时序步骤！若用户要求表演你已掌握的自进化动作（如转圈舞等），请在 behaviors 中演绎或在回复中热情回应。
 - pan: 水平头部朝向 [30, 150]，90 为正中；tilt: 俯仰头部朝向 [70, 110]，90 为平视，80 为轻微抬头看人；delay: 毫秒数 [500, 1200]。
 - skill (可选调度字段，非必须):
   1. 用户要求倒计时(如“10分钟后叫我喝水”) -> "skill": {{"name": "set_timer", "args": {{"seconds": 600, "content": "喝水"}}}}
@@ -420,6 +424,15 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                                     act_obj = skill_mgr.get_evolved_action(act_name)
                                     if act_obj and act_obj.get("keyframes"):
                                         reply_data["behaviors"] = act_obj["keyframes"]
+
+                            # 若用户指令匹配已掌握的自创动作名称或描述，直接提取对应的关键帧进行高精复现
+                            if not (skill_call and skill_call.get("name") == "evolve_action"):
+                                for k, v in known_actions.items():
+                                    short_desc = v.get("description", "").split("：")[0].replace("舞", "")
+                                    if k in user_text.upper() or (short_desc and short_desc in user_text):
+                                        if v.get("keyframes"):
+                                            reply_data["behaviors"] = v["keyframes"]
+                                            break
 
                             # 记录进入记忆中枢
                             mem.record_turn(user_text, reply_data.get("reply", ""))

@@ -257,8 +257,12 @@ def process_interaction(user_text: str):
     weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     current_time_str = f"{now_dt.strftime('%Y-%m-%d %H:%M:%S')} ({weekdays[now_dt.weekday()]})"
 
+    known_actions = skill_mgr.list_evolved_actions()
+    actions_desc = ", ".join([f"{k}({v.get('description', '')})" for k, v in known_actions.items()]) if known_actions else "暂无自创动作"
+
     sys_prompt = f"""你是桌面的具身实体机器人搭子。根据主人的话，输出富有真实生命体征、连续起伏的肢体语言与回答。
 当前系统时间为：{current_time_str}。
+你已永久掌握的自进化动作库包括：【{actions_desc}】。
 
 严格输出 JSON 结构，不要包含任何 markdown 或其他文本：
 {{
@@ -351,6 +355,15 @@ def process_interaction(user_text: str):
                             act_obj = skill_mgr.get_evolved_action(act_name)
                             if act_obj and act_obj.get("keyframes"):
                                 behaviors = act_obj["keyframes"]
+
+                    # 若用户指令匹配已掌握的自创动作名称或描述，直接提取对应的关键帧进行高精复现
+                    if not (skill_call and skill_call.get("name") == "evolve_action"):
+                        for k, v in known_actions.items():
+                            short_desc = v.get("description", "").split("：")[0].replace("舞", "")
+                            if k in user_text.upper() or (short_desc and short_desc in user_text):
+                                if v.get("keyframes"):
+                                    behaviors = v["keyframes"]
+                                    break
 
                     # 记录进记忆中枢
                     mem.record_turn(user_text, reply_text)
