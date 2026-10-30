@@ -244,7 +244,14 @@ def process_interaction(user_text: str):
             reply_text = f"收到：{user_text}"
             behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
 
-    # 具身多时序连招执行
+    import threading
+
+    # 并行启动语音播放线程 (音画同步)
+    tts_thread = threading.Thread(target=tts.speak, args=(reply_text,))
+    tts_thread.start()
+
+    # 具身多时序连招同步执行
+    p_val, t_val = 90, 90
     for b in behaviors:
         p_val = b.get("pan", 90)
         t_val = b.get("tilt", 90)
@@ -267,11 +274,19 @@ def process_interaction(user_text: str):
 
         time.sleep(delay_ms / 1000.0)
 
-    # 语音输出
-    tts.speak(reply_text)
+    # 若动作做完但语音仍在继续播放，保持自然的说话微抬头律动，直至语音彻底结束
+    while tts_thread.is_alive():
+        hal.set_angles(p_val, t_val - 2)
+        time.sleep(0.18)
+        if not tts_thread.is_alive():
+            break
+        hal.set_angles(p_val, t_val + 2)
+        time.sleep(0.18)
 
-    # 归位待机
-    time.sleep(0.3)
+    tts_thread.join()
+
+    # 语音与动作全部完成，归位待机
+    time.sleep(0.2)
     hal.display_face(eyes.render_eyes("NORMAL"))
     hal.set_angles(90, 90)
 

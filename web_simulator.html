@@ -844,80 +844,155 @@
       runActionSequence();
     }
 
-    function playBehaviors(behaviors) {
+    // ==========================================
+    // 音画强同步控制器 (Audio-Driven Sync Engine)
+    // ==========================================
+    let currentAudio = null;
+    let isSpeaking = false;
+    let speakingMotionInterval = null;
+    let speechTimer = null;
+
+    function startSpeakingChoreography(durationMs, behaviors) {
+      if (speechTimer) clearTimeout(speechTimer);
+      if (speakingMotionInterval) clearInterval(speakingMotionInterval);
+
+      isSpeaking = true;
+      document.getElementById("overlay-action").innerText = "🗣️ 语音同步播报与动作中...";
+
+      // 如果未指定 behaviors，构造默认表达
+      if (!behaviors || behaviors.length === 0) {
+        behaviors = [{ emotion: "HAPPY", action: "NOD", pan: 90, tilt: 80 }];
+      }
+
+      // 将语音实际播放毫秒数，按阶段等分给每个 behavior
+      const stageDuration = Math.max(400, durationMs / behaviors.length);
       actionSequence = [];
-      behaviors.forEach((b, index) => {
+
+      behaviors.forEach((b) => {
         const p = b.pan !== undefined ? b.pan : currentPan;
         const t = b.tilt !== undefined ? b.tilt : currentTilt;
-        const emo = b.emotion || "NORMAL";
+        const emo = b.emotion || "HAPPY";
         const act = (b.action || "NONE").toUpperCase();
-        const duration = Math.max(300, b.delay || 700);
 
         if (act === "NOD") {
-          actionSequence.push({ pan: p, tilt: Math.max(60, t - 15), emotion: emo, delay: 180 });
-          actionSequence.push({ pan: p, tilt: Math.min(120, t + 15), emotion: emo, delay: 180 });
-          actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: Math.max(150, duration - 360) });
+          actionSequence.push({ pan: p, tilt: Math.max(60, t - 14), emotion: emo, delay: 200 });
+          actionSequence.push({ pan: p, tilt: Math.min(120, t + 14), emotion: emo, delay: 200 });
+          actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: Math.max(200, stageDuration - 400) });
         } else if (act === "SHAKE") {
-          actionSequence.push({ pan: Math.max(30, p - 20), tilt: t, emotion: emo, delay: 160 });
-          actionSequence.push({ pan: Math.min(150, p + 20), tilt: t, emotion: emo, delay: 160 });
-          actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: Math.max(150, duration - 320) });
+          actionSequence.push({ pan: Math.max(30, p - 18), tilt: t, emotion: emo, delay: 180 });
+          actionSequence.push({ pan: Math.min(150, p + 18), tilt: t, emotion: emo, delay: 180 });
+          actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: Math.max(200, stageDuration - 360) });
         } else if (act === "LOOK_UP") {
-          actionSequence.push({ pan: p, tilt: 70, emotion: emo, delay: duration });
+          actionSequence.push({ pan: p, tilt: 70, emotion: emo, delay: stageDuration });
         } else if (act === "SURPRISE") {
-          actionSequence.push({ pan: p, tilt: 75, emotion: emo, delay: duration });
+          actionSequence.push({ pan: p, tilt: 75, emotion: emo, delay: stageDuration });
         } else {
-          actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: duration });
+          actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: stageDuration });
         }
       });
 
-      // 序列执行完平滑复位待机
-      actionSequence.push({ pan: 90, tilt: 90, emotion: "NORMAL", delay: 200 });
+      // 启动动作序列
       runActionSequence();
+
+      // 在语音播放过程中，模拟真人说话时的自然头部微律动 (±2.5° 语调微浮动)
+      let bouncePhase = 0;
+      speakingMotionInterval = setInterval(() => {
+        if (!isSpeaking) {
+          clearInterval(speakingMotionInterval);
+          return;
+        }
+        bouncePhase += 0.6;
+        targetTilt = currentTilt + Math.sin(bouncePhase) * 2.2;
+      }, 120);
+
+      // 安全兜底定时器：语音播完后复位
+      speechTimer = setTimeout(() => {
+        stopSpeakingChoreography();
+      }, durationMs + 250);
     }
 
-    // 具身对话处理与高保真中文语音合成 (Edge-TTS 优先 + Web Speech 兜底)
-    let currentAudio = null;
+    function stopSpeakingChoreography() {
+      if (!isSpeaking) return;
+      isSpeaking = false;
+      if (speakingMotionInterval) clearInterval(speakingMotionInterval);
+      if (speechTimer) clearTimeout(speechTimer);
 
-    function speakText(text) {
+      actionSequence = [];
+      document.getElementById("overlay-action").innerText = "待机 (IDLE)";
+      setEmotion("NORMAL");
+      updateAngles(90, 90);
+    }
+
+    // 播放语音并与动作进行毫秒级锁频同步
+    function speakAndSync(text, behaviors) {
       if (!text) return;
+      const estimatedMs = Math.max(2000, text.length * 250);
 
-      // 1. 优先调用后端 Edge-TTS 高保真中文神经网络发音 (晓晓 zh-CN)
       try {
         if (currentAudio) {
           currentAudio.pause();
           currentAudio = null;
         }
-        const audioUrl = `/api/tts?text=${encodeURIComponent(text)}`;
-        currentAudio = new Audio(audioUrl);
-        currentAudio.play().catch(err => {
-          console.warn("Edge-TTS 播放受限，切换至本地浏览器中文引擎:", err);
-          fallbackWebSpeech(text);
-        });
-        return;
-      } catch (e) {
-        console.warn("Edge-TTS 请求异常:", e);
-      }
 
-      fallbackWebSpeech(text);
+        const audioUrl = `/api/tts?text=${encodeURIComponent(text)}`;
+        const audio = new Audio(audioUrl);
+        currentAudio = audio;
+
+        let hasStarted = false;
+
+        audio.oncanplay = () => {
+          if (!hasStarted) {
+            hasStarted = true;
+            const actualDurationMs = (audio.duration && !isNaN(audio.duration) && audio.duration > 0)
+              ? (audio.duration * 1000)
+              : estimatedMs;
+            startSpeakingChoreography(actualDurationMs, behaviors);
+          }
+        };
+
+        audio.onended = () => {
+          stopSpeakingChoreography();
+        };
+
+        audio.onerror = () => {
+          fallbackWebSpeechSync(text, behaviors, estimatedMs);
+        };
+
+        audio.play().catch(() => {
+          fallbackWebSpeechSync(text, behaviors, estimatedMs);
+        });
+
+      } catch (e) {
+        fallbackWebSpeechSync(text, behaviors, estimatedMs);
+      }
     }
 
-    function fallbackWebSpeech(text) {
-      if (!('speechSynthesis' in window)) return;
+    function fallbackWebSpeechSync(text, behaviors, estimatedMs) {
+      if (!('speechSynthesis' in window)) {
+        startSpeakingChoreography(estimatedMs, behaviors);
+        return;
+      }
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = "zh-CN";
       utter.rate = 1.0;
       utter.pitch = 1.1;
 
-      // 严格寻找中文发音人
       const voices = window.speechSynthesis.getVoices();
       const zhVoice = voices.find(v =>
         v.lang === "zh-CN" || v.lang === "zh_CN" || v.lang.startsWith("zh") ||
         v.name.includes("Chinese") || v.name.includes("Xiaoxiao") || v.name.includes("Huihui")
       );
-      if (zhVoice) {
-        utter.voice = zhVoice;
-      }
+      if (zhVoice) utter.voice = zhVoice;
+
+      utter.onstart = () => {
+        startSpeakingChoreography(estimatedMs, behaviors);
+      };
+
+      utter.onend = () => {
+        stopSpeakingChoreography();
+      };
+
       window.speechSynthesis.speak(utter);
     }
 
@@ -957,20 +1032,8 @@
         botDiv.innerText = res.reply || "收到啦！";
         chatLogs.scrollTop = chatLogs.scrollHeight;
 
-        if (Array.isArray(res.behaviors) && res.behaviors.length > 0) {
-          playBehaviors(res.behaviors);
-        } else {
-          if (res.pan && res.tilt) {
-            updateAngles(res.pan, res.tilt);
-          }
-          if (res.action && res.action !== "NONE") {
-            triggerAction(res.action);
-          }
-          if (res.emotion) {
-            setEmotion(res.emotion);
-          }
-        }
-        speakText(res.reply);
+        // 启动音画毫秒级强同步时序控制
+        speakAndSync(res.reply, res.behaviors || []);
       } catch (err) {
         botDiv.innerText = "网络异常，未能连接到大模型。";
         console.error(err);
