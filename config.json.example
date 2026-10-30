@@ -13,5 +13,8 @@
   "wakeword_model": "hey_jarvis",
   "wakeword_threshold": 0.5,
   "max_reply_length": 150,
+  "face_tracking": false,
+  "non_verbal_audio": true,
+  "idle_fsm": true,
   "simulation": false
 }

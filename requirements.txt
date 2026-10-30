@@ -15,6 +15,9 @@ fastapi>=0.110.0
 uvicorn>=0.28.0
 pydantic>=2.6.0
 
+# Vision & Face Tracking
+opencv-python-headless>=4.8.0
+
 # PC Simulation Mode (Optional for Sim-to-Real)
 # mujoco>=3.1.0
 # opencv-python>=4.9.0

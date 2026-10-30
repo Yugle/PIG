@@ -17,6 +17,9 @@
    * 配置文件 (`config.json`)
    * 硬件驱动层 (`hal_physical.py` & `hal_simulation.py`)
    * 12 款拟真眼部微表情系统 (`eye_renderer.py`)
+   * 程序化非语言萌趣音效库 (`sound_effects.py`)
+   * 人脸视觉注视追踪中枢 (`face_tracker.py`)
+   * 闲置自主生命体征状态机 (`idle_fsm.py`)
    * 百度语音识别与动态 VAD 切音 (`asr_engine.py`)
    * 语音合成与音画同步引擎 (`tts_engine.py`)
    * 双层认知与持久化记忆中枢 (`memory_manager.py`)
@@ -363,6 +366,9 @@ ctl.!default {
   "wakeword_model": "hey_jarvis",
   "wakeword_threshold": 0.5,
   "max_reply_length": 150,
+  "face_tracking": false,
+  "non_verbal_audio": true,
+  "idle_fsm": true,
   "simulation": false
 }
 ```
@@ -486,7 +492,94 @@ class EyeRenderer:
         return img
 ```
 
-### 4. 百度语音识别与动态 VAD 切音 (`asr_engine.py`)
+### 4. 程序化非语言萌趣音效库 (`sound_effects.py`)
+无需任何外部音频素材依赖，基于纯数学正弦波调制与标准库 `wave` 模块，程序化高保真合成 5 款经典生命体征音效：
+- `happy_chirp.wav`: 480Hz→780Hz 双音连环跳跃鸣响（元气轻快，如 R2-D2 / 瓦力兴奋声）。
+- `confused_boop.wav`: 500Hz 下降滑音至 320Hz（困惑反问，配合挑眉表情）。
+- `surprise_squeak.wav`: 400Hz 快速指数上扬至 900Hz（震惊、受惊吓或突然发现主人）。
+- `thinking_hum.wav`: 260Hz 柔和震颤微嗡鸣（P0 思考态填充音，打消大模型等待焦虑）。
+- `wake_chime.wav`: 三和弦 440Hz→554Hz→659Hz 琶音（唤醒清脆铃声）。
+
+```python
+# sound_effects.py 核心程序化生成与非阻塞播放
+import os, math, wave, struct, threading
+
+class SoundEffectManager:
+    def __init__(self, sound_dir="assets/sounds"):
+        self.sound_dir = sound_dir
+        os.makedirs(sound_dir, exist_ok=True)
+        self._ensure_sounds()
+
+    def play(self, name: str):
+        """非阻塞异步声卡播放"""
+        path = os.path.join(self.sound_dir, f"{name}.wav")
+        if os.path.exists(path):
+            threading.Thread(target=self._play_file, args=(path,), daemon=True).start()
+
+    def _play_file(self, path: str):
+        import subprocess
+        subprocess.run(["aplay", "-q", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+```
+
+### 5. 人脸视觉注视追踪中枢 (`face_tracker.py`)
+基于极轻量 ONNX YuNet 模型 (`models/face_detection_yunet_2023mar.onnx`，仅 228KB)，专为树莓派 3B CPU 深度优化，推理时延低于 10ms：
+- **两级视线-头部解耦追踪架构**:
+  - **微小偏移 (< 45px)**: 仅驱动眼球瞳孔平滑偏移 (`look_x`, `look_y`)，用眼神注视主人，避免舵机无谓转动与齿轮磨损。
+  - **大幅偏移 (>= 45px)**: 计算偏角并启动双轴舵机平滑追平，将面部重置回视野正中。
+- **动态启闭与安全开关**:
+  - `config.json` 中配置 `"face_tracking": false` 默认关闭，保护隐私且节约算力；
+  - Web 仿真器顶部提供一键切换按钮 `[👁️ 注视追踪: 关/开]`；
+  - 后端开放 REST 接口 `/api/face_tracking` (GET / POST) 实现动态热启闭。
+
+```python
+# face_tracker.py 核心结构
+import cv2, numpy as np
+
+class FaceTracker:
+    def __init__(self, model_path="models/face_detection_yunet_2023mar.onnx", enabled=False):
+        self.enabled = enabled
+        self.detector = cv2.FaceDetectorYN_create(model_path, "", (320, 240), score_threshold=0.6)
+
+    def process_frame(self, frame_bgr):
+        if not self.enabled: return None
+        # 缩放至 320x240 极速检测人脸
+        _, faces = self.detector.detect(resized)
+        if faces is not None and len(faces) > 0:
+            box = faces[0][:4]
+            center_x = box[0] + box[2] / 2
+            center_y = box[1] + box[3] / 2
+            look_x = int((center_x - 160) / 160.0 * 25)
+            look_y = int((center_y - 120) / 120.0 * 20)
+            return {"face_detected": True, "look_x": look_x, "look_y": look_y}
+        return {"face_detected": False}
+```
+
+### 6. 闲置自主生命体征状态机 (`idle_fsm.py`)
+彻底消除无交互时机器人“仿佛断电死机”的呆滞感，构建四级生物拟态状态机：
+1. **正弦波呼吸律动 (`IDLE`)**: 舵机在基准角度以 $T=4.0s$ 周期进行 $\pm1.2^\circ$ 正弦波微幅浮动，眼球随机触发自发眨眼与微扫视。
+2. **无聊换姿势 (`BORED`)**: 连续闲置 60 秒无交互，机器人自动微倾头部或伸展打哈欠。
+3. **打瞌睡微垂 (`DOZING`)**: 连续闲置 180 秒无交互，头部微微下垂 12°，眼睛半闭呈现 `SLEEPY` 状态。
+4. **受惊醒猛抬头 (`WAKING`)**: 一旦被唤醒词叫醒或检测到人脸突然靠近，瞬间弹出 `SURPRISED` 睁眼微震、头部回弹正位并伴随清脆唤醒提示音。
+5. **主动式关怀搭话 (Proactive Reminders)**: 闲置过久且主人在场时，主动结合长期记忆发起贴心提醒（如：“阿强，看屏幕很久啦，喝口水休息一下吧！”）。
+
+```python
+# idle_fsm.py 核心状态机循环
+class IdleFSM:
+    def update(self) -> dict:
+        idle_time = time.time() - self.last_interaction_time
+        if idle_time > 180:
+            self.state = "DOZING"
+            return {"pan": 90, "tilt": 102, "emotion": "SLEEPY"}
+        elif idle_time > 60:
+            self.state = "BORED"
+        else:
+            self.state = "IDLE"
+            t = time.time() - self.start_time
+            sine_tilt = math.sin(t * (2 * math.pi / 4.0)) * 1.2
+            return {"pan": 90, "tilt": 90 + sine_tilt, "emotion": "NORMAL"}
+```
+
+### 7. 百度语音识别与动态 VAD 切音 (`asr_engine.py`)
 针对低功耗嵌入式端，内置 **动态能量阈值检测 (Voice Activity Detection)** 与 **百度智能云 ASR** 引擎：
 - **动态切音**: 检测人声能量突增开始录音，连续静音 1.2 秒自动断句上传，彻底淘汰死板固定 4 秒录音。
 - **Token 智能缓存**: 内存缓存 30 天有效期的 Access Token，杜绝每轮鉴权的网络往返延迟。
@@ -528,7 +621,7 @@ class BaiduASR:
         return ""
 ```
 
-### 5. 语音合成与音画同步引擎 (`tts_engine.py`)
+### 8. 语音合成与音画同步引擎 (`tts_engine.py`)
 彻底解决传统机器人 **“动作早已做完、语音还在喋喋不休”** 的不同步通病：
 1. **音频时长精准感知**: 语音合成后立即探测精确时长（通过 `ffprobe` 或 `pygame.mixer.Sound.get_length`）。
 2. **多动作时间轴自适应拉伸**: 将大模型输出的动作列表分配至音频整个时间轴。
@@ -568,7 +661,7 @@ class TTSEngine:
         return pygame.mixer.music.get_busy()
 ```
 
-### 6. 双层认知与持久化记忆中枢 (`memory_manager.py`)
+### 9. 双层认知与持久化记忆中枢 (`memory_manager.py`)
 赋予机器人长期认主与个性化陪伴能力，包含两级存储：
 - **短期工作记忆 (Short-Term Memory)**: 基于滑动窗口维护最近 6~10 轮对话完整上下文，保证连贯多轮追问。
 - **长期事实记忆 (Long-Term Memory)**: 本地持久化 `memory.json`，存储主人称谓、事实偏好（食物/职业/习惯等）、交互总次数与亲密等级。
@@ -614,18 +707,22 @@ class MemoryManager:
             self.short_term_history = self.short_term_history[-self.max_history_turns * 2:]
 ```
 
-### 7. 具身多模态交互主中枢 (`main_agent.py`)
-整合感知、认知中枢、大模型推理与音画同步执行的完整事件主循环：
+### 10. 具身多模态交互主中枢 (`main_agent.py`)
+整合感知、认知中枢、P0~P3 生体灵动中枢、大模型推理与音画同步执行的完整事件主循环：
 
 ```python
 # 运行具身主中枢
 python3 main_agent.py
 ```
-- 自动辨识真机（树莓派加载 `PhysicalRobotHAL`）或 PC（加载 MuJoCo `SimulationRobotHAL`）。
-- 接收语音指令后自动调用记忆注入的大模型，生成多步连续表情动作链。
-- 采用音视频时钟对齐，边讲话边展示律动与表情。
+- **自动辨识真机/仿真**: 树莓派自动加载 `PhysicalRobotHAL`，PC 自动加载 MuJoCo `SimulationRobotHAL`。
+- **P0 零感知延迟思考韵律**: 拾音断句瞬间，0ms 并发触发柔和思考嗡鸣 (`thinking_hum`)、头部偏转倾听 15°、双眼注视右上角沉思微颤，彻底打消等待焦虑。
+- **P1 闲置自主呼吸与状态机**: 无人交互时自主进行正弦微呼吸，随闲置时长递进无聊、打瞌睡或主动发起关怀搭话。
+- **P2 程序化非语言音效**: 随情绪流转自动交织播放萌趣轻鸣，增强生命质感。
+- **P3 视觉注视追踪**: 启用后自动联动 OpenCV YuNet 实现瞳孔视线追焦与云台追平。
+- **高弹性 5 级 JSON 解析容错**: 彻底解决 SenseNova / DeepSeek 等大模型偶发输出 Markdown 代码块、思考推理过程或纯文本时的解析崩溃，保证 100% 稳定生成连续动作链。
+- **音视频时钟对齐**: 边讲话边根据真实音频时长自适应拉伸肢体动作与面部表情。
 
-### 8. 3D WebGL 浏览器仿真系统 (`web_simulator.html` & `web_sim_server.py`)
+### 11. 3D WebGL 浏览器仿真系统 (`web_simulator.html` & `web_sim_server.py`)
 无需任何物理硬件，直接在 PC 浏览器中进行全交互仿真：
 1. **启动仿真服务器**:
    ```bash
@@ -635,11 +732,12 @@ python3 main_agent.py
 3. **特性矩阵**:
    - **Three.js 3D 机器人模型**: 支持平滑转头、仰头、摇头、点头动作。
    - **面部 3D 动态材质贴合**: 2.4寸 ST7789 屏幕作为动态 CanvasTexture 直接贴合在 3D 头部正面，随头部俯仰旋转实时呈现 12 款微表情、高光与眨眼；右下角提供可折叠画中画特写。
+   - **视觉注视追踪开关**: 顶部状态栏提供 `[👁️ 注视追踪: 关/开]` 一键切换，开启后支持鼠标视线追踪或摄像头人脸追踪。
    - **麦克风语音直连**: 点击麦克风说话，前端直录 16kHz PCM，后端自动调用百度 ASR 转写。
    - **高拟真 Edge-TTS 广播**: 后端下发语音，前端网页高保真播放，并实现毫秒级动作同步。
    - **记忆看板**: 实时展示主人档案、偏好事实集、亲密等级与对话轮次。
 
-### 9. 局域网远程代播服务 (`remote_server.py`)
+### 12. 局域网远程代播服务 (`remote_server.py`)
 ```python
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks
@@ -683,7 +781,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-### 10. OTA 自动化静默升级 (`ota_updater.py`)
+### 13. OTA 自动化静默升级 (`ota_updater.py`)
 ```python
 import os
 import subprocess
@@ -706,10 +804,6 @@ def auto_upgrade(repo_dir="/home/pi/desktop_robot"):
         subprocess.run(["sudo", "systemctl", "restart", "robot.service"])
         return True
     return False
-
-if __name__ == "__main__":
-    auto_upgrade()
-```
 
 if __name__ == "__main__":
     auto_upgrade()

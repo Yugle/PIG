@@ -11,6 +11,9 @@ from eye_renderer import EyeRenderer
 from tts_engine import TTSEngine
 from asr_engine import BaiduASR
 from memory_manager import MemoryManager
+import sound_effects
+from face_tracker import FaceTracker
+from idle_fsm import IdleFSM
 
 def parse_llm_json(content: str, reasoning: str = "") -> dict:
     """
@@ -130,6 +133,11 @@ if cfg.get("baidu_api_key") and cfg.get("baidu_secret_key"):
 # 初始化两级记忆中枢 (短期上下文 + 长期持久化画像)
 mem = MemoryManager()
 print(f"🧠 [记忆中枢] 已加载主人档案: {mem.long_term_data.get('user_name', '主人')} (亲密指数: Lv.{mem.long_term_data.get('intimacy_level', 1)})")
+
+# 初始化自主生命体征状态机与人脸视觉注视追踪器
+idle_fsm = IdleFSM()
+face_tracker = FaceTracker(enabled=cfg.get("face_tracking", False))
+print(f"👁️ [视觉追踪] 人脸注视追踪初始化状态: {'ON (开启)' if face_tracker.enabled else 'OFF (关闭)'}")
 api_key = cfg.get("api_key", "")
 base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
 llm_model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
@@ -254,6 +262,14 @@ def process_interaction(user_text: str):
     reply_text = "我在听呢，有什么我可以帮你的吗？"
     behaviors = []
 
+    # 通知闲置状态机已进入活跃交互
+    idle_fsm.notify_active()
+
+    # P0: 即时拟人垫音与零延迟思考动作 (打破 10s 死寂，感知零延迟)
+    sound_effects.play_sound("thinking_hum")
+    hal.set_angles(85, 78) # 好奇歪头
+    hal.display_face(eyes.render_eyes("THINKING", look_x=10, look_y=-14))
+
     # 清空记忆指令拦截
     if any(k in user_text for k in ["清空记忆", "重置记忆", "忘记我"]):
         mem.clear()
@@ -320,6 +336,15 @@ def process_interaction(user_text: str):
             reply_text = f"收到：{user_text}"
             behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
 
+    # P2: 配合第一阶段情感播放萌趣音效
+    first_emo = behaviors[0].get("emotion", "HAPPY") if behaviors else "HAPPY"
+    if first_emo in ["HAPPY", "LOVE", "WINK"]:
+        sound_effects.play_sound("happy_chirp")
+    elif first_emo in ["CONFUSED", "THINKING"]:
+        sound_effects.play_sound("confused_boop")
+    elif first_emo in ["SURPRISED", "ANGRY"]:
+        sound_effects.play_sound("surprise_squeak")
+
     # 1. 预先合成语音并精准获取音频毫秒级时长 (真实硬件核心保障)
     audio_path, total_dur = tts.synthesize(reply_text)
     print(f"🔊 [TTS 准备就绪，音频实测总长: {total_dur:.2f}秒]: {reply_text}")
@@ -381,6 +406,7 @@ def process_interaction(user_text: str):
     time.sleep(0.2)
     hal.display_face(eyes.render_eyes("NORMAL"))
     hal.set_angles(90, 90)
+    idle_fsm.finish_active()
 
 
 def run_loop():
@@ -388,6 +414,9 @@ def run_loop():
     hal.display_face(eyes.render_eyes("NORMAL"))
     print("\n" + "="*50)
     print("🤖 具身交互引擎已激活！")
+    print(f"🎵 非语言萌趣音效: 已激活 (Procedural Audio)")
+    print(f"🫁 闲置呼吸状态机: 已激活 (Sine Wave Breathing & FSM)")
+    print(f"👁️ 人脸视觉注视追踪: {'ON (开启)' if face_tracker.enabled else 'OFF (关闭)'}")
     if has_mic:
         print("🔔 等待唤醒词唤醒 (如: 小猪小猪 / Hey Jarvis)...")
     else:
@@ -403,6 +432,8 @@ def run_loop():
 
                 if any(v > cfg.get("wakeword_threshold", 0.5) for v in preds.values()):
                     print("\n🔔 [唤醒成功] 触发具身注意力机制！")
+                    sound_effects.play_sound("wake_chime")
+                    idle_fsm.notify_active()
                     oww_model.reset()
 
                     # 抬头 10° 并眨眼展示笑意
@@ -430,9 +461,36 @@ def run_loop():
                     if user_text:
                         process_interaction(user_text)
                     else:
+                        sound_effects.play_sound("confused_boop")
                         tts.speak("我好像没听清，您能再说一遍吗？")
                         hal.display_face(eyes.render_eyes("NORMAL"))
                         hal.set_angles(90, 90)
+                else:
+                    # P1: 闲置状态机与呼吸生命体征微动更新
+                    fsm_info = idle_fsm.update()
+                    if fsm_info["pan_offset"] != 0 or fsm_info["tilt_offset"] != 0:
+                        hal.set_angles(90 + fsm_info["pan_offset"], 90 + fsm_info["tilt_offset"], smooth=False)
+                    if fsm_info["emotion"]:
+                        hal.display_face(eyes.render_eyes(fsm_info["emotion"]))
+                    if fsm_info["proactive_text"]:
+                        print(f"💬 [主动关怀播报]: {fsm_info['proactive_text']}")
+                        tts.speak(fsm_info["proactive_text"])
+
+                    # P3: 人脸视觉注视追踪 (若配置开关开启)
+                    if face_tracker.enabled:
+                        try:
+                            img_bytes = hal.capture_image()
+                            if img_bytes:
+                                nparr = np.frombuffer(img_bytes, np.uint8)
+                                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                                has_face, ox, oy = face_tracker.detect_face(frame)
+                                if has_face:
+                                    lx, ly, tp, tt = face_tracker.compute_gaze_and_angles(ox, oy, hal.cur_pan, hal.cur_tilt)
+                                    hal.display_face(eyes.render_eyes("NORMAL", look_x=lx, look_y=ly))
+                                    if abs(ox) > 0.22 or abs(oy) > 0.22:
+                                        hal.set_angles(tp, tt)
+                        except Exception:
+                            pass
 
             except KeyboardInterrupt:
                 break

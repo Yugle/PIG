@@ -7,10 +7,15 @@ import requests
 import subprocess
 from asr_engine import BaiduASR
 from memory_manager import MemoryManager
+import sound_effects
+from face_tracker import FaceTracker
+from idle_fsm import IdleFSM
 
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 mem = MemoryManager()
+face_tracker = FaceTracker(enabled=False)
+idle_fsm = IdleFSM()
 
 def parse_llm_json(content: str, reasoning: str = "") -> dict:
     """
@@ -107,6 +112,35 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(mem_status, ensure_ascii=False).encode("utf-8"))
             return
 
+        # 获取人脸视觉注视追踪开关状态
+        if self.path == "/api/face_tracking":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"enabled": face_tracker.enabled}).encode("utf-8"))
+            return
+
+        # 获取非语言萌趣程序化音效流
+        if self.path.startswith("/api/sounds"):
+            from urllib.parse import parse_qs, urlparse
+            query = parse_qs(urlparse(self.path).query)
+            name = query.get("name", ["happy_chirp"])[0]
+            if not name.endswith(".wav"): name += ".wav"
+            sound_path = os.path.join(DIRECTORY, "assets", "sounds", name)
+            if not os.path.exists(sound_path):
+                sound_effects.ensure_sound_assets()
+            if os.path.exists(sound_path):
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/wav")
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                with open(sound_path, "rb") as sf:
+                    self.wfile.write(sf.read())
+                return
+            else:
+                self.send_error(404, "Sound not found")
+                return
+
         # 高拟真中文语音合成 (Edge-TTS zh-CN-XiaoxiaoNeural)
         if self.path.startswith("/api/tts"):
             from urllib.parse import parse_qs, urlparse
@@ -145,6 +179,22 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        # 人脸视觉注视追踪开关切换
+        if self.path == "/api/face_tracking":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8"))
+                enabled = body.get("enabled", False)
+                face_tracker.set_enabled(enabled)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "enabled": face_tracker.enabled}).encode("utf-8"))
+            except Exception as e:
+                self.send_error(400, str(e))
+            return
+
         # 百度语音识别接口
         if self.path == "/api/asr":
             content_length = int(self.headers.get("Content-Length", 0))
