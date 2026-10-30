@@ -13,6 +13,9 @@ build/
 config.json
 !config.json.example
 
+# Runtime Memory state
+memory.json
+
 # Temporary media files
 *.wav
 *.mp3

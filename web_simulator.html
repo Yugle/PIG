@@ -367,9 +367,16 @@
       🤖 桌面具身 AI 伴侣机器人
       <span class="badge">Sim-to-Real 3D 仿真工作台</span>
     </div>
-    <div class="status-tag">
-      <div class="status-dot"></div>
-      物理动力学 & 表情引擎运行中
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div id="memory-badge" style="font-size: 0.78rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 12px; color: var(--text-sub); display: flex; align-items: center; gap: 6px;">
+        <span>🧠 伴侣记忆:</span>
+        <span id="mem-name" style="color: var(--cyan); font-weight: 600;">主人</span>
+        <span id="mem-intimacy" style="background: rgba(255, 176, 32, 0.15); color: #ffb020; border: 1px solid #ffb020; border-radius: 8px; padding: 1px 5px; font-size: 0.7rem;">Lv.1</span>
+      </div>
+      <div class="status-tag">
+        <div class="status-dot"></div>
+        物理动力学 & 表情引擎运行中
+      </div>
     </div>
   </header>
 
@@ -1034,11 +1041,28 @@
 
         // 启动音画毫秒级强同步时序控制
         speakAndSync(res.reply, res.behaviors || []);
+        updateMemoryBadge();
       } catch (err) {
         botDiv.innerText = "网络异常，未能连接到大模型。";
         console.error(err);
       }
     }
+
+    async function updateMemoryBadge() {
+      try {
+        const resp = await fetch("/api/memory");
+        if (resp.ok) {
+          const data = await resp.json();
+          document.getElementById("mem-name").innerText = data.user_name || "主人";
+          document.getElementById("mem-intimacy").innerText = `Lv.${data.intimacy_level || 1}`;
+          const factsHint = data.facts && data.facts.length ? `已记喜好: ${data.facts.join(', ')}` : "暂无喜好记录";
+          document.getElementById("memory-badge").title = `${factsHint} (总互动: ${data.interaction_count}次)`;
+        }
+      } catch (e) {
+        console.warn("更新记忆状态失败:", e);
+      }
+    }
+    updateMemoryBadge();
 
     // ==========================================
     // 3. 麦克风录音与百度 ASR 语音识别

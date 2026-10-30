@@ -9,6 +9,7 @@ import math
 from eye_renderer import EyeRenderer
 from tts_engine import TTSEngine
 from asr_engine import BaiduASR
+from memory_manager import MemoryManager
 
 # 自动判定运行环境：根据 /proc/device-tree/model 识别树莓派真机或 PC 仿真
 is_raspberry_pi = False
@@ -65,6 +66,10 @@ asr_engine = None
 if cfg.get("baidu_api_key") and cfg.get("baidu_secret_key"):
     asr_engine = BaiduASR(cfg["baidu_api_key"], cfg["baidu_secret_key"])
     print("🎙️ [ASR 初始化] 百度智能云语音识别已就绪")
+
+# 初始化两级记忆中枢 (短期上下文 + 长期持久化画像)
+mem = MemoryManager()
+print(f"🧠 [记忆中枢] 已加载主人档案: {mem.long_term_data.get('user_name', '主人')} (亲密指数: Lv.{mem.long_term_data.get('intimacy_level', 1)})")
 api_key = cfg.get("api_key", "")
 base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
 llm_model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
@@ -189,19 +194,26 @@ def process_interaction(user_text: str):
     reply_text = "我在听呢，有什么我可以帮你的吗？"
     behaviors = []
 
-    if api_key and "YOUR_LLM_API_KEY" not in api_key:
+    # 清空记忆指令拦截
+    if any(k in user_text for k in ["清空记忆", "重置记忆", "忘记我"]):
+        mem.clear()
+        reply_text = "主人，我的记忆库已经全部清空啦，我们重新认识吧！"
+        behaviors = [
+            {"emotion": "SURPRISED", "action": "SURPRISE", "pan": 90, "tilt": 75, "delay": 600},
+            {"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 80, "delay": 800}
+        ]
+    elif api_key and "YOUR_LLM_API_KEY" not in api_key:
         try:
             url = f"{base_url}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             }
+            # 组装包含记忆档案与短期历史的消息链
+            messages = mem.get_messages_for_llm(user_text, sys_prompt)
             payload = {
                 "model": llm_model,
-                "messages": [
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": user_text}
-                ]
+                "messages": messages
             }
             response = requests.post(url, headers=headers, json=payload, timeout=60)
             if response.status_code == 200:
@@ -225,6 +237,8 @@ def process_interaction(user_text: str):
                         "tilt": res.get("tilt", 90),
                         "delay": 700
                     }]
+                # 记录进记忆中枢
+                mem.record_turn(user_text, reply_text)
             else:
                 print(f"⚠️ [LLM 响应异常状态码 {response.status_code}]: {response.text}")
                 reply_text = "网络信号有些微弱，我没听清呢。"

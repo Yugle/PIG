@@ -5,9 +5,11 @@ import json
 import requests
 import subprocess
 from asr_engine import BaiduASR
+from memory_manager import MemoryManager
 
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+mem = MemoryManager()
 
 def load_config():
     cfg_file = os.path.join(DIRECTORY, "config.json")
@@ -24,6 +26,21 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/" or self.path == "":
             self.path = "/web_simulator.html"
             return super().do_GET()
+
+        # 获取记忆中枢档案状态
+        if self.path == "/api/memory":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            mem_status = {
+                "user_name": mem.long_term_data.get("user_name", "主人"),
+                "intimacy_level": mem.long_term_data.get("intimacy_level", 1),
+                "interaction_count": mem.long_term_data.get("interaction_count", 0),
+                "facts": mem.long_term_data.get("facts", []),
+                "history_turns": len(mem.short_term_history) // 2
+            }
+            self.wfile.write(json.dumps(mem_status, ensure_ascii=False).encode("utf-8"))
+            return
 
         # 高拟真中文语音合成 (Edge-TTS zh-CN-XiaoxiaoNeural)
         if self.path.startswith("/api/tts"):
@@ -175,19 +192,27 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "tilt": 90
             }
 
-            if api_key and "YOUR_LLM_API_KEY" not in api_key:
+            if any(k in user_text for k in ["清空记忆", "重置记忆", "忘记我"]):
+                mem.clear()
+                reply_data = {
+                    "reply": "主人，我的记忆库已经全部清空啦，我们重新认识吧！",
+                    "behaviors": [
+                        {"emotion": "SURPRISED", "action": "SURPRISE", "pan": 90, "tilt": 75, "delay": 600},
+                        {"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 80, "delay": 800}
+                    ]
+                }
+            elif api_key and "YOUR_LLM_API_KEY" not in api_key:
                 try:
                     url = f"{base_url}/chat/completions"
                     headers = {
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json"
                     }
+                    # 组装带记忆的系统提示词与上下文
+                    messages = mem.get_messages_for_llm(user_text, sys_prompt)
                     payload = {
                         "model": model,
-                        "messages": [
-                            {"role": "system", "content": sys_prompt},
-                            {"role": "user", "content": user_text}
-                        ]
+                        "messages": messages
                     }
                     resp = requests.post(url, headers=headers, json=payload, timeout=60)
                     if resp.status_code == 200:
@@ -199,6 +224,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                             content = content.strip()
                         parsed = json.loads(content)
                         reply_data.update(parsed)
+                        # 记录进入记忆中枢
+                        mem.record_turn(user_text, reply_data.get("reply", ""))
                 except Exception as e:
                     print(f"⚠️ [Web-LLM Error]: {e}")
 

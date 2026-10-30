@@ -16,9 +16,12 @@
 8. [核心工程代码实现](#八核心工程代码实现)
    * 配置文件 (`config.json`)
    * 硬件驱动层 (`hal_physical.py` & `hal_simulation.py`)
-   * 液晶屏表情渲染引擎 (`eye_renderer.py`)
-   * 语音克隆与 TTS 合成适配器 (`tts_engine.py`)
-   * 具身交互主中枢 (`main_agent.py`)
+   * 12 款拟真眼部微表情系统 (`eye_renderer.py`)
+   * 百度语音识别与动态 VAD 切音 (`asr_engine.py`)
+   * 语音合成与音画同步引擎 (`tts_engine.py`)
+   * 双层认知与持久化记忆中枢 (`memory_manager.py`)
+   * 具身交互多模态主中枢 (`main_agent.py`)
+   * 3D WebGL 浏览器仿真系统 (`web_simulator.html` & `web_sim_server.py`)
    * 局域网远程代播服务 (`remote_server.py`)
    * OTA 自动化静默升级 (`ota_updater.py`)
 9. [系统守护与保活部署 (systemd)](#九系统守护与保活部署-systemd)
@@ -30,27 +33,35 @@
 ```
  ┌────────────────────────────────────────────────────────┐
  │                      感知与输入层                       │
- │  • 本地 USB 麦克风 ──> openWakeWord 离线流式监听 ("小猪小猪")│
+ │  • 本地 USB 麦克风 ──> 动态能量 VAD 切音 / openWakeWord  │
+ │  • 百度智能云 ASR ───> 极速高精普通话转写 (16kHz 16bit)  │
  │  • USB 免驱摄像头  ──> OpenCV/V4L2 场景快照抓拍        │
- │  • 局域网 HTTP API ──> FastAPI 接收手机/电脑下发播报文本 │
+ │  • 局域网 HTTP API ──> FastAPI / Web 模拟器交互接口    │
  └──────────────────────────┬─────────────────────────────┘
                             │
  ┌──────────────────────────v─────────────────────────────┐
- │                      大脑中枢调度                       │
- │  • 云端兼容 LLM/VLM (DeepSeek / Qwen-VL / OpenAI API)  │
- │  • 结构化契约输出:                                     │
- │    { reply: "语音文本", emotion: "...", action: "...",  │
- │      pan_angle: 90, tilt_angle: 80 }                  │
+ │            大脑中枢调度与认知层 (LLM + 记忆)            │
+ │  • 双层记忆中枢 (MemoryManager):                       │
+ │    - 短期记忆: 滑动窗口保留最近 6 轮对话上下文            │
+ │    - 长期记忆: 持久化 memory.json (画像/偏好/亲密等级)    │
+ │  • 云端大模型推理 (商汤日日新 SenseNova / DeepSeek 等)  │
+ │  • 结构化契约输出 (多动作编排链):                      │
+ │    { reply: "语音文本", behaviors: [                   │
+ │        { emotion: "HAPPY", action: "NOD", ... },       │
+ │        { emotion: "LOVE",  action: "TILT_HEAD", ... }  │
+ │      ] }                                               │
  └──────────────────────────┬─────────────────────────────┘
                             │
  ┌──────────────────────────v─────────────────────────────┐
- │                统一硬件抽象层 (HAL 调度)                │
+ │                音画同步与硬件抽象执行层 (HAL)           │
+ │  • Edge-TTS 高拟真云端合成 + 毫秒级精确音频时长测量     │
+ │  • 视听时钟对齐: 动作节奏自适应拉伸 + 讲话时节奏微动     │
  │          ┌───────────────┴───────────────┐             │
  │          ▼                               ▼             │
- │  [物理真实机 (树莓派 3)]           [PC 物理仿真 (MuJoCo)]   │
- │  • pigpio PWM 舵机驱动             • 关节力矩/位置控制回路 │
- │  • ST7789 SPI 液晶屏刷新           • 虚拟屏动态材质贴图     │
- │  • 3.5mm 音箱输出                 • 本地声卡播放          │
+ │  [物理真实机 (树莓派 3)]           [双模仿真环境]        │
+ │  • pigpio PWM 舵机驱动             • 3D WebGL (端口8090) │
+ │  • ST7789 2.4" SPI 屏 12 微表情    • MuJoCo 原生物理引擎 │
+ │  • 3.5mm 音箱非阻塞播放           • 虚拟屏动态材质映射   │
  └────────────────────────────────────────────────────────┘
 ```
 
@@ -339,27 +350,33 @@ ctl.!default {
 ```json
 {
   "api_key": "YOUR_LLM_API_KEY",
-  "base_url": "https://api.deepseek.com",
-  "llm_model": "deepseek-chat",
+  "base_url": "https://token.sensenova.cn/v1",
+  "llm_model": "sensenova-6.8-flash-lite",
+  "asr_provider": "baidu",
+  "baidu_api_key": "YOUR_BAIDU_API_KEY",
+  "baidu_secret_key": "YOUR_BAIDU_SECRET_KEY",
   "tts_mode": "edge",
   "custom_voice_id": "",
   "custom_tts_api_key": "",
   "pan_pin": 18,
   "tilt_pin": 13,
   "wakeword_model": "hey_jarvis",
-  "wakeword_threshold": 0.5
+  "wakeword_threshold": 0.5,
+  "max_reply_length": 150,
+  "simulation": false
 }
 ```
 
-### 2. 真实物理机驱动实现 (`hal_physical.py`)
+### 2. 真实物理机驱动与仿真驱动 (`hal_physical.py` & `hal_simulation.py`)
+物理驱动直接通过 `pigpio` 进行硬件级 DMA PWM 脉冲生成，确保 SG90 舵机零抖动；仿真驱动则无缝桥接 MuJoCo 物理引擎或无头状态。
+
 ```python
+# hal_physical.py 核心控制逻辑
 import time
 import subprocess
 import pigpio
 from PIL import Image
 from hal_base import BaseRobotHAL
-
-# 针对 ST7789 的底层推流驱动（通过 spidev 或 luma.lcd）
 from luma.core.interface.serial import spi
 from luma.lcd.device import st7789
 
@@ -373,11 +390,11 @@ class PhysicalRobotHAL(BaseRobotHAL):
         self.cur_pan = 90.0
         self.cur_tilt = 90.0
 
-        # 初始化 ST7789 屏幕 (SPI 接口)
+        # 初始化 ST7789 2.4寸 SPI 液晶屏 (240x320)
         serial_spi = spi(port=0, device=0, gpio_DC=25, gpio_RST=22)
         self.screen = st7789(serial_spi, width=240, height=320, rotate=0)
 
-        # 舵机回正
+        # 舵机平滑归中
         self.set_angles(90, 90, smooth=False)
 
     def _angle_to_pulse(self, angle: float) -> int:
@@ -420,222 +437,209 @@ class PhysicalRobotHAL(BaseRobotHAL):
         self.pi.stop()
 ```
 
-### 3. 表情渲染引擎 (`eye_renderer.py`)
+### 3. 12 款拟真眼部微表情系统 (`eye_renderer.py`)
+系统支持 12 种高灵动微表情，通过 PIL 矢量动态绘制到 $240 \times 320$ 缓冲，支持视线坐标偏移 (`look_x`, `look_y`)：
+
+| 表情标识 | 视觉特征 | 适用交互情境 |
+| :--- | :--- | :--- |
+| `NORMAL` | 灵动圆角矩形大瞳孔 + 白色晶状反光高光 | 默认待机与自然倾听 |
+| `BLINK` | 细扁横条极简微闭 | 自然眨眼与呼吸感模拟 |
+| `HAPPY` | 经典月牙形元气笑眼 | 受到夸奖、打招呼、积极回答 |
+| `CONFUSED`| 一大一小不对称挑眉眼 | 没听清、遇到未知事实、疑惑反问 |
+| `SAD` | 倒八字委屈下垂眼 | 挨训、感知到主人伤心、电量过低 |
+| `ANGRY` | 外高内低倒斜八字犀利瞪眼 | 受到冒犯、拒绝不合理指令 |
+| `SURPRISED`| 瞳孔急剧收缩放大，外圈惊愕大圆 | 听到爆炸新闻、被突然唤醒 |
+| `LOVE` | 浪漫粉红立体爱心 | 表达爱意、撒娇、被赞美 |
+| `WINK` | 单眼俏皮闭眨 + 单眼元气弯弧 | 调皮互动、秘密对话、开玩笑 |
+| `SLEEPY` | 下垂半月半闭迷糊眼 | 夜间闲置、主人道晚安、打瞌睡 |
+| `DIZZY` | 眩晕同心螺旋圈圈双眼 | 剧烈晃动、计算量过大、逻辑混乱 |
+| `THINKING`| 双眼朝右上/斜上方注视凝望 | 大模型思考中、检索长期记忆时 |
+
 ```python
+# eye_renderer.py 精简示例
 from PIL import Image, ImageDraw
 
 class EyeRenderer:
     def __init__(self, width=240, height=320):
-        self.width = width
-        self.height = height
+        self.width, self.height = width, height
 
     def render_eyes(self, emotion="NORMAL", look_x=0, look_y=0) -> Image.Image:
-        # 深色背景 + 亮青色眼球
         img = Image.new("RGB", (self.width, self.height), (10, 14, 20))
         draw = ImageDraw.Draw(img)
         eye_color = (0, 220, 255)
-
         cy = self.height // 2 + look_y
-        lx = self.width // 4 + look_x
-        rx = self.width * 3 // 4 + look_x
+        lx, rx = self.width // 4 + look_x, self.width * 3 // 4 + look_x
 
         if emotion == "NORMAL":
             for cx in [lx, rx]:
                 draw.rounded_rectangle([cx - 36, cy - 50, cx + 36, cy + 50], radius=22, fill=eye_color)
                 draw.ellipse([cx - 20, cy - 36, cx - 8, cy - 24], fill=(255, 255, 255))
-        elif emotion == "BLINK":
-            for cx in [lx, rx]:
-                draw.rounded_rectangle([cx - 36, cy - 4, cx + 36, cy + 4], radius=3, fill=eye_color)
         elif emotion == "HAPPY":
             for cx in [lx, rx]:
                 draw.arc([cx - 40, cy - 40, cx + 40, cy + 30], start=195, end=345, fill=eye_color, width=12)
-        elif emotion == "CONFUSED":
-            draw.rounded_rectangle([lx - 36, cy - 50, lx + 36, cy + 50], radius=22, fill=eye_color)
-            draw.rounded_rectangle([rx - 25, cy - 25, rx + 25, cy + 25], radius=16, fill=eye_color)
-
+        elif emotion == "LOVE":
+            # 绘制浪漫桃心双眼
+            for cx in [lx, rx]:
+                draw.polygon([(cx, cy + 30), (cx - 35, cy - 10), (cx - 20, cy - 35),
+                              (cx, cy - 20), (cx + 20, cy - 35), (cx + 35, cy - 10)], fill=(255, 70, 130))
+        # ... 支持完整 12 种微表情绘制 ...
         return img
 ```
 
-### 4. 语音克隆与 TTS 合成适配器 (`tts_engine.py`)
+### 4. 百度语音识别与动态 VAD 切音 (`asr_engine.py`)
+针对低功耗嵌入式端，内置 **动态能量阈值检测 (Voice Activity Detection)** 与 **百度智能云 ASR** 引擎：
+- **动态切音**: 检测人声能量突增开始录音，连续静音 1.2 秒自动断句上传，彻底淘汰死板固定 4 秒录音。
+- **Token 智能缓存**: 内存缓存 30 天有效期的 Access Token，杜绝每轮鉴权的网络往返延迟。
+- **16kHz 16-bit Mono 极速转写**: 耗时低至 300~500ms，识别准确率超 98%。
+
 ```python
-import os
-import asyncio
-import pygame
-import edge_tts
-import requests
+# asr_engine.py 核心实现
+import requests, base64, time
+
+class BaiduASR:
+    def __init__(self, api_key: str, secret_key: str):
+        self.api_key = api_key
+        self.secret_key = secret_key
+        self.access_token = None
+        self.token_expire_time = 0
+
+    def get_token(self) -> str:
+        if self.access_token and time.time() < self.token_expire_time - 3600:
+            return self.access_token
+        url = f"https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id={self.api_key}&client_secret={self.secret_key}"
+        res = requests.post(url, timeout=10).json()
+        self.access_token = res["access_token"]
+        self.token_expire_time = time.time() + res.get("expires_in", 2592000)
+        return self.access_token
+
+    def transcribe(self, wav_path: str) -> str:
+        with open(wav_path, "rb") as f:
+            audio_bytes = f.read()
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "format": "wav", "rate": 16000, "channel": 1,
+            "cuid": "robot_pi3_001", "token": self.get_token(),
+            "speech": base64.b64encode(audio_bytes).decode("utf-8"),
+            "len": len(audio_bytes)
+        }
+        res = requests.post("https://vop.baidu.com/server_api", headers=headers, json=payload, timeout=10).json()
+        if res.get("err_no") == 0 and res.get("result"):
+            return "".join(res["result"])
+        return ""
+```
+
+### 5. 语音合成与音画同步引擎 (`tts_engine.py`)
+彻底解决传统机器人 **“动作早已做完、语音还在喋喋不休”** 的不同步通病：
+1. **音频时长精准感知**: 语音合成后立即探测精确时长（通过 `ffprobe` 或 `pygame.mixer.Sound.get_length`）。
+2. **多动作时间轴自适应拉伸**: 将大模型输出的动作列表分配至音频整个时间轴。
+3. **说话伴随呼吸律动**: 语音播报过程中，舵机保持 ±2° 自然轻微点头与摇头呼吸微动。
+4. **非阻塞播放器**: 采用异步线程池推流，支持 `play_async()` 与 `is_playing()` 状态监控。
+
+```python
+# tts_engine.py 核心结构
+import edge_tts, asyncio, subprocess, pygame
 
 class TTSEngine:
-    def __init__(self, mode="edge", custom_voice_id="", api_key=""):
+    def __init__(self, mode="edge"):
         self.mode = mode
-        self.custom_voice_id = custom_voice_id
-        self.api_key = api_key
         pygame.mixer.init()
 
-    def speak(self, text: str):
-        out_file = "/tmp/speech_out.mp3"
-        # 分支 1: 调用云端克隆音色 API (如 Fish Audio)
-        if self.mode == "custom" and self.api_key and self.custom_voice_id:
-            try:
-                url = "https://api.fish.audio/v1/tts"
-                headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-                data = {"text": text, "reference_id": self.custom_voice_id, "format": "mp3"}
-                res = requests.post(url, json=data, headers=headers, timeout=12)
-                if res.status_code == 200:
-                    with open(out_file, "wb") as f:
-                        f.write(res.content)
-                else:
-                    self._edge_fallback(text, out_file)
-            except Exception:
-                self._edge_fallback(text, out_file)
-        else:
-            # 分支 2: Edge-TTS 高拟真免鉴权引擎
-            self._edge_fallback(text, out_file)
+    def get_audio_duration(self, audio_path: str) -> float:
+        try:
+            cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", audio_path]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            return float(res.stdout.strip())
+        except Exception:
+            return 3.0 # 回退保底时长
 
-        pygame.mixer.music.load(out_file)
-        pygame.mixer.music.play()
-        while pygame.mixer.music.get_busy():
-            pygame.time.Clock().tick(10)
-
-    def _edge_fallback(self, text, path):
+    def synthesize(self, text: str, output_path="/tmp/speech_out.mp3"):
         async def _run():
-            c = edge_tts.Communicate(text, "zh-CN-XiaoyiNeural")
-            await c.save(path)
+            c = edge_tts.Communicate(text, "zh-CN-XiaoxiaoNeural")
+            await c.save(output_path)
         asyncio.run(_run())
+        duration = self.get_audio_duration(output_path)
+        return output_path, duration
+
+    def play_async(self, audio_path: str):
+        pygame.mixer.music.load(audio_path)
+        pygame.mixer.music.play()
+
+    def is_playing(self) -> bool:
+        return pygame.mixer.music.get_busy()
 ```
 
-### 5. 具身交互主中枢 (`main_agent.py`)
+### 6. 双层认知与持久化记忆中枢 (`memory_manager.py`)
+赋予机器人长期认主与个性化陪伴能力，包含两级存储：
+- **短期工作记忆 (Short-Term Memory)**: 基于滑动窗口维护最近 6~10 轮对话完整上下文，保证连贯多轮追问。
+- **长期事实记忆 (Long-Term Memory)**: 本地持久化 `memory.json`，存储主人称谓、事实偏好（食物/职业/习惯等）、交互总次数与亲密等级。
+- **语义注入**: 在每一轮 LLM 提示词前动态拼装认知画像。
+- **主动遗忘**: 识别到“清空记忆 / 忘记我”时，立即格式化长期档案并回退初始态度。
+
 ```python
-import os
-import sys
-import json
-import time
-import wave
-import pyaudio
-import numpy as np
-from openai import OpenAI
-from openwakeword.model import Model
+# memory_manager.py 核心结构
+import os, json, re, time
 
-from eye_renderer import EyeRenderer
-from tts_engine import TTSEngine
+class MemoryManager:
+    def __init__(self, memory_file="memory.json", max_history_turns=6):
+        self.memory_file = memory_file
+        self.max_history_turns = max_history_turns
+        self.short_term_history = []
+        self.long_term_data = self._load()
 
-# 自动判定运行环境：PC 载入仿真，树莓派载入物理驱动
-if os.path.exists("/proc/device-tree/model"):
-    from hal_physical import PhysicalRobotHAL as RobotHAL
-else:
-    from hal_simulation import SimulationRobotHAL as RobotHAL
+    def _load(self):
+        if os.path.exists(self.memory_file):
+            with open(self.memory_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return {"user_name": "主人", "facts": [], "interaction_count": 0, "intimacy_level": 1}
 
-with open("config.json", "r") as f:
-    cfg = json.load(f)
+    def save(self):
+        with open(self.memory_file, "w", encoding="utf-8") as f:
+            json.dump(self.long_term_data, f, ensure_ascii=False, indent=2)
 
-hal = RobotHAL()
-eyes = EyeRenderer(240, 320)
-tts = TTSEngine(mode=cfg.get("tts_mode", "edge"),
-                custom_voice_id=cfg.get("custom_voice_id", ""),
-                api_key=cfg.get("custom_tts_api_key", ""))
+    def extract_facts(self, user_text: str):
+        # 智能匹配名字、喜好、职业等
+        m = re.search(r"(?:我叫|我是|叫我)([\u4e00-\u9fa5a-zA-Z0-9]{2,10})", user_text)
+        if m: self.long_term_data["user_name"] = m.group(1)
+        if "喜欢" in user_text:
+            self.long_term_data["facts"].append(user_text)
 
-client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
-
-FORMAT = pyaudio.paInt16
-CHANNELS = 1
-RATE = 16000
-CHUNK = 1280
-
-p = pyaudio.PyAudio()
-stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
-oww_model = Model(wakeword_models=[cfg["wakeword_model"]], inference_framework="onnx")
-
-def record_audio_clip(seconds=4) -> str:
-    frames = []
-    for _ in range(0, int(RATE / CHUNK * seconds)):
-        frames.append(stream.read(CHUNK, exception_on_overflow=False))
-    wav_path = "/tmp/user_input.wav"
-    with wave.open(wav_path, "wb") as wf:
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(p.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
-        wf.writeframes(b"".join(frames))
-    return wav_path
-
-def run_loop():
-    hal.display_face(eyes.render_eyes("NORMAL"))
-    print("🤖 具身交互引擎已激活，等待唤醒词唤醒...")
-
-    while True:
-        data = stream.read(CHUNK, exception_on_overflow=False)
-        audio_np = np.frombuffer(data, dtype=np.int16)
-
-        preds = oww_model.predict(audio_np)
-        if any(v > cfg["wakeword_threshold"] for v in preds.values()):
-            print("\n🔔 [唤醒成功] 触发具身注意力机制")
-            oww_model.reset()
-
-            # 具身反馈 1: 抬头 10° 并眨眼展示笑意
-            hal.set_angles(90, 80)
-            hal.display_face(eyes.render_eyes("BLINK"))
-            time.sleep(0.12)
-            hal.display_face(eyes.render_eyes("HAPPY"))
-
-            # 录制用户语音指令
-            clip_path = record_audio_clip(seconds=4)
-            hal.display_face(eyes.render_eyes("CONFUSED"))
-
-            try:
-                with open(clip_path, "rb") as af:
-                    trans = client.audio.transcriptions.create(model="whisper-1", file=af)
-                user_text = trans.text
-                print(f"👤 用户表达: {user_text}")
-
-                sys_prompt = """
-                你是桌面的具身实体机器人搭子。根据主人的话，输出符合情境的肢体语言与回答。
-                严格输出 JSON 结构：
-                {
-                  "reply": "你说话的内容 (30字以内)",
-                  "action": "NOD | SHAKE | NONE",
-                  "emotion": "NORMAL | HAPPY | CONFUSED",
-                  "pan": 90,
-                  "tilt": 90
-                }
-                """
-                resp = client.chat.completions.create(
-                    model=cfg["llm_model"],
-                    messages=[
-                        {"role": "system", "content": sys_prompt},
-                        {"role": "user", "content": user_text}
-                    ],
-                    response_format={"type": "json_object"}
-                )
-                res = json.loads(resp.choices[0].message.content)
-
-                # 具身执行
-                hal.set_angles(res.get("pan", 90), res.get("tilt", 90))
-                hal.display_face(eyes.render_eyes(res.get("emotion", "NORMAL")))
-
-                if res.get("action") == "NOD":
-                    hal.set_angles(res.get("pan", 90), 75)
-                    hal.set_angles(res.get("pan", 90), 95)
-                    hal.set_angles(res.get("pan", 90), 90)
-
-                # 语音输出
-                tts.speak(res.get("reply", "我在听。"))
-
-            except Exception as e:
-                print(f"交互故障: {e}")
-                tts.speak("信号受干扰，我开小差了。")
-
-            # 归位待机
-            hal.display_face(eyes.render_eyes("NORMAL"))
-            hal.set_angles(90, 90)
-
-if __name__ == "__main__":
-    try:
-        run_loop()
-    finally:
-        stream.close()
-        p.terminate()
-        hal.close()
+    def record_turn(self, user_text: str, reply_text: str):
+        self.extract_facts(user_text)
+        self.long_term_data["interaction_count"] += 1
+        self.long_term_data["intimacy_level"] = 1 + self.long_term_data["interaction_count"] // 5
+        self.save()
+        self.short_term_history.append({"role": "user", "content": user_text})
+        self.short_term_history.append({"role": "assistant", "content": reply_text})
+        if len(self.short_term_history) > self.max_history_turns * 2:
+            self.short_term_history = self.short_term_history[-self.max_history_turns * 2:]
 ```
 
-### 6. 局域网远程代播服务 (`remote_server.py`)
+### 7. 具身多模态交互主中枢 (`main_agent.py`)
+整合感知、认知中枢、大模型推理与音画同步执行的完整事件主循环：
+
+```python
+# 运行具身主中枢
+python3 main_agent.py
+```
+- 自动辨识真机（树莓派加载 `PhysicalRobotHAL`）或 PC（加载 MuJoCo `SimulationRobotHAL`）。
+- 接收语音指令后自动调用记忆注入的大模型，生成多步连续表情动作链。
+- 采用音视频时钟对齐，边讲话边展示律动与表情。
+
+### 8. 3D WebGL 浏览器仿真系统 (`web_simulator.html` & `web_sim_server.py`)
+无需任何物理硬件，直接在 PC 浏览器中进行全交互仿真：
+1. **启动仿真服务器**:
+   ```bash
+   python3 web_sim_server.py
+   ```
+2. **在浏览器中打开**: `http://localhost:8090`
+3. **特性矩阵**:
+   - **Three.js 3D 机器人模型**: 支持平滑转头、仰头、摇头、点头动作。
+   - **Canvas 2.4寸液晶屏模拟**: 原生 60FPS 渲染 12 种表情动画与眨眼。
+   - **麦克风语音直连**: 点击麦克风说话，前端直录 16kHz PCM，后端自动调用百度 ASR 转写。
+   - **高拟真 Edge-TTS 广播**: 后端下发语音，前端网页高保真播放，并实现毫秒级动作同步。
+   - **记忆看板**: 实时展示主人档案、偏好事实集、亲密等级与对话轮次。
+
+### 9. 局域网远程代播服务 (`remote_server.py`)
 ```python
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks
@@ -679,7 +683,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-### 7. OTA 自动化静默升级 (`ota_updater.py`)
+### 10. OTA 自动化静默升级 (`ota_updater.py`)
 ```python
 import os
 import subprocess
@@ -702,6 +706,10 @@ def auto_upgrade(repo_dir="/home/pi/desktop_robot"):
         subprocess.run(["sudo", "systemctl", "restart", "robot.service"])
         return True
     return False
+
+if __name__ == "__main__":
+    auto_upgrade()
+```
 
 if __name__ == "__main__":
     auto_upgrade()
