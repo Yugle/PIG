@@ -28,7 +28,7 @@ class SimulationRobotHAL(BaseRobotHAL):
     如果未安装 MuJoCo 或处于无头 (Headless) 环境，会自动退化为轻量模拟模式，方便逻辑调试。
     """
 
-    def __init__(self, urdf_path="robot.urdf", headless=False):
+    def __init__(self, model_path="scene.xml", headless=False):
         self.cur_pan = 90.0
         self.cur_tilt = 90.0
         self.headless = headless or not bool(os.environ.get("DISPLAY"))
@@ -37,13 +37,17 @@ class SimulationRobotHAL(BaseRobotHAL):
         self.data = None
         self.viewer = None
 
-        if mujoco is not None and os.path.exists(urdf_path) and not self.headless:
+        # 优先选择自带几何体的 scene.xml，若不存在再回退到 urdf
+        if not os.path.exists(model_path) and os.path.exists("robot.urdf"):
+            model_path = "robot.urdf"
+
+        if mujoco is not None and os.path.exists(model_path) and not self.headless:
             try:
-                self.model = mujoco.MjModel.from_xml_path(urdf_path)
+                self.model = mujoco.MjModel.from_xml_path(model_path)
                 self.data = mujoco.MjData(self.model)
                 self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
                 self.has_mujoco = True
-                print("🎮 [HAL-Sim] MuJoCo 3D 动力学仿真视窗已启动")
+                print(f"🎮 [HAL-Sim] MuJoCo 3D 动力学仿真视窗已启动 (模型: {model_path})")
             except Exception as e:
                 print(f"⚠️ [HAL-Sim] MuJoCo 视窗初始化跳过 ({e})，将以控制台日志模式运行")
         else:

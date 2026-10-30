@@ -1,0 +1,60 @@
+<mujoco model="desktop_robot">
+  <compiler angle="radian" coordinate="local"/>
+
+  <default>
+    <joint damping="0.05" armature="0.01"/>
+    <geom condim="3" density="500"/>
+  </default>
+
+  <asset>
+    <!-- 材质定义 -->
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="512"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.8 0.8 0.8" rgb2="0.9 0.9 0.9" width="512" height="512"/>
+    <material name="grid_mat" texture="grid" texrepeat="5 5" reflectance="0.2"/>
+    <material name="white_plastic" rgba="0.92 0.92 0.94 1" specular="0.3" shininess="0.5"/>
+    <material name="dark_metal" rgba="0.25 0.25 0.28 1" specular="0.5" shininess="0.8"/>
+    <material name="cyan_screen" rgba="0.0 0.86 1.0 1" emission="0.8"/>
+    <material name="black_bezel" rgba="0.08 0.08 0.1 1"/>
+  </asset>
+
+  <worldbody>
+    <!-- 地面与光照 -->
+    <light pos="0 -0.5 1.0" dir="0 0.5 -1" diffuse="0.8 0.8 0.8" specular="0.3 0.3 0.3"/>
+    <light pos="0 0.5 1.0" dir="0 -0.5 -1" diffuse="0.5 0.5 0.5"/>
+    <geom name="floor" type="plane" size="0.5 0.5 0.01" material="grid_mat"/>
+
+    <!-- 桌面底座 (Base Stand) -->
+    <body name="base" pos="0 0 0.025">
+      <geom name="base_geom" type="cylinder" size="0.045 0.025" material="white_plastic"/>
+
+      <!-- 水平旋转关节 Yaw (Pan): 对应 SG90 水平舵机，范围约 -70° ~ +70° -->
+      <body name="neck" pos="0 0 0.025">
+        <joint name="neck_yaw_joint" type="hinge" axis="0 0 1" range="-1.22 1.22"/>
+        <geom name="neck_hinge" type="cylinder" size="0.016 0.015" material="dark_metal"/>
+
+        <!-- 俯仰旋转关节 Pitch (Tilt): 对应 SG90 俯仰舵机，范围约 -30° ~ +30° -->
+        <body name="head" pos="0 0 0.03">
+          <joint name="head_pitch_joint" type="hinge" axis="1 0 0" range="-0.52 0.52"/>
+          
+          <!-- 头部主体外壳 -->
+          <geom name="head_body" type="box" size="0.038 0.028 0.035" pos="0 0 0.02" material="white_plastic"/>
+          
+          <!-- 面部黑色边框 -->
+          <geom name="screen_bezel" type="box" size="0.032 0.002 0.028" pos="0 -0.029 0.02" material="black_bezel"/>
+          
+          <!-- 面部彩色液晶屏 (发光青色仿真) -->
+          <geom name="screen_face" type="box" size="0.026 0.001 0.022" pos="0 -0.031 0.02" material="cyan_screen"/>
+          
+          <!-- 额头 USB 摄像头镜头 -->
+          <geom name="camera_lens" type="sphere" size="0.004" pos="0 -0.030 0.045" material="dark_metal"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <!-- 舵机执行器控制通道 (位置控制回路) -->
+  <actuator>
+    <position name="pan_motor" joint="neck_yaw_joint" kp="2.0" ctrlrange="-1.22 1.22"/>
+    <position name="tilt_motor" joint="head_pitch_joint" kp="2.0" ctrlrange="-0.52 0.52"/>
+  </actuator>
+</mujoco>
