@@ -2,6 +2,7 @@ import http.server
 import socketserver
 import os
 import json
+import re
 import requests
 import subprocess
 from asr_engine import BaiduASR
@@ -10,6 +11,70 @@ from memory_manager import MemoryManager
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 mem = MemoryManager()
+
+def parse_llm_json(content: str, reasoning: str = "") -> dict:
+    """
+    五重容错解析大模型输出，确保绝不丢失回答内容：
+    1. 纯 JSON 解析
+    2. Markdown ```json 代码块提取
+    3. 正则匹配最外层花括号 {...}
+    4. 纯自然语言回答回退（保留大模型生成文本，自动附赠生动表情动作）
+    5. reasoning 思考尾部语义回退
+    """
+    content = (content or "").strip()
+    reasoning = (reasoning or "").strip()
+
+    # 策略 1: 直接 json.loads
+    try:
+        data = json.loads(content)
+        if isinstance(data, dict) and ("reply" in data or "behaviors" in data):
+            return data
+    except Exception:
+        pass
+
+    # 策略 2: 提取 ```json ... ```
+    md_match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", content, re.IGNORECASE)
+    if md_match:
+        try:
+            data = json.loads(md_match.group(1))
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+
+    # 策略 3: 正则搜索最外层花括号 {...}
+    brace_match = re.search(r"(\{[\s\S]*\})", content)
+    if brace_match:
+        try:
+            data = json.loads(brace_match.group(1))
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+
+    # 策略 4: 如果大模型输出了纯文本（没带 JSON 外壳），直接取大模型回答，绝不吞掉！
+    clean_text = re.sub(r"```[\s\S]*?```", "", content).strip()
+    if clean_text and len(clean_text) > 1:
+        clean_text = re.sub(r"^(?:回答|回复|小猪|机器小猪)[:：]\s*", "", clean_text).strip()
+        return {
+            "reply": clean_text,
+            "behaviors": [
+                {"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 85, "delay": 700}
+            ]
+        }
+
+    # 策略 5: 回退从 reasoning 思考链末尾提取
+    if reasoning:
+        r_brace = re.search(r"(\{[\s\S]*\})", reasoning)
+        if r_brace:
+            try:
+                data = json.loads(r_brace.group(1))
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                pass
+
+    return None
 
 def load_config():
     cfg_file = os.path.join(DIRECTORY, "config.json")
@@ -212,20 +277,25 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     messages = mem.get_messages_for_llm(user_text, sys_prompt)
                     payload = {
                         "model": model,
-                        "messages": messages
+                        "messages": messages,
+                        "response_format": {"type": "json_object"}
                     }
                     resp = requests.post(url, headers=headers, json=payload, timeout=60)
                     if resp.status_code == 200:
-                        content = resp.json()["choices"][0]["message"]["content"].strip()
-                        if content.startswith("```"):
-                            content = content.split("```")[1]
-                            if content.startswith("json"):
-                                content = content[4:]
-                            content = content.strip()
-                        parsed = json.loads(content)
-                        reply_data.update(parsed)
-                        # 记录进入记忆中枢
-                        mem.record_turn(user_text, reply_data.get("reply", ""))
+                        choice = resp.json().get("choices", [{}])[0]
+                        msg_obj = choice.get("message", {})
+                        raw_content = msg_obj.get("content", "")
+                        reasoning_content = msg_obj.get("reasoning", "")
+
+                        parsed = parse_llm_json(raw_content, reasoning_content)
+                        if parsed:
+                            reply_data.update(parsed)
+                            # 记录进入记忆中枢
+                            mem.record_turn(user_text, reply_data.get("reply", ""))
+                        else:
+                            print(f"⚠️ [Web-LLM] 未能提取到有效回答，原始输出: {repr(raw_content)}")
+                    else:
+                        print(f"⚠️ [Web-LLM HTTP 错误 {resp.status_code}]: {resp.text}")
                 except Exception as e:
                     print(f"⚠️ [Web-LLM Error]: {e}")
 

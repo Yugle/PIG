@@ -5,11 +5,71 @@ import time
 import wave
 import signal
 import math
+import re
 
 from eye_renderer import EyeRenderer
 from tts_engine import TTSEngine
 from asr_engine import BaiduASR
 from memory_manager import MemoryManager
+
+def parse_llm_json(content: str, reasoning: str = "") -> dict:
+    """
+    五重容错解析大模型输出，确保绝不丢失回答内容：
+    1. 纯 JSON 解析
+    2. Markdown ```json 代码块提取
+    3. 正则匹配最外层花括号 {...}
+    4. 纯自然语言回答回退（保留大模型生成文本，自动附赠生动表情动作）
+    5. reasoning 思考尾部语义回退
+    """
+    content = (content or "").strip()
+    reasoning = (reasoning or "").strip()
+
+    try:
+        data = json.loads(content)
+        if isinstance(data, dict) and ("reply" in data or "behaviors" in data):
+            return data
+    except Exception:
+        pass
+
+    md_match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", content, re.IGNORECASE)
+    if md_match:
+        try:
+            data = json.loads(md_match.group(1))
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+
+    brace_match = re.search(r"(\{[\s\S]*\})", content)
+    if brace_match:
+        try:
+            data = json.loads(brace_match.group(1))
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+
+    clean_text = re.sub(r"```[\s\S]*?```", "", content).strip()
+    if clean_text and len(clean_text) > 1:
+        clean_text = re.sub(r"^(?:回答|回复|小猪|机器小猪)[:：]\s*", "", clean_text).strip()
+        return {
+            "reply": clean_text,
+            "behaviors": [
+                {"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 85, "delay": 700}
+            ]
+        }
+
+    if reasoning:
+        r_brace = re.search(r"(\{[\s\S]*\})", reasoning)
+        if r_brace:
+            try:
+                data = json.loads(r_brace.group(1))
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                pass
+
+    return None
 
 # 自动判定运行环境：根据 /proc/device-tree/model 识别树莓派真机或 PC 仿真
 is_raspberry_pi = False
@@ -213,32 +273,33 @@ def process_interaction(user_text: str):
             messages = mem.get_messages_for_llm(user_text, sys_prompt)
             payload = {
                 "model": llm_model,
-                "messages": messages
+                "messages": messages,
+                "response_format": {"type": "json_object"}
             }
             response = requests.post(url, headers=headers, json=payload, timeout=60)
             if response.status_code == 200:
                 resp_json = response.json()
-                raw_content = resp_json["choices"][0]["message"]["content"].strip()
+                choice = resp_json.get("choices", [{}])[0]
+                msg_obj = choice.get("message", {})
+                raw_content = msg_obj.get("content", "")
+                reasoning_content = msg_obj.get("reasoning", "")
 
-                if raw_content.startswith("```"):
-                    raw_content = raw_content.split("```")[1]
-                    if raw_content.startswith("json"):
-                        raw_content = raw_content[4:]
-                    raw_content = raw_content.strip()
-
-                res = json.loads(raw_content)
-                reply_text = res.get("reply", reply_text)
-                behaviors = res.get("behaviors", [])
-                if not behaviors:
-                    behaviors = [{
-                        "emotion": res.get("emotion", "NORMAL"),
-                        "action": res.get("action", "NONE"),
-                        "pan": res.get("pan", 90),
-                        "tilt": res.get("tilt", 90),
-                        "delay": 700
-                    }]
-                # 记录进记忆中枢
-                mem.record_turn(user_text, reply_text)
+                parsed = parse_llm_json(raw_content, reasoning_content)
+                if parsed:
+                    reply_text = parsed.get("reply", reply_text)
+                    behaviors = parsed.get("behaviors", [])
+                    if not behaviors:
+                        behaviors = [{
+                            "emotion": parsed.get("emotion", "NORMAL"),
+                            "action": parsed.get("action", "NONE"),
+                            "pan": parsed.get("pan", 90),
+                            "tilt": parsed.get("tilt", 90),
+                            "delay": 700
+                        }]
+                    # 记录进记忆中枢
+                    mem.record_turn(user_text, reply_text)
+                else:
+                    print(f"⚠️ [Agent-LLM] 未能提取到有效回答，原始输出: {repr(raw_content)}")
             else:
                 print(f"⚠️ [LLM 响应异常状态码 {response.status_code}]: {response.text}")
                 reply_text = "网络信号有些微弱，我没听清呢。"
