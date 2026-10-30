@@ -21,6 +21,43 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/" or self.path == "":
             self.path = "/web_simulator.html"
+            return super().do_GET()
+
+        # 高拟真中文语音合成 (Edge-TTS zh-CN-XiaoxiaoNeural)
+        if self.path.startswith("/api/tts"):
+            from urllib.parse import parse_qs, urlparse
+            query = parse_qs(urlparse(self.path).query)
+            text = query.get("text", [""])[0]
+            if not text:
+                self.send_error(400, "Missing text parameter")
+                return
+
+            try:
+                import asyncio
+                import edge_tts
+
+                async def _gen():
+                    # 使用 Xiaoxiao 极具亲和力的甜美自然女声
+                    comm = edge_tts.Communicate(text, "zh-CN-XiaoxiaoNeural")
+                    chunks = []
+                    async for chunk in comm.stream():
+                        if chunk["type"] == "audio":
+                            chunks.append(chunk["data"])
+                    return b"".join(chunks)
+
+                audio_data = asyncio.run(_gen())
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/mpeg")
+                self.send_header("Content-Length", str(len(audio_data)))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(audio_data)
+                return
+            except Exception as e:
+                print(f"⚠️ [TTS 合成错误]: {e}")
+                self.send_error(500, str(e))
+                return
+
         return super().do_GET()
 
     def do_POST(self):
