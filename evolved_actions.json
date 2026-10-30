@@ -1,0 +1,73 @@
+{
+  "SHY_DANCE": {
+    "description": "害羞摇摆舞 (大模型自创演示)",
+    "keyframes": [
+      {
+        "pan": 80,
+        "tilt": 100,
+        "emotion": "LOVE",
+        "duration": 400
+      },
+      {
+        "pan": 100,
+        "tilt": 90,
+        "emotion": "WINK",
+        "duration": 400
+      },
+      {
+        "pan": 85,
+        "tilt": 95,
+        "emotion": "HAPPY",
+        "duration": 300
+      },
+      {
+        "pan": 90,
+        "tilt": 90,
+        "emotion": "NORMAL",
+        "duration": 300
+      }
+    ]
+  },
+  "HAPPY_TWIRL": {
+    "description": "快乐双向转头",
+    "created_at": "2026-10-30 17:51:14",
+    "keyframes": [
+      {
+        "pan": 70,
+        "tilt": 85,
+        "emotion": "HAPPY",
+        "duration": 300
+      },
+      {
+        "pan": 110,
+        "tilt": 85,
+        "emotion": "HAPPY",
+        "duration": 300
+      }
+    ]
+  },
+  "SPIN_DANCE": {
+    "description": "转圈舞：先左看再右看再开心微笑",
+    "created_at": "2026-10-30 17:57:35",
+    "keyframes": [
+      {
+        "pan": 70,
+        "tilt": 90,
+        "emotion": "NORMAL",
+        "duration": 400
+      },
+      {
+        "pan": 110,
+        "tilt": 90,
+        "emotion": "NORMAL",
+        "duration": 400
+      },
+      {
+        "pan": 90,
+        "tilt": 85,
+        "emotion": "HAPPY",
+        "duration": 400
+      }
+    ]
+  }
+}

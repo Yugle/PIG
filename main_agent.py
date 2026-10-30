@@ -14,6 +14,7 @@ from memory_manager import MemoryManager
 import sound_effects
 from face_tracker import FaceTracker
 from idle_fsm import IdleFSM
+from skill_manager import SkillManager
 
 def parse_llm_json(content: str, reasoning: str = "") -> dict:
     """
@@ -138,6 +139,30 @@ print(f"🧠 [记忆中枢] 已加载主人档案: {mem.long_term_data.get('user
 idle_fsm = IdleFSM()
 face_tracker = FaceTracker(enabled=cfg.get("face_tracking", False))
 print(f"👁️ [视觉追踪] 人脸注视追踪初始化状态: {'ON (开启)' if face_tracker.enabled else 'OFF (关闭)'}")
+
+# 初始化技能与自进化动作调度中枢
+skill_mgr = SkillManager()
+
+def on_hardware_alarm(rem):
+    """物理机闹钟/日程到点主动抢占播报"""
+    print(f"🚨 [MainAgent 物理抢占] 到点提醒: {rem.get('content')}")
+    sound_effects.play_sound("wake_chime")
+    hal.set_angles(90, 75)
+    hal.display_face(eyes.render_eyes("SURPRISED"))
+    time.sleep(0.5)
+    alert_text = f"主人，时间到啦！提醒你：{rem.get('content')}！"
+    try:
+        a_path, a_dur = tts.synthesize(alert_text)
+        tts.play_async(a_path, a_dur)
+        hal.set_angles(90, 80)
+        hal.display_face(eyes.render_eyes("HAPPY"))
+        time.sleep(min(3.5, a_dur))
+    except Exception as e:
+        print(f"⚠️ [闹钟语音播报异常]: {e}")
+    hal.set_angles(90, 90)
+    hal.display_face(eyes.render_eyes("NORMAL"))
+
+skill_mgr.register_trigger_callback(on_hardware_alarm)
 api_key = cfg.get("api_key", "")
 base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
 llm_model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
@@ -228,7 +253,13 @@ def process_interaction(user_text: str):
     print(f"\n👤 [用户表达]: {user_text}")
 
     max_len = cfg.get("max_reply_length", 150)
+    now_dt = datetime.now()
+    weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    current_time_str = f"{now_dt.strftime('%Y-%m-%d %H:%M:%S')} ({weekdays[now_dt.weekday()]})"
+
     sys_prompt = f"""你是桌面的具身实体机器人搭子。根据主人的话，输出富有真实生命体征、连续起伏的肢体语言与回答。
+当前系统时间为：{current_time_str}。
+
 严格输出 JSON 结构，不要包含任何 markdown 或其他文本：
 {{
   "reply": "你说话的内容 (口语化、亲切真诚，建议 {max_len} 字以内)",
@@ -240,23 +271,21 @@ def process_interaction(user_text: str):
       "tilt": 80,
       "delay": 700
     }}
-  ]
+  ],
+  "skill": {{
+    "name": "set_timer | set_alarm | cancel_reminder | list_reminders | evolve_action",
+    "args": {{ ... }}
+  }}
 }}
 说明：
 - behaviors: 输出 1 到 3 个连续递进的动作表情时序步骤！模拟真人的情绪起伏波澜演变过程。
-- pan: 水平头部朝向 [30, 150]，90 为正中
-- tilt: 俯仰头部朝向 [70, 110]，90 为平视，80 为轻微抬头看人
-- delay: 该步骤保持毫秒数 [500, 1200]
-
-【参考示例】
-- 用户："哇，我给你带了一整盒草莓蛋糕！" -> {{
-    "reply": "哇！真的吗？太好啦！想想就幸福得冒泡~ 谢谢主人！",
-    "behaviors": [
-      {{"emotion": "SURPRISED", "action": "SURPRISE", "pan": 90, "tilt": 70, "delay": 600}},
-      {{"emotion": "HAPPY", "action": "NOD", "pan": 85, "tilt": 75, "delay": 800}},
-      {{"emotion": "LOVE", "action": "WINK", "pan": 90, "tilt": 80, "delay": 900}}
-    ]
-  }}
+- pan: 水平头部朝向 [30, 150]，90 为正中；tilt: 俯仰头部朝向 [70, 110]，90 为平视，80 为轻微抬头看人；delay: 毫秒数 [500, 1200]。
+- skill (可选调度字段，非必须):
+  1. 用户要求倒计时(如“10分钟后叫我喝水”) -> "skill": {{"name": "set_timer", "args": {{"seconds": 600, "content": "喝水"}}}}
+  2. 用户要求设闹钟/提醒(如“明天早上8点叫我”、“下午3点提醒开会”) -> 根据当前系统时间推算，输出 "skill": {{"name": "set_alarm", "args": {{"time_str": "08:00", "content": "起床"}}}}
+  3. 用户要求取消闹钟(如“取消喝水提醒”) -> "skill": {{"name": "cancel_reminder", "args": {{"keyword": "喝水"}}}}
+  4. 用户要求查有哪些闹钟 -> "skill": {{"name": "list_reminders", "args": {{}}}}
+  5. 用户夸赞、教你新动作、或你想自创一套复合肢体动作时 -> "skill": {{"name": "evolve_action", "args": {{"name": "HAPPY_WIGGLE", "description": "开心扭动舞步", "keyframes": [{{"pan": 80, "tilt": 95, "emotion": "HAPPY", "duration": 400}}, {{"pan": 100, "tilt": 95, "emotion": "HAPPY", "duration": 400}}]}}}}
 """
 
     reply_text = "我在听呢，有什么我可以帮你的吗？"
@@ -312,6 +341,17 @@ def process_interaction(user_text: str):
                             "tilt": parsed.get("tilt", 90),
                             "delay": 700
                         }]
+                    # 调度技能与动作自进化
+                    skill_call = parsed.get("skill")
+                    if skill_call and isinstance(skill_call, dict) and skill_call.get("name"):
+                        skill_res = skill_mgr.dispatch(skill_call)
+                        print(f"🎯 [Skill 调度完成]: {skill_call.get('name')} -> {skill_res}")
+                        if skill_call.get("name") == "evolve_action":
+                            act_name = skill_call.get("args", {}).get("name", "")
+                            act_obj = skill_mgr.get_evolved_action(act_name)
+                            if act_obj and act_obj.get("keyframes"):
+                                behaviors = act_obj["keyframes"]
+
                     # 记录进记忆中枢
                     mem.record_turn(user_text, reply_text)
                 else:

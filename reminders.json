@@ -1,0 +1,24 @@
+[
+  {
+    "id": "timer_412a77",
+    "type": "timer",
+    "content": "测试倒计时关火",
+    "target_time": 1793353873.0342867,
+    "target_time_str": "2026-10-30 17:51:13",
+    "display_str": "0分2秒倒计时: 测试倒计时关火",
+    "repeat": "none",
+    "completed": true,
+    "created_at": 1793353871.034428
+  },
+  {
+    "id": "timer_2da8e5",
+    "type": "timer",
+    "content": "喝水",
+    "target_time": 1793354228.0463033,
+    "target_time_str": "2026-10-30 17:57:08",
+    "display_str": "0分5秒倒计时: 喝水",
+    "repeat": "none",
+    "completed": true,
+    "created_at": 1793354223.0463545
+  }
+]

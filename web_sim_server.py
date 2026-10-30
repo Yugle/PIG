@@ -5,17 +5,32 @@ import json
 import re
 import requests
 import subprocess
+import threading
+from datetime import datetime
 from asr_engine import BaiduASR
 from memory_manager import MemoryManager
 import sound_effects
 from face_tracker import FaceTracker
 from idle_fsm import IdleFSM
+from skill_manager import SkillManager
 
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 mem = MemoryManager()
 face_tracker = FaceTracker(enabled=False)
 idle_fsm = IdleFSM()
+skill_mgr = SkillManager(storage_dir=DIRECTORY)
+
+# 待派发给前端 Web 仿真视窗的到点闹钟事件队列
+pending_web_alarms = []
+alarms_lock = threading.Lock()
+
+def on_alarm_triggered(rem):
+    with alarms_lock:
+        pending_web_alarms.append(rem)
+    print(f"🔔 [WebSim] 收到闹钟事件已推入前端队列: {rem.get('content')}")
+
+skill_mgr.register_trigger_callback(on_alarm_triggered)
 
 def parse_llm_json(content: str, reasoning: str = "") -> dict:
     """
@@ -120,6 +135,35 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"enabled": face_tracker.enabled}).encode("utf-8"))
             return
 
+        # 获取活跃日程与闹钟列表
+        if self.path == "/api/reminders":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            data = {"status": "ok", "reminders": skill_mgr.list_active_reminders()}
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 获取自进化动作列表
+        if self.path == "/api/evolved_actions":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            data = {"status": "ok", "actions": skill_mgr.list_evolved_actions()}
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 获取到点待触发的闹钟/日程事件 (前端长轮询/定期拉取)
+        if self.path == "/api/alarm_events":
+            with alarms_lock:
+                events = list(pending_web_alarms)
+                pending_web_alarms.clear()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "events": events}, ensure_ascii=False).encode("utf-8"))
+            return
+
         # 获取非语言萌趣程序化音效流
         if self.path.startswith("/api/sounds"):
             from urllib.parse import parse_qs, urlparse
@@ -195,6 +239,22 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(400, str(e))
             return
 
+        # 取消提醒或闹钟
+        if self.path == "/api/reminders/cancel":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8"))
+                kw = body.get("keyword", "") or body.get("id", "")
+                res = skill_mgr.cancel_reminder(kw)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "cancelled": res}).encode("utf-8"))
+            except Exception as e:
+                self.send_error(400, str(e))
+            return
+
         # 百度语音识别接口
         if self.path == "/api/asr":
             content_length = int(self.headers.get("Content-Length", 0))
@@ -254,7 +314,13 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
             max_len = cfg.get("max_reply_length", 150)
 
+            now_dt = datetime.now()
+            weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+            current_time_str = f"{now_dt.strftime('%Y-%m-%d %H:%M:%S')} ({weekdays[now_dt.weekday()]})"
+
             sys_prompt = f"""你是桌面的具身实体机器人搭子。根据主人的话，输出富有真实生命体征、连续起伏的肢体语言与回答。
+当前系统时间为：{current_time_str}。
+
 严格输出 JSON 结构，不要包含任何 markdown 或其他文本：
 {{
   "reply": "你说话的内容 (口语化、亲切真诚，建议 {max_len} 字以内)",
@@ -266,36 +332,38 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
       "tilt": 80,
       "delay": 700
     }}
-  ]
+  ],
+  "skill": {{
+    "name": "set_timer | set_alarm | cancel_reminder | list_reminders | evolve_action",
+    "args": {{ ... }}
+  }}
 }}
 说明：
-- behaviors: 输出 1 到 3 个连续递进的动作表情时序步骤！真实人类和皮克斯动画都是复合情绪演变的，例如：被夸时先吃惊再害羞心动，分析问题时先思考后豁然开朗点头！
-- pan: 水平头部朝向 [30, 150]，90 为正中
-- tilt: 俯仰头部朝向 [70, 110]，90 为平视，80 为轻微抬头看人
-- delay: 该步骤保持毫秒数 [500, 1200]
+- behaviors: 输出 1 到 3 个连续递进的动作表情时序步骤！
+- pan: 水平头部朝向 [30, 150]，90 为正中；tilt: 俯仰头部朝向 [70, 110]，90 为平视，80 为轻微抬头看人；delay: 毫秒数 [500, 1200]。
+- skill (可选调度字段，非必须):
+  1. 用户要求倒计时(如“10分钟后叫我喝水”) -> "skill": {{"name": "set_timer", "args": {{"seconds": 600, "content": "喝水"}}}}
+  2. 用户要求设闹钟/提醒(如“明天早上8点叫我”、“下午3点提醒开会”) -> 根据当前系统时间推算，输出 "skill": {{"name": "set_alarm", "args": {{"time_str": "08:00", "content": "起床"}}}}
+  3. 用户要求取消闹钟(如“取消喝水提醒”) -> "skill": {{"name": "cancel_reminder", "args": {{"keyword": "喝水"}}}}
+  4. 用户要求查有哪些闹钟 -> "skill": {{"name": "list_reminders", "args": {{}}}}
+  5. 用户夸赞、教你新动作、或你想自创一套复合肢体动作时 -> "skill": {{"name": "evolve_action", "args": {{"name": "HAPPY_WIGGLE", "description": "开心扭动舞步", "keyframes": [{{"pan": 80, "tilt": 95, "emotion": "HAPPY", "duration": 400}}, {{"pan": 100, "tilt": 95, "emotion": "HAPPY", "duration": 400}}]}}}}
 
 【参考示例】
-- 用户："哇，我给你带了一整盒草莓蛋糕！" -> {{
-    "reply": "哇！真的吗？太好啦！想想就幸福得冒泡~ 谢谢主人！",
+- 用户："30分钟后提醒我关火" -> {{
+    "reply": "好嘞！我已经帮你设好30分钟后的关火倒计时啦，放心交给我！",
     "behaviors": [
-      {{"emotion": "SURPRISED", "action": "SURPRISE", "pan": 90, "tilt": 70, "delay": 600}},
-      {{"emotion": "HAPPY", "action": "NOD", "pan": 85, "tilt": 75, "delay": 800}},
-      {{"emotion": "LOVE", "action": "WINK", "pan": 90, "tilt": 80, "delay": 900}}
-    ]
-  }}
-- 用户："这道复杂的数学题怎么算？" -> {{
-    "reply": "这道题有点意思，容本小猪开足马力推演一下... 搞定啦！",
-    "behaviors": [
-      {{"emotion": "THINKING", "action": "LOOK_UP", "pan": 105, "tilt": 75, "delay": 900}},
+      {{"emotion": "THINKING", "action": "LOOK_UP", "pan": 95, "tilt": 80, "delay": 600}},
       {{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 85, "delay": 800}}
-    ]
+    ],
+    "skill": {{"name": "set_timer", "args": {{"seconds": 1800, "content": "关火"}}}}
   }}
-- 用户："今天加班太累了，我想睡了" -> {{
-    "reply": "辛苦啦主人，快盖好被子，晚安好梦哦~",
+- 用户："做个开心的动作逗逗我" -> {{
+    "reply": "看我的秘密开心摇摆！怎么样，有没有被我萌到呀？",
     "behaviors": [
-      {{"emotion": "SAD", "action": "NONE", "pan": 90, "tilt": 85, "delay": 600}},
-      {{"emotion": "SLEEPY", "action": "NONE", "pan": 90, "tilt": 105, "delay": 1000}}
-    ]
+      {{"emotion": "HAPPY", "action": "NOD", "pan": 80, "tilt": 85, "delay": 500}},
+      {{"emotion": "LOVE", "action": "WINK", "pan": 100, "tilt": 85, "delay": 600}}
+    ],
+    "skill": {{"name": "evolve_action", "args": {{"name": "JOY_BOUNCE", "description": "欢快左右小跳跃", "keyframes": [{{"pan": 80, "tilt": 80, "emotion": "HAPPY", "duration": 400}}, {{"pan": 100, "tilt": 80, "emotion": "LOVE", "duration": 400}}, {{"pan": 90, "tilt": 90, "emotion": "WINK", "duration": 400}}]}}}}
   }}
 """
 
@@ -340,6 +408,19 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         parsed = parse_llm_json(raw_content, reasoning_content)
                         if parsed:
                             reply_data.update(parsed)
+                            # 调度并执行伴侣技能
+                            skill_call = parsed.get("skill")
+                            if skill_call and isinstance(skill_call, dict) and skill_call.get("name"):
+                                skill_res = skill_mgr.dispatch(skill_call)
+                                reply_data["skill_result"] = skill_res
+                                print(f"🎯 [Skill 调度完成]: {skill_call.get('name')} -> {skill_res}")
+                                # 若为动作自进化，动态将新动作关键帧作为 behaviors 演出
+                                if skill_call.get("name") == "evolve_action":
+                                    act_name = skill_call.get("args", {}).get("name", "")
+                                    act_obj = skill_mgr.get_evolved_action(act_name)
+                                    if act_obj and act_obj.get("keyframes"):
+                                        reply_data["behaviors"] = act_obj["keyframes"]
+
                             # 记录进入记忆中枢
                             mem.record_turn(user_text, reply_data.get("reply", ""))
                         else:

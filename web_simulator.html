@@ -454,6 +454,13 @@
           <button class="view-btn" onclick="setCameraView('front')">🔄 伴侣全景</button>
         </div>
 
+        <!-- 🔔 具身主动打断提醒弹窗 -->
+        <div id="alarmAlertModal" style="display:none; position:absolute; top:20px; left:50%; transform:translateX(-50%); background:rgba(22, 27, 34, 0.96); border:2px solid #ffb020; box-shadow:0 0 25px rgba(255, 176, 32, 0.6); border-radius:12px; padding:12px 24px; z-index:100; text-align:center; min-width:300px; backdrop-filter:blur(8px); animation: pulseAlert 1.5s infinite alternate;">
+          <div style="font-size:1.15rem; margin-bottom:4px; font-weight:bold; color:#ffb020;">🔔 <span id="alarmModalTitle">闹钟提醒到点啦！</span></div>
+          <div id="alarmModalContent" style="color:#ffffff; font-size:0.95rem; margin-bottom:12px; font-weight:500;">主人，提醒你：关火！</div>
+          <button class="btn" style="background:#ffb020; color:#0d1117; font-weight:bold; padding:5px 20px; border:none; border-radius:6px; cursor:pointer;" onclick="dismissAlarmModal()">👌 我知道了 / 关闭提醒</button>
+        </div>
+
         <!-- 3D 视窗角标：画中画屏幕特写 (可展开/折叠) -->
         <div class="pip-screen-container" id="pipContainer">
           <div class="pip-header">
@@ -523,6 +530,26 @@
             <button class="btn" onclick="setEmotion('SAD')">🥺 委屈</button>
             <button class="btn" onclick="setEmotion('ANGRY')">😡 愤怒</button>
             <button class="btn" onclick="setEmotion('BLINK')">😑 闭目</button>
+          </div>
+        </div>
+
+        <!-- ⏰ 闹钟日程与自进化动作 (Skills & Evolved Actions) -->
+        <div class="control-section">
+          <div class="section-title">
+            <span>⏰ 闹钟日程与自进化动作</span>
+            <span id="remindersCountBadge" style="font-size:0.7rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:1px 6px; border-radius:10px;">0 个闹钟</span>
+          </div>
+          <div id="remindersList" style="display:flex; flex-direction:column; gap:6px; max-height:110px; overflow-y:auto; font-size:0.78rem;">
+            <div style="color:var(--text-sub); text-align:center; padding:4px 0;">暂无活跃闹钟，试着说“10秒后提醒我关火”</div>
+          </div>
+          <div style="border-top:1px dashed var(--border-color); padding-top:6px; font-size:0.75rem;">
+            <div style="color:var(--text-sub); margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+              <span>✨ 已自进化收录的新动作:</span>
+              <span id="actionsCountBadge" style="color:var(--cyan); font-weight:600;">1 个</span>
+            </div>
+            <div id="evolvedActionsBadges" style="display:flex; flex-wrap:wrap; gap:4px;">
+              <span class="btn" style="padding:2px 8px; font-size:0.7rem;" onclick="playEvolvedAction('SHY_DANCE')">💃 SHY_DANCE</span>
+            </div>
           </div>
         </div>
 
@@ -1281,6 +1308,186 @@
         // 启动音画毫秒级强同步时序控制
         speakAndSync(res.reply, res.behaviors || []);
         updateMemoryBadge();
+
+    // ==========================================
+    // 2.5 ⏰ 闹钟、日程与自进化动作管理
+    // ==========================================
+    let activeReminders = [];
+    let evolvedActionsCache = {};
+
+    async function fetchReminders() {
+      try {
+        const resp = await fetch("/api/reminders");
+        if (resp.ok) {
+          const data = await resp.json();
+          activeReminders = data.reminders || [];
+          renderRemindersList();
+        }
+      } catch (e) {
+        console.warn("拉取闹钟列表失败:", e);
+      }
+    }
+
+    function renderRemindersList() {
+      const container = document.getElementById("remindersList");
+      const badge = document.getElementById("remindersCountBadge");
+      if (!container || !badge) return;
+      badge.innerText = `${activeReminders.length} 个闹钟`;
+
+      if (activeReminders.length === 0) {
+        container.innerHTML = `<div style="color:var(--text-sub); text-align:center; padding:4px 0;">暂无活跃闹钟，试着说“10秒后提醒我关火”</div>`;
+        return;
+      }
+
+      const now = Date.now() / 1000;
+      container.innerHTML = activeReminders.map(r => {
+        const leftSec = Math.max(0, Math.round(r.target_time - now));
+        const leftStr = leftSec > 60 ? `${Math.floor(leftSec / 60)}分${leftSec % 60}秒` : `${leftSec}秒`;
+        return `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:#161b22; border:1px solid #30363d; border-radius:6px; padding:3px 8px;">
+            <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;">
+              <span style="color:${r.type === 'timer' ? 'var(--cyan)' : '#ffb020'}; font-weight:600;">${r.type === 'timer' ? '⏳' : '⏰'} ${r.content}</span>
+              <span style="color:var(--text-sub); font-size:0.7rem; margin-left:4px;">(余${leftStr})</span>
+            </div>
+            <button class="btn" style="padding:1px 6px; font-size:0.7rem; color:#ff7b72;" onclick="cancelReminder('${r.id}')">取消</button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function cancelReminder(id) {
+      try {
+        await fetch("/api/reminders/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: id })
+        });
+        fetchReminders();
+      } catch (e) {
+        console.error("取消闹钟失败:", e);
+      }
+    }
+
+    async function fetchEvolvedActions() {
+      try {
+        const resp = await fetch("/api/evolved_actions");
+        if (resp.ok) {
+          const data = await resp.json();
+          evolvedActionsCache = data.actions || {};
+          const container = document.getElementById("evolvedActionsBadges");
+          const countBadge = document.getElementById("actionsCountBadge");
+          if (!container || !countBadge) return;
+          const names = Object.keys(evolvedActionsCache);
+          countBadge.innerText = `${names.length} 个`;
+
+          if (names.length === 0) {
+            container.innerHTML = `<span style="color:var(--text-sub);">暂未解锁新动作</span>`;
+            return;
+          }
+
+          container.innerHTML = names.map(n => `
+            <button class="btn" style="padding:2px 8px; font-size:0.7rem; background:rgba(0, 229, 255, 0.1); border-color:rgba(0, 229, 255, 0.3);" onclick="playEvolvedAction('${n}')" title="${evolvedActionsCache[n].description || ''}">
+              💃 ${n}
+            </button>
+          `).join("");
+        }
+      } catch (e) {
+        console.warn("拉取自进化动作失败:", e);
+      }
+    }
+
+    function playEvolvedAction(name) {
+      const act = evolvedActionsCache[name];
+      if (act && act.keyframes) {
+        lastInteractionTime = Date.now();
+        playChirp("happy_chirp");
+        playBehaviorSequence(act.keyframes);
+      }
+    }
+
+    // 闹钟触发全屏抢占提醒与弹窗
+    let alarmModalTimer = null;
+    function showAlarmModal(content) {
+      const modal = document.getElementById("alarmAlertModal");
+      if (!modal) return;
+      document.getElementById("alarmModalContent").innerText = `主人，提醒你：${content}！`;
+      modal.style.display = "block";
+      if (alarmModalTimer) clearTimeout(alarmModalTimer);
+      alarmModalTimer = setTimeout(() => {
+        dismissAlarmModal();
+      }, 15000);
+    }
+
+    function dismissAlarmModal() {
+      const modal = document.getElementById("alarmAlertModal");
+      if (modal) modal.style.display = "none";
+      if (alarmModalTimer) clearTimeout(alarmModalTimer);
+      setEmotion("NORMAL");
+    }
+
+    // 后台秒级拉取到点闹钟事件 (Preemption Event)
+    async function pollAlarmEvents() {
+      try {
+        const resp = await fetch("/api/alarm_events");
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.events && data.events.length > 0) {
+            for (const ev of data.events) {
+              handlePreemptiveAlarm(ev);
+            }
+          }
+        }
+      } catch (e) {
+        // 静默
+      }
+    }
+
+    function handlePreemptiveAlarm(rem) {
+      console.log("🚨 [前端收到到点闹钟抢占]:", rem);
+      lastInteractionTime = Date.now();
+      idleFsmState = "WAKING";
+
+      // 1. 播放唤醒铃声
+      playChirp("wake_chime");
+
+      // 2. 头部吃惊抬头弹起
+      targetPan = 90;
+      targetTilt = 75;
+      setEmotion("SURPRISED");
+
+      // 3. 弹出强提醒视窗
+      showAlarmModal(rem.content);
+
+      // 4. 在聊天框写入闹钟提醒
+      const chatLogs = document.getElementById("chatLogs");
+      if (chatLogs) {
+        const alertDiv = document.createElement("div");
+        alertDiv.className = "msg bot";
+        alertDiv.style.border = "1px solid #ffb020";
+        alertDiv.style.color = "#ffb020";
+        alertDiv.innerText = `🔔 [闹钟提醒到点]: 主人，时间到啦！提醒你：${rem.content}！`;
+        chatLogs.appendChild(alertDiv);
+        chatLogs.scrollTop = chatLogs.scrollHeight;
+      }
+
+      // 5. 语音主动播报
+      const speakText = `主人，时间到啦！提醒你：${rem.content}！`;
+      speakAndSync(speakText, [
+        { emotion: "SURPRISED", action: "SURPRISE", pan: 90, tilt: 75, delay: 600 },
+        { emotion: "HAPPY", action: "NOD", pan: 90, tilt: 80, delay: 800 }
+      ]);
+
+      fetchReminders();
+    }
+
+    // 启动定时轮询
+    setInterval(fetchReminders, 2000);
+    setInterval(fetchEvolvedActions, 6000);
+    setInterval(pollAlarmEvents, 1000);
+    fetchReminders();
+    fetchEvolvedActions();
+        fetchReminders();
+        fetchEvolvedActions();
       } catch (err) {
         stopThinkingCadence();
         botDiv.innerText = "网络异常，未能连接到大模型。";
@@ -1303,6 +1510,184 @@
       }
     }
     updateMemoryBadge();
+
+    // ==========================================
+    // 2.5 ⏰ 闹钟、日程与自进化动作管理
+    // ==========================================
+    let activeReminders = [];
+    let evolvedActionsCache = {};
+
+    async function fetchReminders() {
+      try {
+        const resp = await fetch("/api/reminders");
+        if (resp.ok) {
+          const data = await resp.json();
+          activeReminders = data.reminders || [];
+          renderRemindersList();
+        }
+      } catch (e) {
+        console.warn("拉取闹钟列表失败:", e);
+      }
+    }
+
+    function renderRemindersList() {
+      const container = document.getElementById("remindersList");
+      const badge = document.getElementById("remindersCountBadge");
+      if (!container || !badge) return;
+      badge.innerText = `${activeReminders.length} 个闹钟`;
+
+      if (activeReminders.length === 0) {
+        container.innerHTML = `<div style="color:var(--text-sub); text-align:center; padding:4px 0;">暂无活跃闹钟，试着说“10秒后提醒我关火”</div>`;
+        return;
+      }
+
+      const now = Date.now() / 1000;
+      container.innerHTML = activeReminders.map(r => {
+        const leftSec = Math.max(0, Math.round(r.target_time - now));
+        const leftStr = leftSec > 60 ? `${Math.floor(leftSec / 60)}分${leftSec % 60}秒` : `${leftSec}秒`;
+        return `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:#161b22; border:1px solid #30363d; border-radius:6px; padding:3px 8px;">
+            <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;">
+              <span style="color:${r.type === 'timer' ? 'var(--cyan)' : '#ffb020'}; font-weight:600;">${r.type === 'timer' ? '⏳' : '⏰'} ${r.content}</span>
+              <span style="color:var(--text-sub); font-size:0.7rem; margin-left:4px;">(余${leftStr})</span>
+            </div>
+            <button class="btn" style="padding:1px 6px; font-size:0.7rem; color:#ff7b72;" onclick="cancelReminder('${r.id}')">取消</button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function cancelReminder(id) {
+      try {
+        await fetch("/api/reminders/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: id })
+        });
+        fetchReminders();
+      } catch (e) {
+        console.error("取消闹钟失败:", e);
+      }
+    }
+
+    async function fetchEvolvedActions() {
+      try {
+        const resp = await fetch("/api/evolved_actions");
+        if (resp.ok) {
+          const data = await resp.json();
+          evolvedActionsCache = data.actions || {};
+          const container = document.getElementById("evolvedActionsBadges");
+          const countBadge = document.getElementById("actionsCountBadge");
+          if (!container || !countBadge) return;
+          const names = Object.keys(evolvedActionsCache);
+          countBadge.innerText = `${names.length} 个`;
+
+          if (names.length === 0) {
+            container.innerHTML = `<span style="color:var(--text-sub);">暂未解锁新动作</span>`;
+            return;
+          }
+
+          container.innerHTML = names.map(n => `
+            <button class="btn" style="padding:2px 8px; font-size:0.7rem; background:rgba(0, 229, 255, 0.1); border-color:rgba(0, 229, 255, 0.3);" onclick="playEvolvedAction('${n}')" title="${evolvedActionsCache[n].description || ''}">
+              💃 ${n}
+            </button>
+          `).join("");
+        }
+      } catch (e) {
+        console.warn("拉取自进化动作失败:", e);
+      }
+    }
+
+    function playEvolvedAction(name) {
+      const act = evolvedActionsCache[name];
+      if (act && act.keyframes) {
+        lastInteractionTime = Date.now();
+        playChirp("happy_chirp");
+        playBehaviorSequence(act.keyframes);
+      }
+    }
+
+    // 闹钟触发全屏抢占提醒与弹窗
+    let alarmModalTimer = null;
+    function showAlarmModal(content) {
+      const modal = document.getElementById("alarmAlertModal");
+      if (!modal) return;
+      document.getElementById("alarmModalContent").innerText = `主人，提醒你：${content}！`;
+      modal.style.display = "block";
+      if (alarmModalTimer) clearTimeout(alarmModalTimer);
+      alarmModalTimer = setTimeout(() => {
+        dismissAlarmModal();
+      }, 15000);
+    }
+
+    function dismissAlarmModal() {
+      const modal = document.getElementById("alarmAlertModal");
+      if (modal) modal.style.display = "none";
+      if (alarmModalTimer) clearTimeout(alarmModalTimer);
+      setEmotion("NORMAL");
+    }
+
+    // 后台秒级拉取到点闹钟事件 (Preemption Event)
+    async function pollAlarmEvents() {
+      try {
+        const resp = await fetch("/api/alarm_events");
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.events && data.events.length > 0) {
+            for (const ev of data.events) {
+              handlePreemptiveAlarm(ev);
+            }
+          }
+        }
+      } catch (e) {
+        // 静默
+      }
+    }
+
+    function handlePreemptiveAlarm(rem) {
+      console.log("🚨 [前端收到到点闹钟抢占]:", rem);
+      lastInteractionTime = Date.now();
+      idleFsmState = "WAKING";
+
+      // 1. 播放唤醒铃声
+      playChirp("wake_chime");
+
+      // 2. 头部吃惊抬头弹起
+      targetPan = 90;
+      targetTilt = 75;
+      setEmotion("SURPRISED");
+
+      // 3. 弹出强提醒视窗
+      showAlarmModal(rem.content);
+
+      // 4. 在聊天框写入闹钟提醒
+      const chatLogs = document.getElementById("chatLogs");
+      if (chatLogs) {
+        const alertDiv = document.createElement("div");
+        alertDiv.className = "msg bot";
+        alertDiv.style.border = "1px solid #ffb020";
+        alertDiv.style.color = "#ffb020";
+        alertDiv.innerText = `🔔 [闹钟提醒到点]: 主人，时间到啦！提醒你：${rem.content}！`;
+        chatLogs.appendChild(alertDiv);
+        chatLogs.scrollTop = chatLogs.scrollHeight;
+      }
+
+      // 5. 语音主动播报
+      const speakText = `主人，时间到啦！提醒你：${rem.content}！`;
+      speakAndSync(speakText, [
+        { emotion: "SURPRISED", action: "SURPRISE", pan: 90, tilt: 75, delay: 600 },
+        { emotion: "HAPPY", action: "NOD", pan: 90, tilt: 80, delay: 800 }
+      ]);
+
+      fetchReminders();
+    }
+
+    // 启动定时轮询
+    setInterval(fetchReminders, 2000);
+    setInterval(fetchEvolvedActions, 6000);
+    setInterval(pollAlarmEvents, 1000);
+    fetchReminders();
+    fetchEvolvedActions();
 
     // ==========================================
     // 3. 麦克风录音与百度 ASR 语音识别
