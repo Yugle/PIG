@@ -46,7 +46,8 @@ if is_raspberry_pi and not cfg.get("simulation", False):
 else:
     print("💻 [环境识别] 加载 PC 仿真 HAL 驱动...")
     from hal_simulation import SimulationRobotHAL as RobotHAL
-    hal = RobotHAL(urdf_path=os.path.join(os.path.dirname(__file__), "robot.urdf"))
+    scene_file = os.path.join(os.path.dirname(__file__), "scene.xml")
+    hal = RobotHAL(model_path=scene_file)
 
 eyes = EyeRenderer(240, 320)
 tts = TTSEngine(

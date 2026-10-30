@@ -28,7 +28,7 @@ class SimulationRobotHAL(BaseRobotHAL):
     如果未安装 MuJoCo 或处于无头 (Headless) 环境，会自动退化为轻量模拟模式，方便逻辑调试。
     """
 
-    def __init__(self, model_path="scene.xml", headless=False):
+    def __init__(self, model_path="scene.xml", headless=False, urdf_path=None, **kwargs):
         self.cur_pan = 90.0
         self.cur_tilt = 90.0
         self.headless = headless or not bool(os.environ.get("DISPLAY"))
@@ -36,6 +36,10 @@ class SimulationRobotHAL(BaseRobotHAL):
         self.model = None
         self.data = None
         self.viewer = None
+
+        # 兼容 urdf_path 传参
+        if urdf_path is not None:
+            model_path = urdf_path
 
         # 优先选择自带几何体的 scene.xml，若不存在再回退到 urdf
         if not os.path.exists(model_path) and os.path.exists("robot.urdf"):
