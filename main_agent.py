@@ -99,13 +99,45 @@ except Exception as e:
     print(f"ℹ️ [音频模块] 物理麦克风/唤醒词库未就绪 ({e})，将支持终端命令行交互模式")
 
 
-def record_audio_clip(seconds=4) -> str:
-    """录制指定秒数的音频输入"""
+def record_audio_clip(max_seconds=15, silence_timeout=0.9, min_seconds=0.6) -> str:
+    """
+    智能动态录音 (基于能量 VAD 静音检测)：
+    - 告别死等 4 秒！
+    - 开始说话后，停顿超过 0.9 秒自动截止并提交转写；
+    - 设有最长保护 (默认 15 秒) 与最短过滤 (0.6 秒)。
+    """
     if not stream or not p:
         return ""
+
     frames = []
-    for _ in range(0, int(RATE / CHUNK * seconds)):
-        frames.append(stream.read(CHUNK, exception_on_overflow=False))
+    chunk_per_sec = int(RATE / CHUNK)
+    max_chunks = int(chunk_per_sec * max_seconds)
+    min_chunks = int(chunk_per_sec * min_seconds)
+    silence_limit = int(chunk_per_sec * silence_timeout)
+
+    silence_counter = 0
+    has_spoken = False
+    print("🎙️ [正在倾听...] 请说话 (说完停顿约 1 秒自动开始回答)")
+
+    for _ in range(max_chunks):
+        data = stream.read(CHUNK, exception_on_overflow=False)
+        frames.append(data)
+
+        # 动态计算语音振幅能量
+        audio_np = np.frombuffer(data, dtype=np.int16)
+        energy = float(np.abs(audio_np).mean())
+
+        # 能量超过阈值判定为有人说话
+        if energy > 650:
+            has_spoken = True
+            silence_counter = 0
+        else:
+            if has_spoken:
+                silence_counter += 1
+                if silence_counter >= silence_limit and len(frames) >= min_chunks:
+                    print("🛑 [检测到说话停顿] 自动截断录音并立即开始识别...")
+                    break
+
     wav_path = "/tmp/user_input.wav"
     with wave.open(wav_path, "wb") as wf:
         wf.setnchannels(CHANNELS)
@@ -250,8 +282,8 @@ def run_loop():
                     time.sleep(0.12)
                     hal.display_face(eyes.render_eyes("HAPPY"))
 
-                    # 录制用户语音
-                    clip_path = record_audio_clip(seconds=4)
+                    # 动态 VAD 智能录制用户语音 (说完即停，最长 15s)
+                    clip_path = record_audio_clip()
                     hal.display_face(eyes.render_eyes("CONFUSED"))
 
                     user_text = ""
