@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>桌面具身 AI 伴侣机器人 - 3D 仿真工作台</title>
+  <style>
+    :root {
+      --bg-dark: #0d1117;
+      --card-bg: rgba(22, 27, 34, 0.85);
+      --border-color: #30363d;
+      --cyan: #00e5ff;
+      --cyan-glow: rgba(0, 229, 255, 0.35);
+      --text-main: #f0f6fc;
+      --text-sub: #8b949e;
+      --accent-green: #2ea043;
+      --accent-red: #da3633;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      overflow-x: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 12px 24px;
+      background: rgba(13, 17, 23, 0.95);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(8px);
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--cyan);
+      letter-spacing: 0.5px;
+    }
+
+    .brand span.badge {
+      font-size: 0.75rem;
+      background: rgba(0, 229, 255, 0.15);
+      color: var(--cyan);
+      border: 1px solid var(--cyan);
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+
+    .status-tag {
+      font-size: 0.85rem;
+      color: var(--accent-green);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+    }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 340px 380px;
+      gap: 16px;
+      padding: 16px;
+      overflow: hidden;
+    }
+
+    @media (max-width: 1100px) {
+      main {
+        grid-template-columns: 1fr 340px;
+        overflow-y: auto;
+      }
+    }
+
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.95rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-main);
+    }
+
+    /* 3D 视窗容器 */
+    #viewport-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    #threejs-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .viewport-overlay {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(13, 17, 23, 0.7);
+      backdrop-filter: blur(4px);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      pointer-events: none;
+    }
+
+    /* 2.4 寸液晶屏渲染器 */
+    .screen-panel-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .device-bezel {
+      background: #1b1f24;
+      border: 3px solid #30363d;
+      border-radius: 20px;
+      padding: 18px 14px 14px 14px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .camera-hole {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #000;
+      border: 2px solid #282e36;
+      box-shadow: inset 0 0 4px #00e5ff;
+    }
+
+    #eyeCanvas {
+      width: 240px;
+      height: 320px;
+      background: #0a0e14;
+      border-radius: 8px;
+      box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.8), 0 0 12px rgba(0, 229, 255, 0.2);
+    }
+
+    .bezel-brand {
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      color: #57606a;
+      font-weight: bold;
+    }
+
+    /* 控制面板 */
+    .control-body {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+
+    .control-section {
+      background: rgba(13, 17, 23, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--cyan);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .slider-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--text-sub);
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: #21262d;
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--cyan);
+      cursor: pointer;
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+
+    .btn-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    button.btn {
+      background: #21262d;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    button.btn:hover {
+      background: #30363d;
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    button.btn.active {
+      background: rgba(0, 229, 255, 0.15);
+      border-color: var(--cyan);
+      color: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan-glow);
+    }
+
+    /* 对话框模块 */
+    .chat-box {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      height: 200px;
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+      font-size: 0.82rem;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .msg {
+      padding: 6px 10px;
+      border-radius: 6px;
+      max-width: 85%;
+      line-height: 1.4;
+    }
+
+    .msg.user {
+      align-self: flex-end;
+      background: #1f6feb;
+      color: #fff;
+    }
+
+    .msg.bot {
+      align-self: flex-start;
+      background: #21262d;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+
+    .chat-input-bar {
+      display: flex;
+      border-top: 1px solid var(--border-color);
+      background: #161b22;
+    }
+
+    .chat-input-bar input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      padding: 8px 12px;
+      color: var(--text-main);
+      outline: none;
+      font-size: 0.82rem;
+    }
+
+    .chat-input-bar button {
+      background: var(--cyan);
+      color: #0d1117;
+      border: none;
+      padding: 0 14px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 0.82rem;
+    }
+  </style>
+
+  <!-- 引入 Three.js 3D 渲染库 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      🤖 桌面具身 AI 伴侣机器人
+      <span class="badge">Sim-to-Real 3D 仿真工作台</span>
+    </div>
+    <div class="status-tag">
+      <div class="status-dot"></div>
+      物理动力学 & 表情引擎运行中
+    </div>
+  </header>
+
+  <main>
+    <!-- 左侧：3D 物理动力学视窗 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>🎮 3D 机械孪生视窗 (Three.js WebGL)</span>
+        <span style="font-size: 0.75rem; color: var(--text-sub);">按住鼠标左键可 360° 旋转视角</span>
+      </div>
+      <div id="viewport-container">
+        <canvas id="threejs-canvas"></canvas>
+        <div class="viewport-overlay">
+          <div>水平航向 (Pan): <span id="overlay-pan" style="color:var(--cyan);">90.0°</span></div>
+          <div>俯仰角度 (Tilt): <span id="overlay-tilt" style="color:var(--cyan);">90.0°</span></div>
+          <div>当前动作: <span id="overlay-action" style="color:#7ee787;">待机 (IDLE)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 中间：2.4 寸液晶显示屏模拟 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>📺 2.4" ST7789 动态面部屏</span>
+        <span id="current-emotion-tag" style="font-size: 0.75rem; color: var(--cyan);">NORMAL</span>
+      </div>
+      <div class="screen-panel-body">
+        <div class="device-bezel">
+          <div class="camera-hole" title="USB 720P 广角摄像头"></div>
+          <canvas id="eyeCanvas" width="240" height="320"></canvas>
+          <div class="bezel-brand">ROBOT COMPANION</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧：控制与具身对话面板 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>🎛️ 具身控制台 & 大脑交互</span>
+      </div>
+      <div class="control-body">
+
+        <!-- 舵机实时调姿 -->
+        <div class="control-section">
+          <div class="section-title">
+            <span>二轴关节角度微调</span>
+            <button class="btn" style="padding: 2px 8px; font-size: 0.75rem;" onclick="resetAngles()">角度回正</button>
+          </div>
+          <div class="slider-group">
+            <div class="slider-label">
+              <span>水平转向 (Pan / Yaw)</span>
+              <span id="val-pan">90°</span>
+            </div>
+            <input type="range" id="slider-pan" min="20" max="160" value="90" oninput="onPanSlider(this.value)">
+          </div>
+          <div class="slider-group">
+            <div class="slider-label">
+              <span>俯仰角度 (Tilt / Pitch)</span>
+              <span id="val-tilt">90°</span>
+            </div>
+            <input type="range" id="slider-tilt" min="60" max="120" value="90" oninput="onTiltSlider(this.value)">
+          </div>
+        </div>
+
+        <!-- 常用动作指令 -->
+        <div class="control-section">
+          <div class="section-title">预设具身动作触发</div>
+          <div class="btn-grid">
+            <button class="btn" onclick="triggerAction('NOD')">👏 赞同点头 (NOD)</button>
+            <button class="btn" onclick="triggerAction('SHAKE')">🙅 疑惑摇头 (SHAKE)</button>
+            <button class="btn" onclick="triggerAction('LOOK_UP')">👀 抬头望人 (LOOK UP)</button>
+            <button class="btn" onclick="triggerAction('SURPRISE')">😲 吃惊注视 (SURPRISE)</button>
+          </div>
+        </div>
+
+        <!-- 切换表情 -->
+        <div class="control-section">
+          <div class="section-title">动态表情切换</div>
+          <div class="btn-grid">
+            <button class="btn" onclick="setEmotion('NORMAL')">😊 常规 (NORMAL)</button>
+            <button class="btn" onclick="setEmotion('HAPPY')">😄 开心 (HAPPY)</button>
+            <button class="btn" onclick="setEmotion('CONFUSED')">🤔 困惑 (CONFUSED)</button>
+            <button class="btn" onclick="setEmotion('BLINK')">😉 眨眼 (BLINK)</button>
+            <button class="btn" onclick="setEmotion('ANGRY')">😡 愤怒 (ANGRY)</button>
+            <button class="btn" onclick="setEmotion('SURPRISED')">😳 吃惊 (SURPRISED)</button>
+          </div>
+        </div>
+
+        <!-- 具身对话 -->
+        <div class="control-section" style="flex:1;">
+          <div class="section-title">具身伴侣对话与 TTS 语音</div>
+          <div class="chat-box">
+            <div class="chat-messages" id="chatLogs">
+              <div class="msg bot">你好！我是你的桌面具身 AI 伴侣。你可以跟我聊天，我会根据你说的话做出肢体动作和表情哦！</div>
+            </div>
+            <div class="chat-input-bar">
+              <input type="text" id="chatInput" placeholder="输入对话，如：你好小猪 / 你真棒..." onkeydown="if(event.key==='Enter') sendChat()">
+              <button onclick="sendChat()">发送</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ==========================================
+    // 1. 2.4 寸屏幕 Canvas 眼球动态渲染器
+    // ==========================================
+    const eyeCanvas = document.getElementById("eyeCanvas");
+    const eyeCtx = eyeCanvas.getContext("2d");
+    let currentEmotion = "NORMAL";
+    let lookOffset = { x: 0, y: 0 };
+    let blinkTimer = null;
+
+    function drawEyes(emotion = currentEmotion, lookX = lookOffset.x, lookY = lookOffset.y) {
+      eyeCtx.fillStyle = "#0a0e14";
+      eyeCtx.fillRect(0, 0, 240, 320);
+
+      const eyeColor = emotion === "ANGRY" ? "#ff3838" : "#00e5ff";
+      eyeCtx.fillStyle = eyeColor;
+
+      const cy = 160 + lookY;
+      const lx = 60 + lookX;
+      const rx = 180 + lookX;
+
+      if (emotion === "NORMAL") {
+        [lx, rx].forEach(cx => {
+          roundRect(eyeCtx, cx - 36, cy - 50, 72, 100, 22, true);
+          eyeCtx.fillStyle = "#ffffff";
+          eyeCtx.beginPath();
+          eyeCtx.ellipse(cx - 14, cy - 30, 8, 8, 0, 0, Math.PI * 2);
+          eyeCtx.fill();
+          eyeCtx.fillStyle = eyeColor;
+        });
+      } else if (emotion === "BLINK") {
+        [lx, rx].forEach(cx => {
+          roundRect(eyeCtx, cx - 36, cy - 4, 72, 8, 3, true);
+        });
+      } else if (emotion === "HAPPY") {
+        eyeCtx.lineWidth = 14;
+        eyeCtx.strokeStyle = eyeColor;
+        eyeCtx.lineCap = "round";
+        [lx, rx].forEach(cx => {
+          eyeCtx.beginPath();
+          eyeCtx.arc(cx, cy + 10, 36, Math.PI * 1.15, Math.PI * 1.85, false);
+          eyeCtx.stroke();
+        });
+      } else if (emotion === "CONFUSED") {
+        // 左大右小
+        roundRect(eyeCtx, lx - 36, cy - 50, 72, 100, 22, true);
+        eyeCtx.fillStyle = "#ffffff";
+        eyeCtx.beginPath();
+        eyeCtx.ellipse(lx - 14, cy - 30, 8, 8, 0, 0, Math.PI * 2);
+        eyeCtx.fill();
+        eyeCtx.fillStyle = eyeColor;
+        roundRect(eyeCtx, rx - 24, cy - 24, 48, 48, 14, true);
+      } else if (emotion === "ANGRY") {
+        [lx, rx].forEach((cx, idx) => {
+          roundRect(eyeCtx, cx - 36, cy - 45, 72, 90, 18, true);
+          eyeCtx.fillStyle = "#0a0e14";
+          eyeCtx.beginPath();
+          if (idx === 0) {
+            eyeCtx.moveTo(cx - 40, cy - 50);
+            eyeCtx.lineTo(cx + 40, cy - 25);
+            eyeCtx.lineTo(cx + 40, cy - 50);
+          } else {
+            eyeCtx.moveTo(cx - 40, cy - 25);
+            eyeCtx.lineTo(cx + 40, cy - 50);
+            eyeCtx.lineTo(cx - 40, cy - 50);
+          }
+          eyeCtx.fill();
+          eyeCtx.fillStyle = eyeColor;
+        });
+      } else if (emotion === "SURPRISED") {
+        [lx, rx].forEach(cx => {
+          eyeCtx.beginPath();
+          eyeCtx.ellipse(cx, cy, 45, 55, 0, 0, Math.PI * 2);
+          eyeCtx.fill();
+          eyeCtx.fillStyle = "#0a0e14";
+          eyeCtx.beginPath();
+          eyeCtx.ellipse(cx, cy - 10, 20, 20, 0, 0, Math.PI * 2);
+          eyeCtx.fill();
+          eyeCtx.fillStyle = eyeColor;
+        });
+      }
+    }
+
+    function roundRect(ctx, x, y, width, height, radius, fill) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      if (fill) ctx.fill();
+    }
+
+    function setEmotion(emo) {
+      currentEmotion = emo;
+      document.getElementById("current-emotion-tag").innerText = emo;
+      drawEyes(emo);
+    }
+
+    // 随机自然眨眼
+    setInterval(() => {
+      if (currentEmotion === "NORMAL" && Math.random() < 0.35) {
+        drawEyes("BLINK");
+        setTimeout(() => drawEyes("NORMAL"), 180);
+      }
+    }, 2800);
+
+    drawEyes("NORMAL");
+
+
+    // ==========================================
+    // 2. Three.js 3D 机械实体渲染器
+    // ==========================================
+    const container = document.getElementById("viewport-container");
+    const canvas = document.getElementById("threejs-canvas");
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0e131a);
+
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(0, 0.25, 0.55);
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 0.1, 0);
+
+    // 灯光
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    dirLight.position.set(1, 2, 1.5);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    const pointLight = new THREE.PointLight(0x00e5ff, 1.2, 0.6);
+    pointLight.position.set(0, 0.16, 0.1);
+    scene.add(pointLight);
+
+    // 网格底盘
+    const grid = new THREE.GridHelper(1, 20, 0x00e5ff, 0x21262d);
+    grid.position.y = 0;
+    scene.add(grid);
+
+    // 材质定义
+    const matWhite = new THREE.MeshStandardMaterial({ color: 0xefefef, roughness: 0.35, metalness: 0.1 });
+    const matDark = new THREE.MeshStandardMaterial({ color: 0x24292f, roughness: 0.5, metalness: 0.7 });
+    const matBezel = new THREE.MeshStandardMaterial({ color: 0x161b22, roughness: 0.8 });
+    const matScreen = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+    const matLens = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.9 });
+
+    // 1. 底座 Base
+    const baseGroup = new THREE.Group();
+    const baseGeom = new THREE.CylinderGeometry(0.065, 0.07, 0.035, 32);
+    const baseMesh = new THREE.Mesh(baseGeom, matWhite);
+    baseMesh.position.y = 0.035 / 2;
+    baseMesh.castShadow = true;
+    baseGroup.add(baseMesh);
+    scene.add(baseGroup);
+
+    // 2. 脖子水平旋转轴 (Yaw / Pan 关节)
+    const neckYawGroup = new THREE.Group();
+    neckYawGroup.position.set(0, 0.035, 0);
+    baseGroup.add(neckYawGroup);
+
+    const neckJointGeom = new THREE.CylinderGeometry(0.024, 0.024, 0.025, 24);
+    const neckJointMesh = new THREE.Mesh(neckJointGeom, matDark);
+    neckJointMesh.position.y = 0.025 / 2;
+    neckYawGroup.add(neckJointMesh);
+
+    // 3. 头部俯仰旋转轴 (Pitch / Tilt 关节)
+    const headPitchGroup = new THREE.Group();
+    headPitchGroup.position.set(0, 0.035, 0);
+    neckYawGroup.add(headPitchGroup);
+
+    // 头部主体外壳
+    const headGeom = new THREE.BoxGeometry(0.09, 0.08, 0.07);
+    const headMesh = new THREE.Mesh(headGeom, matWhite);
+    headMesh.position.set(0, 0.04, 0);
+    headMesh.castShadow = true;
+    headPitchGroup.add(headMesh);
+
+    // 前脸黑色边框
+    const bezelGeom = new THREE.BoxGeometry(0.08, 0.07, 0.004);
+    const bezelMesh = new THREE.Mesh(bezelGeom, matBezel);
+    bezelMesh.position.set(0, 0.04, 0.037);
+    headPitchGroup.add(bezelMesh);
+
+    // 彩色发光屏幕 (2.4寸)
+    const screenGeom = new THREE.PlaneGeometry(0.068, 0.055);
+    const screenMesh = new THREE.Mesh(screenGeom, matScreen);
+    screenMesh.position.set(0, 0.038, 0.04);
+    headPitchGroup.add(screenMesh);
+
+    // 摄像头镜头
+    const lensGeom = new THREE.SphereGeometry(0.007, 16, 16);
+    const lensMesh = new THREE.Mesh(lensGeom, matLens);
+    lensMesh.position.set(0, 0.068, 0.038);
+    headPitchGroup.add(lensMesh);
+
+    // 角度控制
+    let currentPan = 90;
+    let currentTilt = 90;
+    let targetPan = 90;
+    let targetTilt = 90;
+
+    function updateAngles(pan, tilt) {
+      targetPan = parseFloat(pan);
+      targetTilt = parseFloat(tilt);
+
+      document.getElementById("slider-pan").value = targetPan;
+      document.getElementById("slider-tilt").value = targetTilt;
+      document.getElementById("val-pan").innerText = targetPan.toFixed(0) + "°";
+      document.getElementById("val-tilt").innerText = targetTilt.toFixed(0) + "°";
+      document.getElementById("overlay-pan").innerText = targetPan.toFixed(1) + "°";
+      document.getElementById("overlay-tilt").innerText = targetTilt.toFixed(1) + "°";
+    }
+
+    function onPanSlider(val) {
+      updateAngles(val, targetTilt);
+    }
+
+    function onTiltSlider(val) {
+      updateAngles(targetPan, val);
+    }
+
+    function resetAngles() {
+      updateAngles(90, 90);
+      setEmotion("NORMAL");
+    }
+
+    // 动作动画队列
+    let actionSequence = [];
+    function runActionSequence() {
+      if (actionSequence.length === 0) return;
+      const step = actionSequence.shift();
+      updateAngles(step.pan, step.tilt);
+      if (step.emotion) setEmotion(step.emotion);
+      if (step.delay) {
+        setTimeout(runActionSequence, step.delay);
+      } else {
+        runActionSequence();
+      }
+    }
+
+    function triggerAction(action) {
+      document.getElementById("overlay-action").innerText = action;
+      if (action === "NOD") {
+        actionSequence = [
+          { pan: currentPan, tilt: 75, emotion: "HAPPY", delay: 180 },
+          { pan: currentPan, tilt: 105, emotion: "HAPPY", delay: 180 },
+          { pan: currentPan, tilt: 75, delay: 180 },
+          { pan: currentPan, tilt: 90, emotion: "NORMAL", delay: 200 }
+        ];
+      } else if (action === "SHAKE") {
+        actionSequence = [
+          { pan: currentPan - 25, tilt: currentTilt, emotion: "CONFUSED", delay: 180 },
+          { pan: currentPan + 25, tilt: currentTilt, emotion: "CONFUSED", delay: 180 },
+          { pan: currentPan - 20, tilt: currentTilt, delay: 180 },
+          { pan: 90, tilt: 90, emotion: "NORMAL", delay: 200 }
+        ];
+      } else if (action === "LOOK_UP") {
+        actionSequence = [
+          { pan: 90, tilt: 70, emotion: "HAPPY", delay: 600 },
+          { pan: 90, tilt: 90, emotion: "NORMAL", delay: 200 }
+        ];
+      } else if (action === "SURPRISE") {
+        actionSequence = [
+          { pan: 90, tilt: 75, emotion: "SURPRISED", delay: 800 },
+          { pan: 90, tilt: 90, emotion: "NORMAL", delay: 200 }
+        ];
+      }
+      runActionSequence();
+    }
+
+    // 具身对话处理与 Web 语音合成 (TTS)
+    function speakText(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 1.05;
+        utter.pitch = 1.1;
+        window.speechSynthesis.speak(utter);
+      }
+    }
+
+    function sendChat() {
+      const input = document.getElementById("chatInput");
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+
+      const chatLogs = document.getElementById("chatLogs");
+      const userDiv = document.createElement("div");
+      userDiv.className = "msg user";
+      userDiv.innerText = text;
+      chatLogs.appendChild(userDiv);
+
+      // 规则决策/大模型交互
+      setTimeout(() => {
+        let reply = "我在听呢，有什么问题尽管问我吧！";
+        let action = "NONE";
+        let emotion = "NORMAL";
+        let pan = 90;
+        let tilt = 90;
+
+        if (text.includes("你好") || text.includes("嗨") || text.includes("小猪")) {
+          reply = "主人你好呀！今天心情怎么样？很高兴见到你！";
+          emotion = "HAPPY";
+          action = "NOD";
+          tilt = 80;
+        } else if (text.includes("难过") || text.includes("累") || text.includes("不")) {
+          reply = "抱抱你，别难过啦，无论怎样我都会一直陪着你的。";
+          emotion = "CONFUSED";
+          action = "SHAKE";
+        } else if (text.includes("真棒") || text.includes("喜欢") || text.includes("可爱")) {
+          reply = "嘿嘿，听到你夸我，我的芯片温度都升高啦！";
+          emotion = "HAPPY";
+          action = "NOD";
+        } else if (text.includes("谁") || text.includes("介绍")) {
+          reply = "我是基于树莓派 3 的桌面具身 AI 伴侣机器人，具备二轴灵巧脖子和动态面部表情哦！";
+          emotion = "SURPRISED";
+          action = "LOOK_UP";
+        } else {
+          reply = `收到你的话啦："${text}"，我正在通过 3D 仿真大脑与你互动。`;
+          emotion = "HAPPY";
+        }
+
+        const botDiv = document.createElement("div");
+        botDiv.className = "msg bot";
+        botDiv.innerText = reply;
+        chatLogs.appendChild(botDiv);
+        chatLogs.scrollTop = chatLogs.scrollHeight;
+
+        triggerAction(action);
+        setEmotion(emotion);
+        speakText(reply);
+      }, 350);
+    }
+
+    // 动画主循环
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // 平滑插值转动
+      currentPan += (targetPan - currentPan) * 0.12;
+      currentTilt += (targetTilt - currentTilt) * 0.12;
+
+      // 映射到弧度 (90度为中间)
+      neckYawGroup.rotation.y = -THREE.MathUtils.degToRad(currentPan - 90);
+      headPitchGroup.rotation.x = THREE.MathUtils.degToRad(currentTilt - 90);
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // 窗口尺寸自适应
+    window.addEventListener("resize", () => {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    animate();
+  </script>
+</body>
+</html>
