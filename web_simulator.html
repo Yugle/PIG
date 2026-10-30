@@ -466,7 +466,8 @@
               <div class="msg bot">你好！我是你的桌面具身 AI 伴侣。你可以跟我聊天，我会根据你说的话做出肢体动作和表情哦！</div>
             </div>
             <div class="chat-input-bar">
-              <input type="text" id="chatInput" placeholder="输入对话，如：你好小猪 / 你真棒..." onkeydown="if(event.key==='Enter') sendChat()">
+              <input type="text" id="chatInput" placeholder="输入文字，或点击麦克风说话..." onkeydown="if(event.key==='Enter') sendChat()">
+              <button id="micBtn" onclick="toggleMic()" style="background:#21262d; border-right:1px solid var(--border-color); color:var(--cyan); padding:0 12px; cursor:pointer;" title="点击开始/停止录音 (百度 ASR 转写)">🎙️ 语音</button>
               <button onclick="sendChat()">发送</button>
             </div>
           </div>
@@ -857,6 +858,72 @@
       } catch (err) {
         botDiv.innerText = "网络异常，未能连接到大模型。";
         console.error(err);
+      }
+    }
+
+    // ==========================================
+    // 3. 麦克风录音与百度 ASR 语音识别
+    // ==========================================
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+
+    async function toggleMic() {
+      const micBtn = document.getElementById("micBtn");
+      const input = document.getElementById("chatInput");
+
+      if (!isRecording) {
+        // 开始录音
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          audioChunks = [];
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+          };
+          mediaRecorder.onstop = async () => {
+            micBtn.innerText = "⏳ 识别中";
+            micBtn.style.color = "#ffb020";
+
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            try {
+              const resp = await fetch("/api/asr", {
+                method: "POST",
+                body: audioBlob
+              });
+              const data = await resp.json();
+              if (data.status === "ok" && data.text) {
+                input.value = data.text;
+                sendChat();
+              } else {
+                alert("未能识别到语音，请大声一点再说一次哦~");
+              }
+            } catch (err) {
+              console.error("ASR 请求异常:", err);
+              alert("语音识别服务请求失败: " + err.message);
+            } finally {
+              micBtn.innerText = "🎙️ 语音";
+              micBtn.style.color = "var(--cyan)";
+              micBtn.style.background = "#21262d";
+            }
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          micBtn.innerText = "⏹️ 停止";
+          micBtn.style.color = "#ff4d4f";
+          micBtn.style.background = "rgba(255, 77, 79, 0.2)";
+        } catch (err) {
+          console.error("无法访问麦克风:", err);
+          alert("无法访问麦克风，请在浏览器地址栏允许麦克风权限！");
+        }
+      } else {
+        // 结束录音并触发转写
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          mediaRecorder.stop();
+          mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
+        isRecording = false;
       }
     }
 

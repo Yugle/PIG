@@ -3,6 +3,8 @@ import socketserver
 import os
 import json
 import requests
+import subprocess
+from asr_engine import BaiduASR
 
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -61,6 +63,50 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        # 百度语音识别接口
+        if self.path == "/api/asr":
+            content_length = int(self.headers.get("Content-Length", 0))
+            raw_audio = self.rfile.read(content_length)
+
+            cfg = load_config()
+            ak = cfg.get("baidu_api_key", "")
+            sk = cfg.get("baidu_secret_key", "")
+
+            if not ak or not sk:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "error", "message": "未配置百度 ASR 密钥"}).encode("utf-8"))
+                return
+
+            # 保存并转换为 16kHz WAV
+            in_file = "/tmp/web_upload_audio.bin"
+            wav_file = "/tmp/web_upload_16k.wav"
+            with open(in_file, "wb") as f:
+                f.write(raw_audio)
+
+            # ffmpeg 自动识别浏览器录音格式 (webm/wav/ogg/mp4) 并转成 16k 单声道 wav
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", in_file, "-ar", "16000", "-ac", "1", wav_file],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=True,
+                    timeout=5
+                )
+            except Exception as e:
+                print(f"⚠️ [ASR 音频转换失败]: {e}")
+                wav_file = in_file
+
+            asr = BaiduASR(ak, sk)
+            text = asr.recognize(wav_file)
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "text": text}, ensure_ascii=False).encode("utf-8"))
+            return
+
         if self.path == "/api/chat":
             content_length = int(self.headers.get("Content-Length", 0))
             post_data = self.rfile.read(content_length)

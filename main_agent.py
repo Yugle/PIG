@@ -7,6 +7,7 @@ import signal
 
 from eye_renderer import EyeRenderer
 from tts_engine import TTSEngine
+from asr_engine import BaiduASR
 
 # 自动判定运行环境：根据 /proc/device-tree/model 识别树莓派真机或 PC 仿真
 is_raspberry_pi = False
@@ -58,7 +59,11 @@ tts = TTSEngine(
 
 import requests
 
-# 初始化 OpenAI 兼容大模型客户端 (优先 requests，降级支持 openai sdk)
+# 初始化百度智能云 ASR 语音识别
+asr_engine = None
+if cfg.get("baidu_api_key") and cfg.get("baidu_secret_key"):
+    asr_engine = BaiduASR(cfg["baidu_api_key"], cfg["baidu_secret_key"])
+    print("🎙️ [ASR 初始化] 百度智能云语音识别已就绪")
 api_key = cfg.get("api_key", "")
 base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
 llm_model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
@@ -250,13 +255,16 @@ def run_loop():
                     hal.display_face(eyes.render_eyes("CONFUSED"))
 
                     user_text = ""
-                    if client and clip_path and os.path.exists(clip_path):
-                        try:
-                            with open(clip_path, "rb") as af:
-                                trans = client.audio.transcriptions.create(model="whisper-1", file=af)
-                                user_text = trans.text
-                        except Exception as e:
-                            print(f"⚠️ [ASR 语音转文字异常]: {e}")
+                    if clip_path and os.path.exists(clip_path):
+                        if asr_engine:
+                            user_text = asr_engine.recognize(clip_path)
+                        elif client:
+                            try:
+                                with open(clip_path, "rb") as af:
+                                    trans = client.audio.transcriptions.create(model="whisper-1", file=af)
+                                    user_text = trans.text
+                            except Exception as e:
+                                print(f"⚠️ [ASR 语音转文字异常]: {e}")
 
                     if user_text:
                         process_interaction(user_text)
