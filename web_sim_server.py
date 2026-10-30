@@ -74,16 +74,17 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             api_key = cfg.get("api_key", "")
             base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
             model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
+            max_len = cfg.get("max_reply_length", 150)
 
-            sys_prompt = """你是桌面的具身实体机器人搭子。根据主人的话，输出符合情境的肢体语言与回答。
+            sys_prompt = f"""你是桌面的具身实体机器人搭子。根据主人的话，输出符合情境的肢体语言与回答。
 严格输出 JSON 结构，不要包含任何 markdown 或其他文本：
-{
-  "reply": "你说话的内容 (30字以内)",
+{{
+  "reply": "你说话的内容 (口语化、亲切真诚，适合语音播报，建议 {max_len} 字以内，如主人需要详细解答可适当展开)",
   "action": "NOD | SHAKE | NONE | LOOK_UP | SURPRISE",
   "emotion": "NORMAL | HAPPY | CONFUSED | SAD | ANGRY | SURPRISED",
   "pan": 90,
   "tilt": 90
-}
+}}
 说明：
 - pan: 水平头部朝向 [30, 150]，90 为正中
 - tilt: 俯仰头部朝向 [70, 110]，90 为平视，80 为轻微抬头看人
