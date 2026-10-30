@@ -82,15 +82,15 @@
     main {
       flex: 1;
       display: grid;
-      grid-template-columns: 1fr 340px 380px;
+      grid-template-columns: 1fr 420px;
       gap: 16px;
       padding: 16px;
       overflow: hidden;
     }
 
-    @media (max-width: 1100px) {
+    @media (max-width: 1024px) {
       main {
-        grid-template-columns: 1fr 340px;
+        grid-template-columns: 1fr;
         overflow-y: auto;
       }
     }
@@ -135,60 +135,106 @@
       position: absolute;
       top: 12px;
       left: 12px;
-      background: rgba(13, 17, 23, 0.7);
-      backdrop-filter: blur(4px);
+      background: rgba(13, 17, 23, 0.75);
+      backdrop-filter: blur(6px);
       border: 1px solid var(--border-color);
       border-radius: 8px;
       padding: 8px 12px;
       font-size: 0.8rem;
       color: var(--text-sub);
       pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
 
-    /* 2.4 寸液晶屏渲染器 */
-    .screen-panel-body {
-      flex: 1;
+    .viewport-controls-bar {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      display: flex;
+      gap: 8px;
+      z-index: 5;
+    }
+
+    .view-btn {
+      background: rgba(13, 17, 23, 0.8);
+      border: 1px solid var(--border-color);
+      color: var(--text-sub);
+      font-size: 0.75rem;
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+      transition: all 0.2s ease;
+    }
+
+    .view-btn:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    /* 2.4 寸画中画 (PIP) 屏幕特写卡片 */
+    .pip-screen-container {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .pip-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--text-sub);
+      gap: 8px;
+    }
+
+    .pip-toggle {
+      background: none;
+      border: none;
+      color: var(--cyan);
+      font-size: 0.7rem;
+      cursor: pointer;
+      padding: 2px 4px;
+    }
+
+    .pip-toggle:hover {
+      text-decoration: underline;
+    }
+
+    .pip-body {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 16px;
-    }
-
-    .device-bezel {
-      background: #1b1f24;
-      border: 3px solid #30363d;
-      border-radius: 20px;
-      padding: 18px 14px 14px 14px;
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.1);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .camera-hole {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #000;
-      border: 2px solid #282e36;
-      box-shadow: inset 0 0 4px #00e5ff;
     }
 
     #eyeCanvas {
-      width: 240px;
-      height: 320px;
+      width: 120px;
+      height: 160px;
       background: #0a0e14;
-      border-radius: 8px;
-      box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.8), 0 0 12px rgba(0, 229, 255, 0.2);
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8), 0 0 8px rgba(0, 229, 255, 0.2);
     }
 
-    .bezel-brand {
-      font-size: 0.75rem;
-      letter-spacing: 1px;
-      color: #57606a;
-      font-weight: bold;
+    .pip-screen-container.collapsed {
+      padding: 6px 12px;
+    }
+
+    .pip-screen-container.collapsed .pip-body {
+      display: none;
     }
 
     /* 控制面板 */
@@ -381,11 +427,17 @@
   </header>
 
   <main>
-    <!-- 左侧：3D 物理动力学视窗 -->
+    <!-- 左侧：3D 实体动力学主视窗 (屏幕贴合于 3D 机器人面部) -->
     <div class="panel">
       <div class="panel-header">
-        <span>🎮 3D 机械孪生视窗 (Three.js WebGL)</span>
-        <span style="font-size: 0.75rem; color: var(--text-sub);">按住鼠标左键可 360° 旋转视角</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span>🎮 3D 具身机械孪生 (Three.js WebGL)</span>
+          <span style="font-size: 0.72rem; background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); padding: 1px 6px; border-radius: 4px;">📺 面部 2.4" 屏幕动态纹理贴合</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span id="current-emotion-tag" style="font-size: 0.8rem; color: var(--cyan); font-weight:600;">表情: NORMAL</span>
+          <span style="font-size: 0.75rem; color: var(--text-sub);">鼠标左键旋转 / 滚轮缩放</span>
+        </div>
       </div>
       <div id="viewport-container">
         <canvas id="threejs-canvas"></canvas>
@@ -394,20 +446,21 @@
           <div>俯仰角度 (Tilt): <span id="overlay-tilt" style="color:var(--cyan);">90.0°</span></div>
           <div>当前动作: <span id="overlay-action" style="color:#7ee787;">待机 (IDLE)</span></div>
         </div>
-      </div>
-    </div>
 
-    <!-- 中间：2.4 寸液晶显示屏模拟 -->
-    <div class="panel">
-      <div class="panel-header">
-        <span>📺 2.4" ST7789 动态面部屏</span>
-        <span id="current-emotion-tag" style="font-size: 0.75rem; color: var(--cyan);">NORMAL</span>
-      </div>
-      <div class="screen-panel-body">
-        <div class="device-bezel">
-          <div class="camera-hole" title="USB 720P 广角摄像头"></div>
-          <canvas id="eyeCanvas" width="240" height="320"></canvas>
-          <div class="bezel-brand">ROBOT COMPANION</div>
+        <div class="viewport-controls-bar">
+          <button class="view-btn" onclick="setCameraView('close')">🎯 正面特写</button>
+          <button class="view-btn" onclick="setCameraView('front')">🔄 伴侣全景</button>
+        </div>
+
+        <!-- 3D 视窗角标：画中画屏幕特写 (可展开/折叠) -->
+        <div class="pip-screen-container" id="pipContainer">
+          <div class="pip-header">
+            <span>📺 2.4" 像素特写</span>
+            <button class="pip-toggle" id="pipToggleBtn" onclick="togglePip()">隐藏特写</button>
+          </div>
+          <div class="pip-body" id="pipBody">
+            <canvas id="eyeCanvas" width="240" height="320"></canvas>
+          </div>
         </div>
       </div>
     </div>
@@ -651,7 +704,13 @@
 
     function setEmotion(emo) {
       currentEmotion = emo;
-      document.getElementById("current-emotion-tag").innerText = emo;
+      const tag = document.getElementById("current-emotion-tag");
+      if (tag) tag.innerText = "表情: " + emo;
+      if (typeof pointLight !== "undefined" && pointLight) {
+        if (emo === "ANGRY") pointLight.color.setHex(0xff3838);
+        else if (emo === "LOVE") pointLight.color.setHex(0xff4d8d);
+        else pointLight.color.setHex(0x00e5ff);
+      }
       drawEyes(emo);
     }
 
@@ -690,7 +749,7 @@
     scene.background = new THREE.Color(0x0e131a);
 
     const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(0, 0.25, 0.55);
+    camera.position.set(0, 0.18, 0.42);
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
@@ -700,10 +759,10 @@
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.target.set(0, 0.1, 0);
+    controls.target.set(0, 0.085, 0);
 
     // 灯光
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
     scene.add(ambientLight);
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
@@ -711,8 +770,8 @@
     dirLight.castShadow = true;
     scene.add(dirLight);
 
-    const pointLight = new THREE.PointLight(0x00e5ff, 1.2, 0.6);
-    pointLight.position.set(0, 0.16, 0.1);
+    const pointLight = new THREE.PointLight(0x00e5ff, 1.0, 0.6);
+    pointLight.position.set(0, 0.12, 0.1);
     scene.add(pointLight);
 
     // 网格底盘
@@ -720,16 +779,26 @@
     grid.position.y = 0;
     scene.add(grid);
 
-    // 材质定义
-    const matWhite = new THREE.MeshStandardMaterial({ color: 0xefefef, roughness: 0.35, metalness: 0.1 });
-    const matDark = new THREE.MeshStandardMaterial({ color: 0x24292f, roughness: 0.5, metalness: 0.7 });
-    const matBezel = new THREE.MeshStandardMaterial({ color: 0x161b22, roughness: 0.8 });
-    const matScreen = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
-    const matLens = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.9 });
+    // 材质与纹理定义
+    const matWhite = new THREE.MeshStandardMaterial({ color: 0xf4f5f7, roughness: 0.3, metalness: 0.1 });
+    const matDark = new THREE.MeshStandardMaterial({ color: 0x1a1e24, roughness: 0.45, metalness: 0.7 });
+    const matBezel = new THREE.MeshStandardMaterial({ color: 0x101317, roughness: 0.6, metalness: 0.3 });
+    const matLens = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.95 });
+
+    // 2.4 寸屏幕 Canvas 实时纹理贴图
+    const screenTexture = new THREE.CanvasTexture(eyeCanvas);
+    screenTexture.generateMipmaps = false;
+    screenTexture.minFilter = THREE.LinearFilter;
+    screenTexture.magFilter = THREE.LinearFilter;
+
+    const matScreen = new THREE.MeshBasicMaterial({ 
+      map: screenTexture,
+      toneMapped: false
+    });
 
     // 1. 底座 Base
     const baseGroup = new THREE.Group();
-    const baseGeom = new THREE.CylinderGeometry(0.065, 0.07, 0.035, 32);
+    const baseGeom = new THREE.CylinderGeometry(0.065, 0.072, 0.035, 32);
     const baseMesh = new THREE.Mesh(baseGeom, matWhite);
     baseMesh.position.y = 0.035 / 2;
     baseMesh.castShadow = true;
@@ -751,30 +820,71 @@
     headPitchGroup.position.set(0, 0.035, 0);
     neckYawGroup.add(headPitchGroup);
 
-    // 头部主体外壳
-    const headGeom = new THREE.BoxGeometry(0.09, 0.08, 0.07);
+    // 头部主体外壳 (宽 0.088, 高 0.108, 深 0.075)
+    const headGeom = new THREE.BoxGeometry(0.088, 0.108, 0.075);
     const headMesh = new THREE.Mesh(headGeom, matWhite);
-    headMesh.position.set(0, 0.04, 0);
+    headMesh.position.set(0, 0.054, 0);
     headMesh.castShadow = true;
     headPitchGroup.add(headMesh);
 
-    // 前脸黑色边框
-    const bezelGeom = new THREE.BoxGeometry(0.08, 0.07, 0.004);
+    // 头部黑色屏幕边框 (Bezel)
+    const bezelGeom = new THREE.BoxGeometry(0.072, 0.092, 0.005);
     const bezelMesh = new THREE.Mesh(bezelGeom, matBezel);
-    bezelMesh.position.set(0, 0.04, 0.037);
+    bezelMesh.position.set(0, 0.050, 0.0375);
     headPitchGroup.add(bezelMesh);
 
-    // 彩色发光屏幕 (2.4寸)
-    const screenGeom = new THREE.PlaneGeometry(0.068, 0.055);
+    // 彩色发光面部屏幕 (2.4寸 ST7789 240x320 竖屏，宽 0.058, 高 0.078，精确 3:4 比例)
+    const screenGeom = new THREE.PlaneGeometry(0.058, 0.078);
     const screenMesh = new THREE.Mesh(screenGeom, matScreen);
-    screenMesh.position.set(0, 0.038, 0.04);
+    screenMesh.position.set(0, 0.050, 0.0402);
     headPitchGroup.add(screenMesh);
 
-    // 摄像头镜头
-    const lensGeom = new THREE.SphereGeometry(0.007, 16, 16);
+    // 摄像头模组
+    const lensRingGeom = new THREE.CylinderGeometry(0.006, 0.006, 0.003, 16);
+    const lensRing = new THREE.Mesh(lensRingGeom, matDark);
+    lensRing.rotation.x = Math.PI / 2;
+    lensRing.position.set(0, 0.094, 0.0385);
+    headPitchGroup.add(lensRing);
+
+    const lensGeom = new THREE.SphereGeometry(0.0035, 16, 16);
     const lensMesh = new THREE.Mesh(lensGeom, matLens);
-    lensMesh.position.set(0, 0.068, 0.038);
+    lensMesh.position.set(0, 0.094, 0.040);
     headPitchGroup.add(lensMesh);
+
+    // 伴侣侧耳机械细节
+    const earGeom = new THREE.CylinderGeometry(0.012, 0.012, 0.008, 16);
+    const leftEar = new THREE.Mesh(earGeom, matDark);
+    leftEar.rotation.z = Math.PI / 2;
+    leftEar.position.set(-0.046, 0.054, 0);
+    headPitchGroup.add(leftEar);
+
+    const rightEar = leftEar.clone();
+    rightEar.position.x = 0.046;
+    headPitchGroup.add(rightEar);
+
+    // 视角切换与画中画切换控制
+    function setCameraView(view) {
+      if (view === "close") {
+        camera.position.set(0, 0.14, 0.28);
+        controls.target.set(0, 0.085, 0);
+      } else {
+        camera.position.set(0, 0.20, 0.44);
+        controls.target.set(0, 0.085, 0);
+      }
+      controls.update();
+    }
+
+    function togglePip() {
+      const container = document.getElementById("pipContainer");
+      const btn = document.getElementById("pipToggleBtn");
+      if (container.classList.contains("collapsed")) {
+        container.classList.remove("collapsed");
+        btn.innerText = "隐藏特写";
+      } else {
+        container.classList.add("collapsed");
+        btn.innerText = "展开特写";
+      }
+    }
 
     // 角度控制
     let currentPan = 90;
@@ -1141,6 +1251,11 @@
       // 映射到弧度 (90度为中间)
       neckYawGroup.rotation.y = -THREE.MathUtils.degToRad(currentPan - 90);
       headPitchGroup.rotation.x = THREE.MathUtils.degToRad(currentTilt - 90);
+
+      // 保持 Canvas 2.4" 面部纹理高帧率同步贴附于 3D 模型面部
+      if (typeof screenTexture !== "undefined" && screenTexture) {
+        screenTexture.needsUpdate = true;
+      }
 
       controls.update();
       renderer.render(scene, camera);
