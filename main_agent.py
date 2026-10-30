@@ -154,33 +154,39 @@ def process_interaction(user_text: str):
     print(f"\n👤 [用户表达]: {user_text}")
 
     max_len = cfg.get("max_reply_length", 150)
-    sys_prompt = f"""你是桌面的具身实体机器人搭子。根据主人的话，输出符合情境的肢体语言与回答。
+    sys_prompt = f"""你是桌面的具身实体机器人搭子。根据主人的话，输出富有真实生命体征、连续起伏的肢体语言与回答。
 严格输出 JSON 结构，不要包含任何 markdown 或其他文本：
 {{
-  "reply": "你说话的内容 (口语化、亲切真诚，适合语音播报，建议 {max_len} 字以内，如主人需要详细解答可适当展开)",
-  "action": "NOD | SHAKE | NONE",
-  "emotion": "NORMAL | HAPPY | LOVE | WINK | CONFUSED | THINKING | SURPRISED | SLEEPY | DIZZY | SAD | ANGRY",
-  "pan": 90,
-  "tilt": 90
+  "reply": "你说话的内容 (口语化、亲切真诚，建议 {max_len} 字以内)",
+  "behaviors": [
+    {{
+      "emotion": "NORMAL | HAPPY | LOVE | WINK | CONFUSED | THINKING | SURPRISED | SLEEPY | DIZZY | SAD | ANGRY",
+      "action": "NOD | SHAKE | NONE | LOOK_UP | SURPRISE",
+      "pan": 90,
+      "tilt": 80,
+      "delay": 700
+    }}
+  ]
 }}
 说明：
+- behaviors: 输出 1 到 3 个连续递进的动作表情时序步骤！模拟真人的情绪起伏波澜演变过程。
 - pan: 水平头部朝向 [30, 150]，90 为正中
 - tilt: 俯仰头部朝向 [70, 110]，90 为平视，80 为轻微抬头看人
-- action: NOD(点头认同), SHAKE(摇头否认), NONE(静止)
-- emotion: 表情类型 (必须大胆且贴切地使用丰富表情：被夸选 LOVE，卖萌选 WINK，分析选 THINKING，疲倦选 SLEEPY，开玩笑被绕晕选 DIZZY，委屈选 SAD，被挑衅选 ANGRY，震惊选 SURPRISED)
+- delay: 该步骤保持毫秒数 [500, 1200]
 
 【参考示例】
-- 用户："你真可爱，好喜欢你！" -> {{"reply":"嘿嘿，听到你夸我，我开心得核心温度都上升啦！","action":"NOD","emotion":"LOVE","pan":90,"tilt":80}}
-- 用户："这道复杂的算术题怎么做？" -> {{"reply":"本小猪正在满频运算中，马上给你答案！","action":"LOOK_UP","emotion":"THINKING","pan":90,"tilt":75}}
-- 用户："今天加班太累了，我想睡了" -> {{"reply":"辛苦啦主人，快盖好被子好好休息吧，晚安好梦~","action":"NONE","emotion":"SLEEPY","pan":90,"tilt":100}}
-- 用户："把舌头打结念一段绕口令" -> {{"reply":"哎呀呀，本小猪的代码都被你绕晕成蚊香啦！","action":"SHAKE","emotion":"DIZZY","pan":110,"tilt":90}}
+- 用户："哇，我给你带了一整盒草莓蛋糕！" -> {{
+    "reply": "哇！真的吗？太好啦！想想就幸福得冒泡~ 谢谢主人！",
+    "behaviors": [
+      {{"emotion": "SURPRISED", "action": "SURPRISE", "pan": 90, "tilt": 70, "delay": 600}},
+      {{"emotion": "HAPPY", "action": "NOD", "pan": 85, "tilt": 75, "delay": 800}},
+      {{"emotion": "LOVE", "action": "WINK", "pan": 90, "tilt": 80, "delay": 900}}
+    ]
+  }}
 """
 
     reply_text = "我在听呢，有什么我可以帮你的吗？"
-    emotion = "HAPPY"
-    action = "NONE"
-    pan = 90
-    tilt = 90
+    behaviors = []
 
     if api_key and "YOUR_LLM_API_KEY" not in api_key:
         try:
@@ -201,7 +207,6 @@ def process_interaction(user_text: str):
                 resp_json = response.json()
                 raw_content = resp_json["choices"][0]["message"]["content"].strip()
 
-                # 清理可能包含的 markdown 语法块 ```json ... ```
                 if raw_content.startswith("```"):
                     raw_content = raw_content.split("```")[1]
                     if raw_content.startswith("json"):
@@ -210,52 +215,63 @@ def process_interaction(user_text: str):
 
                 res = json.loads(raw_content)
                 reply_text = res.get("reply", reply_text)
-                emotion = res.get("emotion", "NORMAL")
-                action = res.get("action", "NONE")
-                pan = res.get("pan", 90)
-                tilt = res.get("tilt", 90)
+                behaviors = res.get("behaviors", [])
+                if not behaviors:
+                    behaviors = [{
+                        "emotion": res.get("emotion", "NORMAL"),
+                        "action": res.get("action", "NONE"),
+                        "pan": res.get("pan", 90),
+                        "tilt": res.get("tilt", 90),
+                        "delay": 700
+                    }]
             else:
                 print(f"⚠️ [LLM 响应异常状态码 {response.status_code}]: {response.text}")
                 reply_text = "网络信号有些微弱，我没听清呢。"
-                emotion = "CONFUSED"
+                behaviors = [{"emotion": "CONFUSED", "action": "NONE", "pan": 90, "tilt": 90}]
         except Exception as e:
             print(f"⚠️ [LLM 推理解析异常]: {e}")
             reply_text = "刚才信号闪了一下，我开小差了。"
-            emotion = "CONFUSED"
+            behaviors = [{"emotion": "CONFUSED", "action": "NONE", "pan": 90, "tilt": 90}]
     else:
-        # Mock 规则匹配，便于在未配 Key 时体验
+        # Mock 规则匹配
         if "你好" in user_text or "嗨" in user_text:
             reply_text = "主人你好呀！今天心情怎么样？"
-            emotion = "HAPPY"
-            action = "NOD"
-            tilt = 80
-        elif "不" in user_text or "错" in user_text:
-            reply_text = "哎呀，不要难过嘛，我一直在陪着你。"
-            emotion = "CONFUSED"
-            action = "SHAKE"
+            behaviors = [
+                {"emotion": "SURPRISED", "action": "NONE", "pan": 90, "tilt": 80, "delay": 500},
+                {"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 85, "delay": 800}
+            ]
         else:
-            reply_text = f"收到：{user_text}，我是一只智能机械伴侣小猪。"
-            emotion = "HAPPY"
+            reply_text = f"收到：{user_text}"
+            behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
 
-    # 具身执行
-    print(f"🤖 [具身动作] 转向 Pan={pan}°, Tilt={tilt}°, 表情={emotion}, 动作={action}")
-    hal.set_angles(pan, tilt)
-    hal.display_face(eyes.render_eyes(emotion))
+    # 具身多时序连招执行
+    for b in behaviors:
+        p_val = b.get("pan", 90)
+        t_val = b.get("tilt", 90)
+        emo_val = b.get("emotion", "NORMAL")
+        act_val = b.get("action", "NONE")
+        delay_ms = b.get("delay", 700)
 
-    if action == "NOD":
-        hal.set_angles(pan, 75)
-        hal.set_angles(pan, 95)
-        hal.set_angles(pan, 90)
-    elif action == "SHAKE":
-        hal.set_angles(pan - 20, tilt)
-        hal.set_angles(pan + 20, tilt)
-        hal.set_angles(pan, tilt)
+        print(f"🤖 [时序动作] 转向 Pan={p_val}°, Tilt={t_val}°, 表情={emo_val}, 动作={act_val}")
+        hal.set_angles(p_val, t_val)
+        hal.display_face(eyes.render_eyes(emo_val))
+
+        if act_val == "NOD":
+            hal.set_angles(p_val, 75)
+            hal.set_angles(p_val, 95)
+            hal.set_angles(p_val, t_val)
+        elif act_val == "SHAKE":
+            hal.set_angles(p_val - 20, t_val)
+            hal.set_angles(p_val + 20, t_val)
+            hal.set_angles(p_val, t_val)
+
+        time.sleep(delay_ms / 1000.0)
 
     # 语音输出
     tts.speak(reply_text)
 
-    # 动作执行完毕，归位待机
-    time.sleep(0.5)
+    # 归位待机
+    time.sleep(0.3)
     hal.display_face(eyes.render_eyes("NORMAL"))
     hal.set_angles(90, 90)
 

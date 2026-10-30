@@ -844,6 +844,37 @@
       runActionSequence();
     }
 
+    function playBehaviors(behaviors) {
+      actionSequence = [];
+      behaviors.forEach((b, index) => {
+        const p = b.pan !== undefined ? b.pan : currentPan;
+        const t = b.tilt !== undefined ? b.tilt : currentTilt;
+        const emo = b.emotion || "NORMAL";
+        const act = (b.action || "NONE").toUpperCase();
+        const duration = Math.max(300, b.delay || 700);
+
+        if (act === "NOD") {
+          actionSequence.push({ pan: p, tilt: Math.max(60, t - 15), emotion: emo, delay: 180 });
+          actionSequence.push({ pan: p, tilt: Math.min(120, t + 15), emotion: emo, delay: 180 });
+          actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: Math.max(150, duration - 360) });
+        } else if (act === "SHAKE") {
+          actionSequence.push({ pan: Math.max(30, p - 20), tilt: t, emotion: emo, delay: 160 });
+          actionSequence.push({ pan: Math.min(150, p + 20), tilt: t, emotion: emo, delay: 160 });
+          actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: Math.max(150, duration - 320) });
+        } else if (act === "LOOK_UP") {
+          actionSequence.push({ pan: p, tilt: 70, emotion: emo, delay: duration });
+        } else if (act === "SURPRISE") {
+          actionSequence.push({ pan: p, tilt: 75, emotion: emo, delay: duration });
+        } else {
+          actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: duration });
+        }
+      });
+
+      // 序列执行完平滑复位待机
+      actionSequence.push({ pan: 90, tilt: 90, emotion: "NORMAL", delay: 200 });
+      runActionSequence();
+    }
+
     // 具身对话处理与高保真中文语音合成 (Edge-TTS 优先 + Web Speech 兜底)
     let currentAudio = null;
 
@@ -926,14 +957,18 @@
         botDiv.innerText = res.reply || "收到啦！";
         chatLogs.scrollTop = chatLogs.scrollHeight;
 
-        if (res.pan && res.tilt) {
-          updateAngles(res.pan, res.tilt);
-        }
-        if (res.action && res.action !== "NONE") {
-          triggerAction(res.action);
-        }
-        if (res.emotion) {
-          setEmotion(res.emotion);
+        if (Array.isArray(res.behaviors) && res.behaviors.length > 0) {
+          playBehaviors(res.behaviors);
+        } else {
+          if (res.pan && res.tilt) {
+            updateAngles(res.pan, res.tilt);
+          }
+          if (res.action && res.action !== "NONE") {
+            triggerAction(res.action);
+          }
+          if (res.emotion) {
+            setEmotion(res.emotion);
+          }
         }
         speakText(res.reply);
       } catch (err) {
