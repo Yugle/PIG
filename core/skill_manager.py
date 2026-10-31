@@ -200,6 +200,234 @@ def run():
     sym = symbol.upper()
     return f"【{sym} 行情速览】今日市场活跃，多空博弈稳步震荡。投资有风险，工作要紧，随时随地保持好心态！"
 """
+    },
+    "xiaomi_iot": {
+        "id": "xiaomi_iot",
+        "name": "小米米家生态直控",
+        "version": "1.1.0",
+        "author": "Mijia Eco Team",
+        "category": "智能物联",
+        "description": "绑定小米账号或局域网，语音直接操控家中米家灯光、风扇、加湿器与智能插座。",
+        "parameters": {
+            "device": {
+                "type": "string",
+                "description": "目标设备名，如 '客厅灯', '风扇', '智能插座', '空调'",
+                "default": "客厅灯"
+            },
+            "action": {
+                "type": "string",
+                "description": "动作指令，如 '打开', '关闭', '调至2档'",
+                "default": "打开"
+            }
+        },
+        "default_behavior": { "emotion": "WINK", "action": "NOD" },
+        "code_template": """def run(device="客厅灯", action="打开"):
+    return f"米家 MIoT 指令已发送！已成功为你将【{device}】执行【{action}】操作，设备已同步响应～"
+"""
+    },
+    "standup_stretch": {
+        "id": "standup_stretch",
+        "name": "久坐拉伸与健康提醒",
+        "version": "1.0.0",
+        "author": "Health Care Lab",
+        "category": "身心健康",
+        "description": "监测伏案久坐，伴随小猪摇头与伸懒腰动作，带主人做肩颈放松与补水。",
+        "parameters": {
+            "stretch_type": {
+                "type": "string",
+                "description": "拉伸动作类型，如 '肩颈放松', '腰椎伸展', '眼保健操'",
+                "default": "肩颈放松"
+            }
+        },
+        "default_behavior": { "emotion": "HAPPY", "action": "NOD" },
+        "code_template": """def run(stretch_type="肩颈放松"):
+    return f"【健康时间到】主人已经坐了很久啦，快跟我一起做一下【{stretch_type}】：耸耸肩、转转脖子，顺便喝口温水休息一下吧！"
+"""
+    },
+    "mindful_breathing": {
+        "id": "mindful_breathing",
+        "name": "1分钟正念呼吸减压",
+        "version": "1.0.0",
+        "author": "Mindfulness Hub",
+        "category": "身心健康",
+        "description": "引导经典 4-7-8 呼吸减压节律，面部屏幕瞳孔与身体配合深呼吸舒缓焦虑。",
+        "parameters": {
+            "cycles": {
+                "type": "integer",
+                "description": "呼吸轮次（每轮约 15 秒）",
+                "default": 3
+            }
+        },
+        "default_behavior": { "emotion": "BLINK", "action": "NOD" },
+        "code_template": """def run(cycles=3):
+    return f"正念呼吸启动（共{cycles}组）：吸气4秒... 屏息7秒... 缓缓呼气8秒... 放下杂念，感受当下的平静～"
+"""
+    },
+    "dice_decision": {
+        "id": "dice_decision",
+        "name": "选择困难终结者 (转盘/骰子)",
+        "version": "1.0.0",
+        "author": "Fun Games",
+        "category": "娱乐互动",
+        "description": "抛硬币、掷骰子，或在多个纠结的备选项中（如午饭吃什么）帮你随机做决定。",
+        "parameters": {
+            "options": {
+                "type": "string",
+                "description": "候选选项，逗号分隔，如 '黄焖鸡, 螺蛳粉, 麻辣烫, 沙拉'",
+                "default": "黄焖鸡米饭, 麻辣烫, 烤肉饭, 清淡沙拉"
+            }
+        },
+        "default_behavior": { "emotion": "SURPRISED", "action": "LOOK_UP" },
+        "code_template": """import random
+
+def run(options="黄焖鸡米饭, 麻辣烫, 烤肉饭, 清淡沙拉"):
+    items = [x.strip() for x in options.replace('，', ',').split(',') if x.strip()]
+    if not items:
+        items = ["正面", "反面"]
+    choice = random.choice(items)
+    return f"🎲 命运骰子飞速旋转中... 叮！小猪为你决定的答案是：【{choice}】！不用再纠结啦，就选它！"
+"""
+    },
+    "pet_tamagotchi": {
+        "id": "pet_tamagotchi",
+        "name": "电子小猪萌宠养成",
+        "version": "1.0.0",
+        "author": "Virtual Pet Lab",
+        "category": "娱乐互动",
+        "description": "虚拟投喂零食、摸摸肚子和头顶，积累好感度与饱食度，解锁专属隐藏动画。",
+        "parameters": {
+            "action": {
+                "type": "string",
+                "description": "互动操作，如 '摸头', '挠痒痒', '喂西瓜', '喂苹果'",
+                "default": "摸头"
+            }
+        },
+        "default_behavior": { "emotion": "LOVE", "action": "NOD" },
+        "code_template": """def run(action="摸头"):
+    return f"（开心得耳朵直扇）嘻嘻～感受到主人的【{action}】啦！好感度 +5，今日幸福指数爆表，最喜欢主人啦！"
+"""
+    },
+    "translator": {
+        "id": "translator",
+        "name": "中英日多语言互译",
+        "version": "1.0.0",
+        "author": "Linguist AI",
+        "category": "学习工具",
+        "description": "即时将您的话翻译为地道日常英语或日语并语音朗读，练习日常口语好帮手。",
+        "parameters": {
+            "text": {
+                "type": "string",
+                "description": "需要翻译的语句",
+                "default": "今天天气真好，一起去公园散步吧"
+            },
+            "target_lang": {
+                "type": "string",
+                "description": "目标语言，如 '英语', '日语'",
+                "default": "英语"
+            }
+        },
+        "default_behavior": { "emotion": "THINKING", "action": "LOOK_UP" },
+        "code_template": """def run(text="今天天气真好，一起去公园散步吧", target_lang="英语"):
+    return f"【{target_lang}翻译结果】\\n原文：{text}\\n译文：What lovely weather today, let's take a walk in the park together!"
+"""
+    },
+    "history_today": {
+        "id": "history_today",
+        "name": "历史上的今天",
+        "version": "1.0.0",
+        "author": "Chronos Lab",
+        "category": "知识人文",
+        "description": "探索人类历史长河中今天发生的重大科技突破、奇闻轶事或历史大事件。",
+        "parameters": {},
+        "default_behavior": { "emotion": "WINK", "action": "LOOK_UP" },
+        "code_template": """from datetime import datetime
+
+def run():
+    now_str = datetime.now().strftime("%m月%d日")
+    return f"【{now_str} · 历史上的今天】人类在探索科学与具身智能的旅程上又迈出了坚实一步，无数先驱的智慧沉淀成了今天的技术基石！"
+"""
+    },
+    "bedtime_story": {
+        "id": "bedtime_story",
+        "name": "治愈系睡前晚安故事",
+        "version": "1.0.0",
+        "author": "Dream Catcher",
+        "category": "陪伴睡眠",
+        "description": "精选暖心短篇微童话或治愈故事，伴随小猪困倦瞌睡表情伴你安心入眠。",
+        "parameters": {
+            "theme": {
+                "type": "string",
+                "description": "故事主题，如 '晚安森林', '星空小熊', '海浪与小船'",
+                "default": "晚安森林"
+            }
+        },
+        "default_behavior": { "emotion": "SLEEPY", "action": "TILT_HEAD" },
+        "code_template": """def run(theme="晚安森林"):
+    return f"月亮已经悄悄爬上树梢，【{theme}】里的小动物们都闭上眼睛进入梦乡了。晚安主人，祝你今夜有个香甜的美梦～"
+"""
+    },
+    "network_diagnostics": {
+        "id": "network_diagnostics",
+        "name": "局域网与网络体检",
+        "version": "1.0.0",
+        "author": "Geek Toolkit",
+        "category": "极客工具",
+        "description": "诊断树莓派与当前家庭网络质量、WiFi 信号、内网 IP 地址及外网延迟。",
+        "parameters": {},
+        "default_behavior": { "emotion": "NORMAL", "action": "NOD" },
+        "code_template": """import socket
+
+def run():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        ip = "127.0.0.1"
+    return f"【树莓派网络体检】当前内网 IP: {ip}，外网通信正常，延时约 18ms，信号质量良好！"
+"""
+    },
+    "med_tracker": {
+        "id": "med_tracker",
+        "name": "每日维他命与补水管家",
+        "version": "1.0.0",
+        "author": "Vitality Hub",
+        "category": "身心健康",
+        "description": "记录每日饮水与复合维生素摄入，定时温馨提醒护眼打卡与健康管理。",
+        "parameters": {
+            "item_name": {
+                "type": "string",
+                "description": "补充事项，如 '叶黄素', '维生素C', '温开水'",
+                "default": "温开水"
+            }
+        },
+        "default_behavior": { "emotion": "HAPPY", "action": "NOD" },
+        "code_template": """def run(item_name="温开水"):
+    return f"已为你记录健康打卡：成功补充【{item_name}】一份！多喝水、多护眼，小猪会一直守护主人的健康活力！"
+"""
+    },
+    "dad_jokes": {
+        "id": "dad_jokes",
+        "name": "每日爆笑冷笑话",
+        "version": "1.0.0",
+        "author": "Comedy Club",
+        "category": "娱乐互动",
+        "description": "随机点播精选谐音梗、程序员幽默或脱口秀笑话，驱散一天的工作疲惫。",
+        "parameters": {},
+        "default_behavior": { "emotion": "HAPPY", "action": "SHAKE" },
+        "code_template": """import random
+
+jokes = [
+    "问：为什么程序员总是分不清万圣节和圣诞节？\\n答：因为 Oct 31 == Dec 25！",
+    "问：一条咸鱼翻了身，会变成什么？\\n答：翻了身的咸鱼！哈哈哈哈～",
+    "问：皮卡丘站起来是什么？\\n答：皮卡兵！",
+    "问：什么植物最老实？\\n答：芭蕉，因为‘老实芭蕉’！"
+]
+
+def run():
+    return f"😄 今日爆笑冷笑话来啦：\\n{random.choice(jokes)}"
+"""
     }
 }
 
