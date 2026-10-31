@@ -82,15 +82,25 @@
     main {
       flex: 1;
       display: grid;
-      grid-template-columns: 1fr 420px;
-      gap: 16px;
-      padding: 16px;
+      grid-template-columns: 330px 1fr 370px;
+      gap: 14px;
+      padding: 14px;
       overflow: hidden;
+      min-height: 0;
     }
 
-    @media (max-width: 1024px) {
+    @media (max-width: 1360px) {
+      main {
+        grid-template-columns: 300px 1fr 340px;
+        gap: 12px;
+        padding: 12px;
+      }
+    }
+
+    @media (max-width: 1050px) {
       main {
         grid-template-columns: 1fr;
+        grid-template-rows: auto 520px auto;
         overflow-y: auto;
       }
     }
@@ -333,12 +343,47 @@
       box-shadow: 0 0 10px var(--cyan-glow);
     }
 
-    /* 对话框模块 */
+    /* 具身对话面板与气泡交互 */
+    .chat-panel-body {
+      flex: 1;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .quick-chips-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .quick-chip {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 3px 8px;
+      font-size: 0.72rem;
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .quick-chip:hover {
+      background: rgba(0, 229, 255, 0.12);
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
     .chat-box {
       display: flex;
       flex-direction: column;
       flex: 1;
-      height: 200px;
+      min-height: 0;
       background: #0d1117;
       border: 1px solid var(--border-color);
       border-radius: 8px;
@@ -347,25 +392,27 @@
 
     .chat-messages {
       flex: 1;
-      padding: 10px;
+      padding: 12px;
       overflow-y: auto;
       font-size: 0.82rem;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
     }
 
     .msg {
-      padding: 6px 10px;
-      border-radius: 6px;
-      max-width: 85%;
-      line-height: 1.4;
+      padding: 8px 12px;
+      border-radius: 8px;
+      max-width: 88%;
+      line-height: 1.45;
+      word-break: break-word;
     }
 
     .msg.user {
       align-self: flex-end;
       background: #1f6feb;
       color: #fff;
+      box-shadow: 0 2px 8px rgba(31, 111, 235, 0.25);
     }
 
     .msg.bot {
@@ -373,6 +420,7 @@
       background: #21262d;
       color: var(--text-main);
       border: 1px solid var(--border-color);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
 
     .chat-input-bar {
@@ -385,7 +433,7 @@
       flex: 1;
       background: transparent;
       border: none;
-      padding: 8px 12px;
+      padding: 10px 12px;
       color: var(--text-main);
       outline: none;
       font-size: 0.82rem;
@@ -399,6 +447,11 @@
       font-weight: bold;
       cursor: pointer;
       font-size: 0.82rem;
+      transition: background 0.2s ease;
+    }
+
+    .chat-input-bar button:hover {
+      background: #33ebff;
     }
   </style>
 
@@ -427,57 +480,14 @@
   </header>
 
   <main>
-    <!-- 左侧：3D 实体动力学主视窗 (屏幕贴合于 3D 机器人面部) -->
+    <!-- 左侧：具身控制台 (姿态、动作、表情、技能生态、元认知) -->
     <div class="panel">
       <div class="panel-header">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span>🎮 3D 具身机械孪生 (Three.js WebGL)</span>
-          <span style="font-size: 0.72rem; background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); padding: 1px 6px; border-radius: 4px;">📺 面部 2.4" 屏幕动态纹理贴合</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>🎛️ 具身控制台</span>
+          <span style="font-size: 0.72rem; background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); padding: 1px 6px; border-radius: 4px;">硬件 & 技能</span>
         </div>
-        <div style="display:flex; align-items:center; gap:12px;">
-          <span id="current-emotion-tag" style="font-size: 0.8rem; color: var(--cyan); font-weight:600;">表情: NORMAL</span>
-          <span style="font-size: 0.75rem; color: var(--text-sub);">鼠标左键旋转 / 滚轮缩放</span>
-        </div>
-      </div>
-      <div id="viewport-container">
-        <canvas id="threejs-canvas"></canvas>
-        <div class="viewport-overlay">
-          <div>水平航向 (Pan): <span id="overlay-pan" style="color:var(--cyan);">90.0°</span></div>
-          <div>俯仰角度 (Tilt): <span id="overlay-tilt" style="color:var(--cyan);">90.0°</span></div>
-          <div>当前动作: <span id="overlay-action" style="color:#7ee787;">待机 (IDLE)</span></div>
-          <div>生命节律: <span id="overlay-fsm" style="color:#a371f7;">🫁 呼吸待机 (IDLE)</span></div>
-        </div>
-
-        <div class="viewport-controls-bar">
-          <button class="view-btn" id="gazeToggleBtn" onclick="toggleGazeTracking()" title="开启后，机器人头部与眼球将跟随您的鼠标/人脸两级视线注视">👁️ 注视追踪: 关</button>
-          <button class="view-btn" onclick="setCameraView('close')">🎯 正面特写</button>
-          <button class="view-btn" onclick="setCameraView('front')">🔄 伴侣全景</button>
-        </div>
-
-        <!-- 🔔 具身主动打断提醒弹窗 -->
-        <div id="alarmAlertModal" style="display:none; position:absolute; top:20px; left:50%; transform:translateX(-50%); background:rgba(22, 27, 34, 0.96); border:2px solid #ffb020; box-shadow:0 0 25px rgba(255, 176, 32, 0.6); border-radius:12px; padding:12px 24px; z-index:100; text-align:center; min-width:300px; backdrop-filter:blur(8px); animation: pulseAlert 1.5s infinite alternate;">
-          <div style="font-size:1.15rem; margin-bottom:4px; font-weight:bold; color:#ffb020;">🔔 <span id="alarmModalTitle">闹钟提醒到点啦！</span></div>
-          <div id="alarmModalContent" style="color:#ffffff; font-size:0.95rem; margin-bottom:12px; font-weight:500;">主人，提醒你：关火！</div>
-          <button class="btn" style="background:#ffb020; color:#0d1117; font-weight:bold; padding:5px 20px; border:none; border-radius:6px; cursor:pointer;" onclick="dismissAlarmModal()">👌 我知道了 / 关闭提醒</button>
-        </div>
-
-        <!-- 3D 视窗角标：画中画屏幕特写 (可展开/折叠) -->
-        <div class="pip-screen-container" id="pipContainer">
-          <div class="pip-header">
-            <span>📺 2.4" 像素特写</span>
-            <button class="pip-toggle" id="pipToggleBtn" onclick="togglePip()">隐藏特写</button>
-          </div>
-          <div class="pip-body" id="pipBody">
-            <canvas id="eyeCanvas" width="240" height="320"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 右侧：控制与具身对话面板 -->
-    <div class="panel">
-      <div class="panel-header">
-        <span>🎛️ 具身控制台 & 大脑交互</span>
+        <button class="btn" style="padding: 2px 8px; font-size: 0.75rem;" onclick="resetAngles()">角度回正</button>
       </div>
       <div class="control-body">
 
@@ -485,7 +495,6 @@
         <div class="control-section">
           <div class="section-title">
             <span>二轴关节角度微调</span>
-            <button class="btn" style="padding: 2px 8px; font-size: 0.75rem;" onclick="resetAngles()">角度回正</button>
           </div>
           <div class="slider-group">
             <div class="slider-label">
@@ -589,21 +598,86 @@
           </div>
         </div>
 
-        <!-- 具身对话 -->
-        <div class="control-section" style="flex:1;">
-          <div class="section-title">具身伴侣对话与 TTS 语音</div>
-          <div class="chat-box">
-            <div class="chat-messages" id="chatLogs">
-              <div class="msg bot">你好！我是你的桌面具身 AI 伴侣。你可以跟我聊天，我会根据你说的话做出肢体动作和表情哦！</div>
-            </div>
-            <div class="chat-input-bar">
-              <input type="text" id="chatInput" placeholder="输入文字，或点击麦克风说话..." onkeydown="if(event.key==='Enter') sendChat()">
-              <button id="micBtn" onclick="toggleMic()" style="background:#21262d; border-right:1px solid var(--border-color); color:var(--cyan); padding:0 12px; cursor:pointer;" title="点击开始/停止录音 (百度 ASR 转写)">🎙️ 语音</button>
-              <button onclick="sendChat()">发送</button>
-            </div>
-          </div>
+      </div>
+    </div>
+
+    <!-- 中间：3D 实体动力学主视窗 (屏幕贴合于 3D 机器人面部) -->
+    <div class="panel">
+      <div class="panel-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span>🎮 3D 具身机械仿真 (Three.js WebGL)</span>
+          <span style="font-size: 0.72rem; background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); padding: 1px 6px; border-radius: 4px;">📺 面部 2.4" 屏幕动态纹理贴合</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span id="current-emotion-tag" style="font-size: 0.8rem; color: var(--cyan); font-weight:600;">表情: NORMAL</span>
+          <span style="font-size: 0.75rem; color: var(--text-sub);">鼠标左键旋转 / 滚轮缩放</span>
+        </div>
+      </div>
+      <div id="viewport-container">
+        <canvas id="threejs-canvas"></canvas>
+        <div class="viewport-overlay">
+          <div>水平航向 (Pan): <span id="overlay-pan" style="color:var(--cyan);">90.0°</span></div>
+          <div>俯仰角度 (Tilt): <span id="overlay-tilt" style="color:var(--cyan);">90.0°</span></div>
+          <div>当前动作: <span id="overlay-action" style="color:#7ee787;">待机 (IDLE)</span></div>
+          <div>生命节律: <span id="overlay-fsm" style="color:#a371f7;">🫁 呼吸待机 (IDLE)</span></div>
         </div>
 
+        <div class="viewport-controls-bar">
+          <button class="view-btn" id="gazeToggleBtn" onclick="toggleGazeTracking()" title="开启后，机器人头部与眼球将跟随您的鼠标/人脸两级视线注视">👁️ 注视追踪: 关</button>
+          <button class="view-btn" onclick="setCameraView('close')">🎯 正面特写</button>
+          <button class="view-btn" onclick="setCameraView('front')">🔄 伴侣全景</button>
+        </div>
+
+        <!-- 🔔 具身主动打断提醒弹窗 -->
+        <div id="alarmAlertModal" style="display:none; position:absolute; top:20px; left:50%; transform:translateX(-50%); background:rgba(22, 27, 34, 0.96); border:2px solid #ffb020; box-shadow:0 0 25px rgba(255, 176, 32, 0.6); border-radius:12px; padding:12px 24px; z-index:100; text-align:center; min-width:300px; backdrop-filter:blur(8px); animation: pulseAlert 1.5s infinite alternate;">
+          <div style="font-size:1.15rem; margin-bottom:4px; font-weight:bold; color:#ffb020;">🔔 <span id="alarmModalTitle">闹钟提醒到点啦！</span></div>
+          <div id="alarmModalContent" style="color:#ffffff; font-size:0.95rem; margin-bottom:12px; font-weight:500;">主人，提醒你：关火！</div>
+          <button class="btn" style="background:#ffb020; color:#0d1117; font-weight:bold; padding:5px 20px; border:none; border-radius:6px; cursor:pointer;" onclick="dismissAlarmModal()">👌 我知道了 / 关闭提醒</button>
+        </div>
+
+        <!-- 3D 视窗角标：画中画屏幕特写 (可展开/折叠) -->
+        <div class="pip-screen-container" id="pipContainer">
+          <div class="pip-header">
+            <span>📺 2.4" 像素特写</span>
+            <button class="pip-toggle" id="pipToggleBtn" onclick="togglePip()">隐藏特写</button>
+          </div>
+          <div class="pip-body" id="pipBody">
+            <canvas id="eyeCanvas" width="240" height="320"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧：具身对话与语音交互 (AI Brain 对话框) -->
+    <div class="panel">
+      <div class="panel-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>💬 具身伴侣对话与交互</span>
+          <span id="chatStatusPill" style="font-size:0.72rem; background:rgba(46, 160, 67, 0.15); color:#7ee787; border:1px solid #238636; padding:1px 6px; border-radius:4px;">就绪 (Online)</span>
+        </div>
+        <button class="btn" style="padding: 2px 8px; font-size: 0.75rem;" onclick="clearChatLogs()">清空消息</button>
+      </div>
+      <div class="chat-panel-body">
+        <!-- 快捷场景提问气泡 -->
+        <div class="quick-chips-container">
+          <div class="quick-chip" onclick="sendQuickChip('今天天气怎么样？')">🌦️ 天气查询</div>
+          <div class="quick-chip" onclick="sendQuickChip('10秒后提醒我关火')">⏰ 倒计时闹钟</div>
+          <div class="quick-chip" onclick="sendQuickChip('跳个害羞舞看看')">💃 害羞舞</div>
+          <div class="quick-chip" onclick="sendQuickChip('讲个冷笑话逗我开心')">😄 讲笑话</div>
+          <div class="quick-chip" onclick="sendQuickChip('主人准备睡觉啦，晚安！')">😴 晚安作息</div>
+        </div>
+
+        <!-- 独立对话视窗 (自适应撑满高度) -->
+        <div class="chat-box">
+          <div class="chat-messages" id="chatLogs">
+            <div class="msg bot">你好！我是你的桌面具身 AI 伴侣。你可以跟我聊天，我会根据你说的话做出肢体动作和表情哦！</div>
+          </div>
+          <div class="chat-input-bar">
+            <input type="text" id="chatInput" placeholder="输入文字，或点击麦克风说话..." onkeydown="if(event.key==='Enter') sendChat()">
+            <button id="micBtn" onclick="toggleMic()" style="background:#21262d; border-right:1px solid var(--border-color); color:var(--cyan); padding:0 12px; cursor:pointer;" title="点击开始/停止录音 (百度 ASR 转写)">🎙️ 语音</button>
+            <button onclick="sendChat()">发送</button>
+          </div>
+        </div>
       </div>
     </div>
   </main>
@@ -1411,6 +1485,22 @@
       };
     }
 
+    // 快捷气泡与清空对话记录
+    function clearChatLogs() {
+      const chatLogs = document.getElementById("chatLogs");
+      if (chatLogs) {
+        chatLogs.innerHTML = '<div class="msg bot">你好！历史消息已清空。我是你的桌面具身 AI 伴侣，有什么想对我说呢？</div>';
+      }
+    }
+
+    function sendQuickChip(text) {
+      const input = document.getElementById("chatInput");
+      if (input) {
+        input.value = text;
+        sendChat();
+      }
+    }
+
     async function sendChat() {
       const input = document.getElementById("chatInput");
       const text = input.value.trim();
@@ -1428,6 +1518,13 @@
       botDiv.innerText = "💭 商汤日日新大模型正在思考...";
       chatLogs.appendChild(botDiv);
       chatLogs.scrollTop = chatLogs.scrollHeight;
+
+      const pill = document.getElementById("chatStatusPill");
+      if (pill) {
+        pill.innerText = "🤔 思考中...";
+        pill.style.color = "#00e5ff";
+        pill.style.borderColor = "rgba(0, 229, 255, 0.4)";
+      }
 
       // P0: 触发零延迟即时垫音与好奇歪头思考时序 (Thinking Cadence)
       triggerThinkingCadence();
@@ -1461,6 +1558,13 @@
         stopThinkingCadence();
         botDiv.innerText = "网络异常，未能连接到大模型。";
         console.error(err);
+      } finally {
+        const pill = document.getElementById("chatStatusPill");
+        if (pill) {
+          pill.innerText = "就绪 (Online)";
+          pill.style.color = "#7ee787";
+          pill.style.borderColor = "#238636";
+        }
       }
     }
 
@@ -1887,12 +1991,19 @@
       renderer.render(scene, camera);
     }
 
-    // 窗口尺寸自适应
-    window.addEventListener("resize", () => {
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
-    });
+    // 视窗自适应 (监听窗口缩放与容器尺寸动态变化)
+    function handleResize() {
+      if (container && container.clientWidth > 0 && container.clientHeight > 0) {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+      }
+    }
+    window.addEventListener("resize", handleResize);
+    if (window.ResizeObserver && container) {
+      const ro = new ResizeObserver(handleResize);
+      ro.observe(container);
+    }
 
     animate();
 
