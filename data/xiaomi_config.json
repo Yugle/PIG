@@ -1,0 +1,19 @@
+{
+  "_help": "这是小米米家控制配置文件。你可以选择【云端账号登录】或【局域网IP直连】任意一种方式。",
+  "cloud": {
+    "enabled": false,
+    "username": "13800000000",
+    "password": "your_xiaomi_password",
+    "country": "cn"
+  },
+  "lan_devices": {
+    "客厅灯": {
+      "ip": "192.168.1.105",
+      "token": "在这里填入32位Token"
+    },
+    "智能插座": {
+      "ip": "192.168.1.106",
+      "token": "在这里填入32位Token"
+    }
+  }
+}
