@@ -1164,62 +1164,99 @@
     }
 
     function onPanSlider(val) {
+      recordUserAction();
+      stopActionSequence();
       updateAngles(val, targetTilt);
     }
 
     function onTiltSlider(val) {
+      recordUserAction();
+      stopActionSequence();
       updateAngles(targetPan, val);
     }
 
     function resetAngles() {
+      recordUserAction();
+      stopActionSequence();
       updateAngles(90, 90);
       setEmotion("NORMAL");
     }
 
-    // 动作动画队列
+    // 动作动画队列管理
     let actionSequence = [];
-    function runActionSequence() {
-      if (actionSequence.length === 0) return;
-      const step = actionSequence.shift();
-      updateAngles(step.pan, step.tilt);
-      if (step.emotion) setEmotion(step.emotion);
-      if (step.delay) {
-        setTimeout(runActionSequence, step.delay);
-      } else {
-        runActionSequence();
+    let isActionRunning = false;
+    let actionTimer = null;
+
+    function stopActionSequence() {
+      if (actionTimer) {
+        clearTimeout(actionTimer);
+        actionTimer = null;
       }
+      actionSequence = [];
+      isActionRunning = false;
+    }
+
+    function runActionSequence() {
+      if (actionSequence.length === 0) {
+        isActionRunning = false;
+        return;
+      }
+      isActionRunning = true;
+      const step = actionSequence.shift();
+      updateAngles(step.pan !== undefined ? step.pan : targetPan, step.tilt !== undefined ? step.tilt : targetTilt);
+      if (step.emotion) setEmotion(step.emotion);
+
+      const delay = step.delay || step.duration || 250;
+      if (actionTimer) clearTimeout(actionTimer);
+      actionTimer = setTimeout(runActionSequence, delay);
+    }
+
+    function playBehaviorSequence(keyframes) {
+      if (!keyframes || !Array.isArray(keyframes) || keyframes.length === 0) return;
+      recordUserAction();
+      stopActionSequence();
+      document.getElementById("overlay-action").innerText = "💃 自进化动作";
+      actionSequence = keyframes.map(kf => ({
+        pan: kf.pan !== undefined ? kf.pan : 90,
+        tilt: kf.tilt !== undefined ? kf.tilt : 90,
+        emotion: kf.emotion || "HAPPY",
+        delay: kf.duration || kf.delay || 400
+      }));
+      actionSequence.push({ pan: 90, tilt: 90, emotion: "NORMAL", delay: 300 });
+      runActionSequence();
     }
 
     function triggerAction(action) {
       recordUserAction();
+      stopActionSequence();
       document.getElementById("overlay-action").innerText = action;
       if (action === "NOD") {
         playChirp("happy_chirp");
         actionSequence = [
-          { pan: currentPan, tilt: 75, emotion: "HAPPY", delay: 180 },
-          { pan: currentPan, tilt: 105, emotion: "HAPPY", delay: 180 },
-          { pan: currentPan, tilt: 75, delay: 180 },
-          { pan: currentPan, tilt: 90, emotion: "NORMAL", delay: 200 }
+          { pan: 90, tilt: 70, emotion: "HAPPY", delay: 200 },
+          { pan: 90, tilt: 110, emotion: "HAPPY", delay: 200 },
+          { pan: 90, tilt: 75, delay: 200 },
+          { pan: 90, tilt: 90, emotion: "NORMAL", delay: 250 }
         ];
       } else if (action === "SHAKE") {
         playChirp("confused_boop");
         actionSequence = [
-          { pan: currentPan - 25, tilt: currentTilt, emotion: "CONFUSED", delay: 180 },
-          { pan: currentPan + 25, tilt: currentTilt, emotion: "CONFUSED", delay: 180 },
-          { pan: currentPan - 20, tilt: currentTilt, delay: 180 },
+          { pan: 65, tilt: 90, emotion: "CONFUSED", delay: 180 },
+          { pan: 115, tilt: 90, emotion: "CONFUSED", delay: 180 },
+          { pan: 70, tilt: 90, delay: 180 },
           { pan: 90, tilt: 90, emotion: "NORMAL", delay: 200 }
         ];
       } else if (action === "LOOK_UP") {
         playChirp("wake_chime");
         actionSequence = [
-          { pan: 90, tilt: 70, emotion: "HAPPY", delay: 600 },
-          { pan: 90, tilt: 90, emotion: "NORMAL", delay: 200 }
+          { pan: 90, tilt: 65, emotion: "HAPPY", delay: 600 },
+          { pan: 90, tilt: 90, emotion: "NORMAL", delay: 250 }
         ];
       } else if (action === "SURPRISE") {
         playChirp("surprise_squeak");
         actionSequence = [
-          { pan: 90, tilt: 75, emotion: "SURPRISED", delay: 800 },
-          { pan: 90, tilt: 90, emotion: "NORMAL", delay: 200 }
+          { pan: 90, tilt: 70, emotion: "SURPRISED", delay: 700 },
+          { pan: 90, tilt: 90, emotion: "NORMAL", delay: 250 }
         ];
       }
       runActionSequence();
@@ -1230,12 +1267,11 @@
     // ==========================================
     let currentAudio = null;
     let isSpeaking = false;
-    let speakingMotionInterval = null;
     let speechTimer = null;
 
     function startSpeakingChoreography(durationMs, behaviors) {
       if (speechTimer) clearTimeout(speechTimer);
-      if (speakingMotionInterval) clearInterval(speakingMotionInterval);
+      stopActionSequence();
 
       isSpeaking = true;
       document.getElementById("overlay-action").innerText = "🗣️ 语音同步播报与动作中...";
@@ -1250,23 +1286,23 @@
       actionSequence = [];
 
       behaviors.forEach((b) => {
-        const p = b.pan !== undefined ? b.pan : currentPan;
-        const t = b.tilt !== undefined ? b.tilt : currentTilt;
+        const p = b.pan !== undefined ? b.pan : 90;
+        const t = b.tilt !== undefined ? b.tilt : 90;
         const emo = b.emotion || "HAPPY";
         const act = (b.action || "NONE").toUpperCase();
 
         if (act === "NOD") {
-          actionSequence.push({ pan: p, tilt: Math.max(60, t - 14), emotion: emo, delay: 200 });
-          actionSequence.push({ pan: p, tilt: Math.min(120, t + 14), emotion: emo, delay: 200 });
+          actionSequence.push({ pan: p, tilt: Math.max(60, t - 18), emotion: emo, delay: 200 });
+          actionSequence.push({ pan: p, tilt: Math.min(120, t + 18), emotion: emo, delay: 200 });
           actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: Math.max(200, stageDuration - 400) });
         } else if (act === "SHAKE") {
-          actionSequence.push({ pan: Math.max(30, p - 18), tilt: t, emotion: emo, delay: 180 });
-          actionSequence.push({ pan: Math.min(150, p + 18), tilt: t, emotion: emo, delay: 180 });
+          actionSequence.push({ pan: Math.max(30, p - 25), tilt: t, emotion: emo, delay: 180 });
+          actionSequence.push({ pan: Math.min(150, p + 25), tilt: t, emotion: emo, delay: 180 });
           actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: Math.max(200, stageDuration - 360) });
         } else if (act === "LOOK_UP") {
-          actionSequence.push({ pan: p, tilt: 70, emotion: emo, delay: stageDuration });
+          actionSequence.push({ pan: p, tilt: 65, emotion: emo, delay: stageDuration });
         } else if (act === "SURPRISE") {
-          actionSequence.push({ pan: p, tilt: 75, emotion: emo, delay: stageDuration });
+          actionSequence.push({ pan: p, tilt: 70, emotion: emo, delay: stageDuration });
         } else {
           actionSequence.push({ pan: p, tilt: t, emotion: emo, delay: stageDuration });
         }
@@ -1274,17 +1310,6 @@
 
       // 启动动作序列
       runActionSequence();
-
-      // 在语音播放过程中，模拟真人说话时的自然头部微律动 (±2.5° 语调微浮动)
-      let bouncePhase = 0;
-      speakingMotionInterval = setInterval(() => {
-        if (!isSpeaking) {
-          clearInterval(speakingMotionInterval);
-          return;
-        }
-        bouncePhase += 0.6;
-        targetTilt = currentTilt + Math.sin(bouncePhase) * 2.2;
-      }, 120);
 
       // 安全兜底定时器：语音播完后复位
       speechTimer = setTimeout(() => {
@@ -1295,10 +1320,12 @@
     function stopSpeakingChoreography() {
       if (!isSpeaking) return;
       isSpeaking = false;
-      if (speakingMotionInterval) clearInterval(speakingMotionInterval);
-      if (speechTimer) clearTimeout(speechTimer);
+      if (speechTimer) {
+        clearTimeout(speechTimer);
+        speechTimer = null;
+      }
 
-      actionSequence = [];
+      stopActionSequence();
       document.getElementById("overlay-action").innerText = "待机 (IDLE)";
       setEmotion("NORMAL");
       updateAngles(90, 90);
@@ -1428,263 +1455,6 @@
         // 启动音画毫秒级强同步时序控制
         speakAndSync(res.reply, res.behaviors || []);
         updateMemoryBadge();
-
-    // ==========================================
-    // 2.5 ⏰ 闹钟、日程与自进化动作管理
-    // ==========================================
-    let activeReminders = [];
-    let evolvedActionsCache = {};
-
-    async function fetchReminders() {
-      try {
-        const resp = await fetch("/api/reminders");
-        if (resp.ok) {
-          const data = await resp.json();
-          activeReminders = data.reminders || [];
-          renderRemindersList();
-        }
-      } catch (e) {
-        console.warn("拉取闹钟列表失败:", e);
-      }
-    }
-
-    function renderRemindersList() {
-      const container = document.getElementById("remindersList");
-      const badge = document.getElementById("remindersCountBadge");
-      if (!container || !badge) return;
-      badge.innerText = `${activeReminders.length} 个闹钟`;
-
-      if (activeReminders.length === 0) {
-        container.innerHTML = `<div style="color:var(--text-sub); text-align:center; padding:4px 0;">暂无活跃闹钟，试着说“10秒后提醒我关火”</div>`;
-        return;
-      }
-
-      const now = Date.now() / 1000;
-      container.innerHTML = activeReminders.map(r => {
-        const leftSec = Math.max(0, Math.round(r.target_time - now));
-        const leftStr = leftSec > 60 ? `${Math.floor(leftSec / 60)}分${leftSec % 60}秒` : `${leftSec}秒`;
-        return `
-          <div style="display:flex; justify-content:space-between; align-items:center; background:#161b22; border:1px solid #30363d; border-radius:6px; padding:3px 8px;">
-            <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;">
-              <span style="color:${r.type === 'timer' ? 'var(--cyan)' : '#ffb020'}; font-weight:600;">${r.type === 'timer' ? '⏳' : '⏰'} ${r.content}</span>
-              <span style="color:var(--text-sub); font-size:0.7rem; margin-left:4px;">(余${leftStr})</span>
-            </div>
-            <button class="btn" style="padding:1px 6px; font-size:0.7rem; color:#ff7b72;" onclick="cancelReminder('${r.id}')">取消</button>
-          </div>
-        `;
-      }).join("");
-    }
-
-    async function cancelReminder(id) {
-      try {
-        await fetch("/api/reminders/cancel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: id })
-        });
-        fetchReminders();
-      } catch (e) {
-        console.error("取消闹钟失败:", e);
-      }
-    }
-
-    async function fetchEvolvedActions() {
-      try {
-        const resp = await fetch("/api/evolved_actions");
-        if (resp.ok) {
-          const data = await resp.json();
-          evolvedActionsCache = data.actions || {};
-          const container = document.getElementById("evolvedActionsBadges");
-          const countBadge = document.getElementById("actionsCountBadge");
-          if (!container || !countBadge) return;
-          const names = Object.keys(evolvedActionsCache);
-          countBadge.innerText = `${names.length} 个`;
-
-          if (names.length === 0) {
-            container.innerHTML = `<span style="color:var(--text-sub);">暂未解锁新动作</span>`;
-            return;
-          }
-
-          container.innerHTML = names.map(n => `
-            <button class="btn" style="padding:2px 8px; font-size:0.7rem; background:rgba(0, 229, 255, 0.1); border-color:rgba(0, 229, 255, 0.3);" onclick="playEvolvedAction('${n}')" title="${evolvedActionsCache[n].description || ''}">
-              💃 ${n}
-            </button>
-          `).join("");
-        }
-      } catch (e) {
-        console.warn("拉取自进化动作失败:", e);
-      }
-    }
-
-    function playEvolvedAction(name) {
-      const act = evolvedActionsCache[name];
-      if (act && act.keyframes) {
-        lastInteractionTime = Date.now();
-        playChirp("happy_chirp");
-        playBehaviorSequence(act.keyframes);
-      }
-    }
-
-    // 闹钟触发全屏抢占提醒与弹窗
-    let alarmModalTimer = null;
-    function showAlarmModal(content) {
-      const modal = document.getElementById("alarmAlertModal");
-      if (!modal) return;
-      document.getElementById("alarmModalContent").innerText = `主人，提醒你：${content}！`;
-      modal.style.display = "block";
-      if (alarmModalTimer) clearTimeout(alarmModalTimer);
-      alarmModalTimer = setTimeout(() => {
-        dismissAlarmModal();
-      }, 15000);
-    }
-
-    function dismissAlarmModal() {
-      const modal = document.getElementById("alarmAlertModal");
-      if (modal) modal.style.display = "none";
-      if (alarmModalTimer) clearTimeout(alarmModalTimer);
-      setEmotion("NORMAL");
-    }
-
-    // 后台秒级拉取到点闹钟事件 (Preemption Event)
-    async function pollAlarmEvents() {
-      try {
-        const resp = await fetch("/api/alarm_events");
-        if (resp.ok) {
-          const data = await resp.json();
-          if (data.events && data.events.length > 0) {
-            for (const ev of data.events) {
-              handlePreemptiveAlarm(ev);
-            }
-          }
-        }
-      } catch (e) {
-        // 静默
-      }
-    }
-
-    function handlePreemptiveAlarm(rem) {
-      console.log("🚨 [前端收到到点闹钟抢占]:", rem);
-      lastInteractionTime = Date.now();
-      idleFsmState = "WAKING";
-
-      // 1. 播放唤醒铃声
-      playChirp("wake_chime");
-
-      // 2. 头部吃惊抬头弹起
-      targetPan = 90;
-      targetTilt = 75;
-      setEmotion("SURPRISED");
-
-      // 3. 弹出强提醒视窗
-      showAlarmModal(rem.content);
-
-      // 4. 在聊天框写入闹钟提醒
-      const chatLogs = document.getElementById("chatLogs");
-      if (chatLogs) {
-        const alertDiv = document.createElement("div");
-        alertDiv.className = "msg bot";
-        alertDiv.style.border = "1px solid #ffb020";
-        alertDiv.style.color = "#ffb020";
-        alertDiv.innerText = `🔔 [闹钟提醒到点]: 主人，时间到啦！提醒你：${rem.content}！`;
-        chatLogs.appendChild(alertDiv);
-        chatLogs.scrollTop = chatLogs.scrollHeight;
-      }
-
-      // 5. 语音主动播报
-      const speakText = `主人，时间到啦！提醒你：${rem.content}！`;
-      speakAndSync(speakText, [
-        { emotion: "SURPRISED", action: "SURPRISE", pan: 90, tilt: 75, delay: 600 },
-        { emotion: "HAPPY", action: "NOD", pan: 90, tilt: 80, delay: 800 }
-      ]);
-
-      fetchReminders();
-    }
-
-    async function fetchSkillsStore() {
-      try {
-        const resp = await fetch("/api/skills/store");
-        if (resp.ok) {
-          const data = await resp.json();
-          const installed = data.installed || [];
-          const countBadge = document.getElementById("pluginsCountBadge");
-          if (countBadge) countBadge.innerText = `${installed.length} 个`;
-          const listDiv = document.getElementById("installedPluginsBadges");
-          if (listDiv) {
-            listDiv.innerHTML = "";
-            installed.forEach(p => {
-              const span = document.createElement("span");
-              span.className = "btn";
-              span.style.cssText = "padding:2px 6px; font-size:0.7rem; color:#7ee787; border-color:#238636; cursor:pointer;";
-              span.innerText = `🔌 ${p.name || p.id}`;
-              span.title = p.description || "";
-              span.onclick = () => openSkillStoreModal();
-              listDiv.appendChild(span);
-            });
-            if (installed.length === 0) {
-              listDiv.innerHTML = `<span style="color:var(--text-sub); font-size:0.72rem;">暂无已安装插件，可前往商店安装</span>`;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("拉取已安装插件失败:", e);
-      }
-    }
-
-    // 启动定时轮询
-    setInterval(fetchReminders, 2000);
-    setInterval(fetchEvolvedActions, 6000);
-    setInterval(pollAlarmEvents, 1000);
-    setInterval(fetchSkillsStore, 4000);
-    fetchReminders();
-    fetchEvolvedActions();
-    fetchSkillsStore();
-
-    // ==========================================
-    // 2.8 🌱 生物钟作息与海马体反思管理
-    // ==========================================
-    async function fetchCircadianAndReflection() {
-      try {
-        const resp = await fetch("/api/circadian");
-        if (resp.ok) {
-          const data = await resp.json();
-          const habits = (data.circadian && data.circadian.learned_habits) || { wake_hour: 9, slump_hour: 14, sleep_hour: 23 };
-          document.getElementById("habitsDesc").innerText = `${habits.wake_hour}:00 起床 · ${habits.slump_hour}:00 易疲劳 · ${habits.sleep_hour}:00 睡前`;
-
-          const ref = data.reflection;
-          if (ref && ref.summary) {
-            document.getElementById("reflectionDesc").innerText = `[${ref.date || ''}] ${ref.summary} (重点: ${ref.next_day_care || '自然相伴'})`;
-          }
-        }
-      } catch (e) {
-        console.warn("拉取生物钟数据失败:", e);
-      }
-    }
-
-    async function triggerNightlyReflection() {
-      const btn = document.getElementById("reflectBtn");
-      btn.innerText = "⏳ 正在海马体反思升华...";
-      btn.disabled = true;
-
-      try {
-        const resp = await fetch("/api/reflection/trigger", { method: "POST" });
-        const data = await resp.json();
-        if (data.status === "ok" && data.result) {
-          alert(`✨ 【夜间记忆升华反思完成】\n• 认知提炼: ${data.result.reflection_summary}\n• 永久事实新增: ${data.result.new_facts && data.result.new_facts.length ? data.result.new_facts.join('、') : '保持现状'}\n• 明日关怀重点: ${data.result.next_day_care}\n• 性格微调导向: ${data.result.persona_adaptation}`);
-          updateMemoryBadge();
-          fetchCircadianAndReflection();
-        } else {
-          alert("反思未生成新记忆或对话轮次不足: " + (data.msg || "无变更"));
-        }
-      } catch (e) {
-        alert("反思请求异常: " + e.message);
-      } finally {
-        btn.innerText = "🌙 触发记忆升华反思";
-        btn.disabled = false;
-      }
-    }
-
-    setInterval(fetchCircadianAndReflection, 5000);
-    fetchCircadianAndReflection();
         fetchReminders();
         fetchEvolvedActions();
       } catch (err) {
@@ -2039,42 +1809,67 @@
       requestAnimationFrame(animate);
       animClock += 0.02;
 
-      // P1: 闲置自主生命体征状态机更新 (呼吸微动、无聊伸腰、瞌睡沉头)
+      // 计算附加律动偏移量 (Additive Offsets)
+      let panOffset = 0;
+      let tiltOffset = 0;
+
       const idleSec = (Date.now() - lastInteractionTime) / 1000;
-      if (!isSpeaking && !isThinking && !gazeTrackingEnabled) {
+
+      if (isSpeaking) {
+        document.getElementById("overlay-fsm").innerText = "🗣️ 语音同步表达中";
+        // 说话时的自然语调微颤与微点头
+        tiltOffset = Math.sin(animClock * 8.0) * 1.8;
+        panOffset = Math.sin(animClock * 3.5) * 0.8;
+      } else if (isThinking) {
+        document.getElementById("overlay-fsm").innerText = "🤔 深度思考动脑";
+        tiltOffset = -4 + Math.sin(animClock * 2.0) * 1.0;
+        panOffset = 5 + Math.cos(animClock * 1.5) * 0.8;
+      } else if (gazeTrackingEnabled) {
+        document.getElementById("overlay-fsm").innerText = "👁️ 专注视线注视追踪";
+      } else if (isActionRunning || actionSequence.length > 0) {
+        // 动作序列执行中，不做闲置微动，保障动作精确性
+      } else {
+        // P1: 闲置自主生命体征状态机更新 (呼吸微动、无聊发呆、瞌睡沉头)
         if (idleSec > 150) {
           if (idleFsmState !== "DOZING") {
             idleFsmState = "DOZING";
             setEmotion("SLEEPY");
             document.getElementById("overlay-fsm").innerText = "😴 打瞌睡 (DOZING)";
           }
-          targetTilt = 105 + Math.sin(animClock * 0.8) * 1.5;
+          tiltOffset = 15 + Math.sin(animClock * 0.8) * 1.5;
         } else if (idleSec > 40) {
           if (idleFsmState !== "BORED") {
             idleFsmState = "BORED";
             document.getElementById("overlay-fsm").innerText = "💭 无聊发呆 (BORED)";
           }
-          targetPan = 90 + Math.sin(animClock * 0.9) * 2.2;
-          targetTilt = 90 + Math.cos(animClock * 0.7) * 1.5;
-        } else {
+          panOffset = Math.sin(animClock * 0.9) * 2.2;
+          tiltOffset = Math.cos(animClock * 0.7) * 1.5;
+        } else if (idleSec > 3) {
           if (idleFsmState !== "IDLE") {
             idleFsmState = "IDLE";
             document.getElementById("overlay-fsm").innerText = "🫁 呼吸待机 (IDLE)";
           }
-          targetPan = 90 + Math.sin(animClock * 1.4) * 1.2;
-          targetTilt = 90 + Math.cos(animClock * 1.4) * 0.9;
+          panOffset = Math.sin(animClock * 1.4) * 1.2;
+          tiltOffset = Math.cos(animClock * 1.4) * 0.9;
+        } else {
+          if (idleFsmState !== "ACTIVE") {
+            idleFsmState = "ACTIVE";
+            document.getElementById("overlay-fsm").innerText = "⚡ 活跃操控 (ACTIVE)";
+          }
         }
-      } else if (isSpeaking) {
-        document.getElementById("overlay-fsm").innerText = "🗣️ 语音同步表达中";
-      } else if (isThinking) {
-        document.getElementById("overlay-fsm").innerText = "🤔 深度思考动脑";
-      } else if (gazeTrackingEnabled) {
-        document.getElementById("overlay-fsm").innerText = "👁️ 专注视线注视追踪";
       }
 
-      // 平滑插值转动
-      currentPan += (targetPan - currentPan) * 0.12;
-      currentTilt += (targetTilt - currentTilt) * 0.12;
+      // 平滑插值转动 (基准角度 + 附加微动)
+      const desiredPan = Math.max(10, Math.min(170, targetPan + panOffset));
+      const desiredTilt = Math.max(50, Math.min(130, targetTilt + tiltOffset));
+      currentPan += (desiredPan - currentPan) * 0.14;
+      currentTilt += (desiredTilt - currentTilt) * 0.14;
+
+      // 实时同步当前物理角度到 HUD 显控面板
+      const elOverlayPan = document.getElementById("overlay-pan");
+      const elOverlayTilt = document.getElementById("overlay-tilt");
+      if (elOverlayPan) elOverlayPan.innerText = currentPan.toFixed(1) + "°";
+      if (elOverlayTilt) elOverlayTilt.innerText = currentTilt.toFixed(1) + "°";
 
       // 映射到弧度 (90度为中间)
       neckYawGroup.rotation.y = -THREE.MathUtils.degToRad(currentPan - 90);
