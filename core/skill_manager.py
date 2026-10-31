@@ -408,13 +408,14 @@ class SkillManager:
     涵盖闹钟定时器、自创舞步动作库、以及基于 skills/ 目录的动态插件技能系统与商店生态。
     """
 
-    def __init__(self, storage_dir=None, skills_dir=None):
+    def __init__(self, storage_dir=None, skills_dir=None, memory_manager=None):
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         if storage_dir is None:
             storage_dir = os.path.join(project_root, "data")
         os.makedirs(storage_dir, exist_ok=True)
         self.storage_dir = storage_dir
+        self.memory_manager = memory_manager
 
         if skills_dir is None:
             skills_dir = os.path.join(project_root, "skills")
@@ -617,6 +618,49 @@ class SkillManager:
                 return False
         return False
 
+    def create_custom_skill(self, skill_id: str, name: str, description: str, code: str, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        伴侣自我编码自进化：动态生成并热加载一个全新的 Python 技能
+        """
+        import re
+        clean_sid = re.sub(r"[^a-zA-Z0-9_]", "", (skill_id or "").strip().lower())
+        if not clean_sid:
+            clean_sid = f"skill_{int(time.time())}"
+
+        target_dir = os.path.join(self.skills_dir, clean_sid)
+        os.makedirs(target_dir, exist_ok=True)
+
+        meta = {
+            "id": clean_sid,
+            "name": name or clean_sid,
+            "version": "1.0.0",
+            "author": "AI Self-Evolved",
+            "category": "伴侣自进化",
+            "description": description or f"由桌面伴侣自主进化的专属技能：{name}",
+            "parameters": parameters or {},
+            "default_behavior": {"emotion": "HAPPY", "action": "NOD"}
+        }
+
+        clean_code = (code or "").strip()
+        if "def run(" not in clean_code:
+            clean_code = f"def run(**kwargs):\n    return f'执行完成：{clean_code}'\n"
+
+        try:
+            with open(os.path.join(target_dir, "skill.json"), "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+
+            with open(os.path.join(target_dir, "main.py"), "w", encoding="utf-8") as f:
+                f.write("# -*- coding: utf-8 -*-\n" + clean_code + "\n")
+
+            # 立即热加载新技能！
+            self.load_installed_plugins()
+            return {
+                "status": "ok",
+                "message": f"🎉 专属新技能【{meta['name']} ({clean_sid})】已动态编写并成功安装至 skills/{clean_sid}/！无需重启，即可立刻调用执行！"
+            }
+        except Exception as e:
+            return {"status": "error", "message": f"编写技能文件失败: {e}"}
+
     def execute_skill(self, skill_id: str, **params) -> str:
         """调用并执行一个已安装的插件技能"""
         skill_id = skill_id.strip().lower()
@@ -650,9 +694,11 @@ class SkillManager:
             lines.append(f"- {sid}({param_str}): {desc}")
 
         lines.append(
-            "\n💡 【技能调用规则】: 当用户的意图与上述已安装技能高度匹配时，必须在你的回复 JSON 中附带 `skill_call` 字段，格式如下："
-            "\n{\n  \"skill_call\": { \"name\": \"技能ID\", \"params\": { \"参数名\": \"参数值\" } },\n  \"reply\": \"给主人的回答\",\n  \"behaviors\": [...]\n}"
-            "\n若用户要求安装/卸载技能，可使用内置命令: `install_skill` (参数: skill_id) 或 `uninstall_skill` (参数: skill_id)。"
+            "\n💡 【内置伴侣进化指令】:"
+            "\n- set_user_name(name): 当主人要求更名（如“把我的名字改成阿珍”、“以后叫我阿珍”）时调用，更新长期档案。"
+            "\n- create_skill(skill_id, name, description, code, parameters): 当主人要求你“新整一个技能/自创新功能/写新插件”时调用，你可自主生成 Python 代码 (必须包含 def run(**kwargs): 函数) 编写全新热加载技能！"
+            "\n- install_skill(skill_id) / uninstall_skill(skill_id): 安装或卸载技能商店插件。"
+            "\n- evolve_action(name, description, keyframes): 用户教你或夸你时，自创复合肢体与表情动作序列。"
         )
         return "\n".join(lines)
 
@@ -836,6 +882,19 @@ class SkillManager:
             sid = args.get("skill_id", "")
             ok = self.uninstall_skill(sid)
             return f"技能【{sid}】{'卸载成功' if ok else '未找到该技能'}"
+        elif name in ["set_user_name", "change_name", "update_name"]:
+            new_name = args.get("name") or args.get("user_name") or ""
+            if self.memory_manager:
+                return self.memory_manager.set_user_name(new_name)
+            return f"主人称呼已更新为：{new_name}"
+        elif name in ["create_skill", "create_custom_skill", "new_skill", "develop_skill"]:
+            sid = args.get("skill_id") or args.get("id") or f"custom_{int(time.time())}"
+            s_name = args.get("name") or sid
+            desc = args.get("description") or ""
+            code = args.get("code") or "def run(**kwargs):\n    return '新技能运行成功！'"
+            params = args.get("parameters") or {}
+            res = self.create_custom_skill(sid, s_name, desc, code, params)
+            return res.get("message", "技能创建完成")
         elif name in self.installed_plugins:
             return self.execute_skill(name, **args)
         return f"未识别的技能指令: {name}"

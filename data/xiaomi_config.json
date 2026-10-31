@@ -1,46 +1,103 @@
 {
-  "_help": "这是小米米家控制配置文件，已录入局域网直连设备（支持毫秒级局域网 0 延迟控制）。",
+  "_help": "这是小米米家控制配置文件，已由米家 App 扫码一键自动同步（支持毫秒级局域网 0 延迟控制）。",
   "cloud": {
-    "enabled": false,
-    "username": "15269693835",
-    "password": "your_password",
+    "enabled": true,
+    "userId": "884276197",
+    "serviceToken": "xJr1VonfgtnD99CgiWuVAilY+ts/ppa+7pMwvl5Y2O5gBK3ccDlauhCUXpdsZoQHqknM+tskUSV95apOxisDjiuhTqPd1fIEv1Sc9/5pHptRltbjkul8nnhIA7pOEtmIhrQpF4k7GUVMIDAjmxce8ODJkJxZAzlmZb4DSjxuJnc=",
+    "ssecurity": "0QZICAZomnrH89P1lNTawg==",
     "country": "cn"
   },
   "lan_devices": {
     "台灯": {
-      "name": "Mijia LED Desk Lamp 1S Enhanced Edition (Black)",
-      "aliases": ["台灯", "米家台灯", "台灯1S"],
-      "ip": "192.168.10.95",
+      "name": "米家台灯1S增强版 耀夜黑",
+      "did": "749743837",
+      "mac": "8C:D0:B2:08:74:2E",
+      "ip": "192.168.1.8",
       "token": "58fbbf382c31b128d0341e19e352e67b",
-      "model": "yeelink.light.lamp28"
-    },
-    "饮水机": {
-      "name": "Mijia Smart Pet Water Dispenser",
-      "aliases": ["宠物饮水机", "饮水机", "猫咪饮水机"],
-      "ip": "192.168.10.2",
-      "token": "c0aa448e9cd6a1e3854c5ef2ae2e903e",
-      "model": "mmgg.pet_waterer.s1"
+      "model": "yeelink.light.lamp28",
+      "aliases": [
+        "米家台灯1S增强版 耀夜黑",
+        "台灯",
+        "米家台灯",
+        "灯"
+      ]
     },
     "水壶": {
-      "name": "Xiaomi Smart Kettle 2 Pro",
-      "aliases": ["电水壶", "水壶", "烧水壶", "恒温水壶"],
+      "name": "米家恒温电水壶2 Pro",
+      "did": "875915613",
+      "mac": "CC:4D:75:9B:C9:52",
       "ip": "192.168.10.63",
       "token": "a03b6f7c47a173381fb4a41e444f9514",
-      "model": "yunmi.kettle.v19"
+      "model": "yunmi.kettle.v19",
+      "aliases": [
+        "米家恒温电水壶2 Pro",
+        "水壶",
+        "电水壶",
+        "烧水壶"
+      ]
+    },
+    "小米手环6 NFC版": {
+      "name": "小米手环6 NFC版",
+      "did": "huami.32098/11844110",
+      "mac": "C2:4A:16:38:CC:55",
+      "ip": "",
+      "token": "",
+      "model": "hmpace.motion.v6nfc",
+      "aliases": [
+        "小米手环6 NFC版"
+      ]
     },
     "电视盒子": {
       "name": "胖虎的电视盒子",
-      "aliases": ["电视盒子", "胖虎的电视盒子", "电视"],
+      "did": "mitv.9ae306d1f30cc2269795a0ac2c1e6426:062c3d4f98fa4fd288977e340556656b",
+      "mac": "00:9e:c8:ef:cb:37",
       "ip": "192.168.0.105",
       "token": "6c7151543035716e783662615a6b354a",
-      "model": "xiaomi.tvbox.v1"
+      "model": "xiaomi.tvbox.v1",
+      "aliases": [
+        "胖虎的电视盒子",
+        "电视盒子",
+        "电视"
+      ]
     },
     "摄像机": {
-      "name": "IMILAB Home Security Camera C21",
-      "aliases": ["摄像机", "摄像头", "监控"],
+      "name": "小白智能摄像机Y2 云台尊享版",
+      "did": "1055140117",
+      "mac": "94:F8:27:52:63:26",
       "ip": "192.168.10.5",
       "token": "54534e6678395267786965344f787568",
-      "model": "chuangmi.camera.038a02"
+      "model": "chuangmi.camera.038a02",
+      "aliases": [
+        "小白智能摄像机Y2 云台尊享版",
+        "摄像机",
+        "摄像头",
+        "监控"
+      ]
+    },
+    "饮水机": {
+      "name": "米家智能宠物饮水机",
+      "did": "413842403",
+      "mac": "58:B6:23:BD:64:D8",
+      "ip": "192.168.10.2",
+      "token": "c0aa448e9cd6a1e3854c5ef2ae2e903e",
+      "model": "mmgg.pet_waterer.s1",
+      "aliases": [
+        "米家智能宠物饮水机",
+        "饮水机",
+        "宠物饮水机",
+        "猫咪饮水机"
+      ]
+    },
+    "小米手环8 NFC版": {
+      "name": "小米手环8 NFC版",
+      "did": "738711479",
+      "mac": "D0:62:2C:1E:E8:D9",
+      "ip": "",
+      "token": "6cac544fcfa5a14b7da8130ccdc17c08",
+      "model": "miwear.watch.m66nfc",
+      "aliases": [
+        "小米手环8 NFC版"
+      ]
     }
   }
 }

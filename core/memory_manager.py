@@ -65,14 +65,25 @@ class MemoryManager:
         self.save()
         print("🧹 [Memory] 记忆中枢已完全重置与清空。")
 
+    def set_user_name(self, name: str) -> str:
+        """显式修改主人称呼"""
+        name = (name or "").strip()
+        if name and name not in ["小猪", "机器人", "搭子", "什么"]:
+            old_name = self.long_term_data.get("user_name", "主人")
+            self.long_term_data["user_name"] = name
+            self.save()
+            return f"主人称呼已由【{old_name}】正式更改为【{name}】！"
+        return "无效的称呼，未能修改。"
+
     def _extract_facts(self, text: str):
         """自动轻量提取主人的核心画像事实 (无需额外消耗 LLM Token)"""
-        # 1. 匹配名字/昵称
-        name_match = re.search(r"(?:我叫|我是|叫我|名字是)\s*([a-zA-Z\u4e00-\u9fa5]{2,10})", text)
+        # 1. 匹配名字/昵称更名与识别
+        name_match = re.search(r"(?:我叫|我是|叫我|名字是|名字改成|改成|改名叫|换成|称呼我为|以后叫我)\s*([a-zA-Z\u4e00-\u9fa5]{2,10})", text)
         if name_match:
             cand = name_match.group(1).strip()
-            if cand not in ["小猪", "机器人", "搭子", "什么"]:
+            if cand not in ["小猪", "机器人", "搭子", "什么", "主人"]:
                 self.long_term_data["user_name"] = cand
+                self.save()
 
         # 2. 匹配喜好
         like_match = re.search(r"(?:我喜欢|我最喜欢|平时喜欢|我爱|爱好是)\s*([^\s,，。!！]{2,15})", text)

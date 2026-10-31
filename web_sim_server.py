@@ -24,7 +24,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 mem = MemoryManager(memory_file=os.path.join(DATA_DIR, "memory.json"))
 face_tracker = FaceTracker(enabled=False)
 idle_fsm = IdleFSM()
-skill_mgr = SkillManager(storage_dir=DATA_DIR)
+skill_mgr = SkillManager(storage_dir=DATA_DIR, memory_manager=mem)
 evolution_engine = EvolutionEngine(DATA_DIR, memory_manager=mem, skill_manager=skill_mgr)
 
 # 待派发给前端 Web 仿真视窗的到点闹钟事件队列

@@ -148,7 +148,7 @@ face_tracker = FaceTracker(enabled=cfg.get("face_tracking", False))
 print(f"👁️ [视觉追踪] 人脸注视追踪初始化状态: {'ON (开启)' if face_tracker.enabled else 'OFF (关闭)'}")
 
 # 初始化技能与自进化动作调度中枢
-skill_mgr = SkillManager(storage_dir=DATA_DIR)
+skill_mgr = SkillManager(storage_dir=DATA_DIR, memory_manager=mem)
 
 def on_hardware_alarm(rem):
     """物理机闹钟/日程到点主动抢占播报"""
