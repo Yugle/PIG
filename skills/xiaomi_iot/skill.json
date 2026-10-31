@@ -8,13 +8,18 @@
   "parameters": {
     "device": {
       "type": "string",
-      "description": "目标设备名，如 '客厅灯', '风扇', '智能插座', 或查询所有设备时传 'all'",
-      "default": "all"
+      "description": "目标设备名，如 '台灯', '水壶', '饮水机', '电视盒子', 或查询设备时传 'all'",
+      "default": "台灯"
     },
     "action": {
       "type": "string",
-      "description": "动作指令，如 '打开', '关闭', '查询设备列表', '扫描设备'",
-      "default": "查询设备列表"
+      "description": "动作指令，如 '打开', '关闭', '调成暖光', '调成冷白光', '调亮', '调暗', '恒温50度', '查询设备列表', '扫码绑定'",
+      "default": "打开"
+    },
+    "value": {
+      "type": "string",
+      "description": "可选调节数值，如亮度 '40'、色温 '3000'、水温 '55'",
+      "default": ""
     }
   },
   "default_behavior": {

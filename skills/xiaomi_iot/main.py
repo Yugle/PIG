@@ -45,10 +45,10 @@ def _ensure_config():
         logger.error(f"读取小米配置文件失败: {e}")
         return None
 
-def run(device="客厅灯", action="打开"):
+def run(device="台灯", action="打开", value=""):
     """
     技能执行入口：
-    由大模型意图提取 device 与 action 后动态调用
+    由大模型意图提取 device、action 与 value 后动态调用
     """
     config = _ensure_config()
     if not config:
@@ -59,6 +59,7 @@ def run(device="客厅灯", action="打开"):
 
     dev_name = (device or "").strip()
     act = (action or "").strip()
+    val = (value or "").strip()
 
     # 0. 判断是否为「米家 App 扫码登录/绑定」意图
     is_qr_login = any(w in act or w in dev_name for w in ["扫码", "扫一扫", "二维码", "绑定", "登录小米", "绑定米家"])
@@ -154,16 +155,64 @@ def run(device="客厅灯", action="打开"):
                     auth._serviceToken = cloud_cfg.get("serviceToken")
                     auth._ssecurity = cloud_cfg.get("ssecurity")
 
+                    # 智能解析 MIoT 物模型高级属性：色温、亮度、水温、开关
+                    import re
+                    payload_params = []
+                    detail_msg = act
+                    combined_str = f"{act} {val}"
+
+                    # 1. 色温调节 (siid 2, piid 3, 2600K ~ 5000K)
+                    if any(w in combined_str for w in ["色温", "暖光", "黄光", "冷光", "白光", "阅读", "温馨", "护眼", "暖"]):
+                        ct_val = 3000
+                        if any(w in combined_str for w in ["暖", "黄", "温馨", "夜间"]):
+                            ct_val = 2700
+                        elif any(w in combined_str for w in ["冷", "白", "亮白"]):
+                            ct_val = 4800
+                        elif any(w in combined_str for w in ["阅读", "办公", "看书", "护眼"]):
+                            ct_val = 4000
+                        m = re.search(r"(\d{4})", combined_str)
+                        if m:
+                            ct_val = max(2600, min(5000, int(m.group(1))))
+                        payload_params.append({"did": str(did), "siid": 2, "piid": 3, "value": ct_val})
+                        payload_params.append({"did": str(did), "siid": 2, "piid": 1, "value": True})
+                        detail_msg = f"色温调节至 {ct_val}K (暖光模式)" if ct_val < 3500 else f"色温调节至 {ct_val}K"
+
+                    # 2. 亮度调节 (siid 2, piid 2, 1 ~ 100)
+                    elif any(w in combined_str for w in ["亮度", "调亮", "调暗", "亮一点", "暗一点", "暗", "亮"]):
+                        br_val = 70
+                        if "暗" in combined_str:
+                            br_val = 25
+                        elif "亮" in combined_str:
+                            br_val = 85
+                        m = re.search(r"(\d{1,3})", combined_str)
+                        if m:
+                            br_val = max(1, min(100, int(m.group(1))))
+                        payload_params.append({"did": str(did), "siid": 2, "piid": 2, "value": br_val})
+                        payload_params.append({"did": str(did), "siid": 2, "piid": 1, "value": True})
+                        detail_msg = f"亮度调节至 {br_val}%"
+
+                    # 3. 水温/恒温调节 (电水壶 siid 3, piid 4)
+                    elif any(w in combined_str for w in ["水温", "恒温", "度", "保温"]):
+                        temp_val = 55
+                        m = re.search(r"(\d{1,2})", combined_str)
+                        if m:
+                            temp_val = max(40, min(90, int(m.group(1))))
+                        payload_params.append({"did": str(did), "siid": 3, "piid": 4, "value": temp_val})
+                        detail_msg = f"目标水温设定至 {temp_val}°C"
+
+                    # 4. 常规开关指令
+                    else:
+                        payload_params.append({"did": str(did), "siid": 2, "piid": 1, "value": power_on})
+                        detail_msg = "打开" if power_on else "关闭"
+
                     url = auth.get_api_url(cloud_cfg.get("country", "cn")) + "/miotspec/prop/set"
-                    # 标准 MIoT 属性开关: siid 2, piid 1 (True/False)
-                    payload_params = [{"did": str(did), "siid": 2, "piid": 1, "value": power_on}]
                     req_params = {"data": json.dumps({"params": payload_params})}
                     resp = auth.execute_api_call_encrypted(url, req_params)
 
                     if resp and resp.get("code") == 0:
-                        return f"已通过米家云端成功为你将【{k_name}】执行【{act}】操作！"
+                        return f"已通过米家云端成功为你将【{k_name}】执行【{detail_msg}】！"
                     elif resp and "result" in resp and resp["result"] and resp["result"][0].get("code") == 0:
-                        return f"已成功为你将【{k_name}】执行【{act}】操作！"
+                        return f"已成功为你将【{k_name}】执行【{detail_msg}】！"
                 except Exception as e:
                     logger.warning(f"米家云端控制异常，尝试局域网回退: {e}")
 
