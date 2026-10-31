@@ -552,6 +552,11 @@ class SkillManager:
                     with open(manifest_file, "r", encoding="utf-8") as f:
                         meta = json.load(f)
 
+                    # 确保技能目录在 sys.path 中，支持技能内部多文件模块互相 import
+                    import sys
+                    if folder_path not in sys.path:
+                        sys.path.insert(0, folder_path)
+
                     # 动态导入 main.py 模块
                     spec = importlib.util.spec_from_file_location(f"skill_{folder}", code_file)
                     if spec and spec.loader:

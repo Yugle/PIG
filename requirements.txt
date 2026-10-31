@@ -18,6 +18,11 @@ pydantic>=2.6.0
 # Vision & Face Tracking
 opencv-python-headless>=4.8.0
 
+# Smart Home & Xiaomi IoT Ecosystem
+python-miio>=0.5.12
+micloud>=0.6.0
+pycryptodome>=3.20.0
+
 # PC Simulation Mode (Optional for Sim-to-Real)
 # mujoco>=3.1.0
 # opencv-python>=4.9.0

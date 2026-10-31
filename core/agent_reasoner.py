@@ -230,9 +230,12 @@ class AgentReasoner:
                 final_reply = "执行过程中遇到了一点小意外，我们再试一次吧。"
                 break
 
-        # 兜底：如果最终回复仍包含敷衍客套话且有真实观察结果，采用真实观察结果
+        # 兜底检查：仅当大模型最终答复依然是推脱/未完成的敷衍口嗨词（如“稍等我去查/马上为您扫描”），
+        # 且没有表达完成态词汇（“已/完成/好了/成功/二维码已生成/扫描结果”）时，才智能降级到工具真实观察结果
         if last_observation and isinstance(last_observation, str):
-            if any(k in final_reply for k in ["扫描", "查询", "稍等", "好的", "正在"]) or len(final_reply) < 22:
+            is_deferral = any(k in final_reply for k in ["稍等", "正在帮您", "让我先", "正在查询", "正在扫描", "马上为您", "这就去", "我来查"])
+            has_completion = any(k in final_reply for k in ["已", "完成", "好了", "成功", "二维码", "扫描完毕", "查到", "为你", "打开了", "关闭了"])
+            if is_deferral and not has_completion:
                 final_reply = last_observation
 
         # 检查是否匹配用户自创的已知舞蹈动作

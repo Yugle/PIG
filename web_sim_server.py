@@ -38,70 +38,6 @@ def on_alarm_triggered(rem):
 
 skill_mgr.register_trigger_callback(on_alarm_triggered)
 
-def parse_llm_json(content: str, reasoning: str = "") -> dict:
-    """
-    五重容错解析大模型输出，确保绝不丢失回答内容：
-    1. 纯 JSON 解析
-    2. Markdown ```json 代码块提取
-    3. 正则匹配最外层花括号 {...}
-    4. 纯自然语言回答回退（保留大模型生成文本，自动附赠生动表情动作）
-    5. reasoning 思考尾部语义回退
-    """
-    content = (content or "").strip()
-    reasoning = (reasoning or "").strip()
-
-    # 策略 1: 直接 json.loads
-    try:
-        data = json.loads(content)
-        if isinstance(data, dict) and ("reply" in data or "behaviors" in data):
-            return data
-    except Exception:
-        pass
-
-    # 策略 2: 提取 ```json ... ```
-    md_match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", content, re.IGNORECASE)
-    if md_match:
-        try:
-            data = json.loads(md_match.group(1))
-            if isinstance(data, dict):
-                return data
-        except Exception:
-            pass
-
-    # 策略 3: 正则搜索最外层花括号 {...}
-    brace_match = re.search(r"(\{[\s\S]*\})", content)
-    if brace_match:
-        try:
-            data = json.loads(brace_match.group(1))
-            if isinstance(data, dict):
-                return data
-        except Exception:
-            pass
-
-    # 策略 4: 如果大模型输出了纯文本（没带 JSON 外壳），直接取大模型回答，绝不吞掉！
-    clean_text = re.sub(r"```[\s\S]*?```", "", content).strip()
-    if clean_text and len(clean_text) > 1:
-        clean_text = re.sub(r"^(?:回答|回复|小猪|机器小猪)[:：]\s*", "", clean_text).strip()
-        return {
-            "reply": clean_text,
-            "behaviors": [
-                {"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 85, "delay": 700}
-            ]
-        }
-
-    # 策略 5: 回退从 reasoning 思考链末尾提取
-    if reasoning:
-        r_brace = re.search(r"(\{[\s\S]*\})", reasoning)
-        if r_brace:
-            try:
-                data = json.loads(r_brace.group(1))
-                if isinstance(data, dict):
-                    return data
-            except Exception:
-                pass
-
-    return None
-
 def load_config():
     cfg_file = os.path.join(DIRECTORY, "config.json")
     if os.path.exists(cfg_file):
@@ -472,66 +408,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             sys_prompt = f"""你是桌面的具身实体机器人搭子。根据主人的话，输出富有真实生命体征、连续起伏的肢体语言与回答。
 当前系统时间为：{current_time_str}。
 你已永久掌握的自进化动作库包括：【{actions_desc}】。
-
-严格输出 JSON 结构，不要包含任何 markdown 或其他文本：
-{{
-  "reply": "你说话的内容 (口语化、亲切真诚，建议 {max_len} 字以内)",
-  "behaviors": [
-    {{
-      "emotion": "NORMAL | HAPPY | LOVE | WINK | CONFUSED | THINKING | SURPRISED | SLEEPY | DIZZY | SAD | ANGRY",
-      "action": "NOD | SHAKE | NONE | LOOK_UP | SURPRISE",
-      "pan": 90,
-      "tilt": 80,
-      "delay": 700
-    }}
-  ],
-  "skill": {{
-    "name": "set_timer | set_alarm | cancel_reminder | list_reminders | evolve_action",
-    "args": {{ ... }}
-  }}
-}}
-说明：
-- behaviors: 输出 1 到 3 个连续递进的动作表情时序步骤！若用户要求表演你已掌握的自进化动作（如转圈舞等），请在 behaviors 中演绎或在回复中热情回应。
-- pan: 水平头部朝向 [30, 150]，90 为正中；tilt: 俯仰头部朝向 [70, 110]，90 为平视，80 为轻微抬头看人；delay: 毫秒数 [500, 1200]。
-- skill (可选调度字段，非必须):
-  1. 用户要求倒计时(如“10分钟后叫我喝水”) -> "skill": {{"name": "set_timer", "args": {{"seconds": 600, "content": "喝水"}}}}
-  2. 用户要求设闹钟/提醒(如“明天早上8点叫我”、“下午3点提醒开会”) -> 根据当前系统时间推算，输出 "skill": {{"name": "set_alarm", "args": {{"time_str": "08:00", "content": "起床"}}}}
-  3. 用户要求取消闹钟(如“取消喝水提醒”) -> "skill": {{"name": "cancel_reminder", "args": {{"keyword": "喝水"}}}}
-  4. 用户要求查有哪些闹钟 -> "skill": {{"name": "list_reminders", "args": {{}}}}
-  5. 用户夸赞、教你新动作、或你想自创一套复合肢体动作时 -> "skill": {{"name": "evolve_action", "args": {{"name": "HAPPY_WIGGLE", "description": "开心扭动舞步", "keyframes": [{{"pan": 80, "tilt": 95, "emotion": "HAPPY", "duration": 400}}, {{"pan": 100, "tilt": 95, "emotion": "HAPPY", "duration": 400}}]}}}}
-
-【参考示例】
-- 用户："30分钟后提醒我关火" -> {{
-    "reply": "好嘞！我已经帮你设好30分钟后的关火倒计时啦，放心交给我！",
-    "behaviors": [
-      {{"emotion": "THINKING", "action": "LOOK_UP", "pan": 95, "tilt": 80, "delay": 600}},
-      {{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 85, "delay": 800}}
-    ],
-    "skill": {{"name": "set_timer", "args": {{"seconds": 1800, "content": "关火"}}}}
-  }}
-- 用户："帮我看一下我有什么小米设备可以控制" -> {{
-    "reply": "好的主人，马上为你扫描已配置的米家智能设备！",
-    "behaviors": [
-      {{"emotion": "THINKING", "action": "LOOK_UP", "pan": 95, "tilt": 80, "delay": 600}},
-      {{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 85, "delay": 800}}
-    ],
-    "skill": {{"name": "xiaomi_iot", "args": {{"device": "all", "action": "查询设备列表"}}}}
-  }}
-- 用户："做个开心的动作逗逗我" -> {{
-    "reply": "看我的秘密开心摇摆！怎么样，有没有被我萌到呀？",
-    "behaviors": [
-      {{"emotion": "HAPPY", "action": "NOD", "pan": 80, "tilt": 85, "delay": 500}},
-      {{"emotion": "LOVE", "action": "WINK", "pan": 100, "tilt": 85, "delay": 600}}
-    ],
-    "skill": {{"name": "evolve_action", "args": {{"name": "JOY_BOUNCE", "description": "欢快左右小跳跃", "keyframes": [{{"pan": 80, "tilt": 80, "emotion": "HAPPY", "duration": 400}}, {{"pan": 100, "tilt": 80, "emotion": "LOVE", "duration": 400}}, {{"pan": 90, "tilt": 90, "emotion": "WINK", "duration": 400}}]}}}}
-  }}
-
-【真实工具调用铁律】:
-1. 严禁口嗨欺骗用户！当用户提出查设备、查天气、设闹钟、控制电器等明确意图时，你必须在当轮直接输出 `skill` 调度真实工具，严禁使用“稍等我去查/马上为你扫描”等推脱口嗨用语假装后台在跑！
-2. 工具执行后系统会自动将插件真实结果回填给主人，绝不可凭空捏造虚假设备名称！
+回答风格要求：口语化、亲切真诚，富有生命体征感与陪伴感，回复字数控制在 {max_len} 字以内。
 """
-            # 注入已激活的动态技能插件与商店工具指令
-            sys_prompt += "\n" + skill_mgr.get_skills_tools_prompt()
 
             reply_data = {
                 "reply": "我在听呢，有什么问题尽管问我吧！",

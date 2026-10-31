@@ -45,6 +45,7 @@ class XiaomiQRAuth:
         self.error_msg = ""
         self.synced_devices = []
         self._poll_thread = None
+        self._session_id = 0
 
     @staticmethod
     def generate_agent():
@@ -169,6 +170,8 @@ class XiaomiQRAuth:
                     self.status = "waiting"
                     self.error_msg = ""
                     self.synced_devices = []
+                    self._session_id += 1
+                    current_sid = self._session_id
 
                     # 下载并缓存本地二维码图片，供树莓派 2.4 寸 ST7789 屏幕或 Web 实体直接调用
                     try:
@@ -178,11 +181,11 @@ class XiaomiQRAuth:
                             with open(qr_file, "wb") as f:
                                 f.write(qr_img_resp.content)
                             self.local_qr_path = str(qr_file)
-                    except Exception as e:
+                    except Exception:
                         pass
 
-                    # 启动后台监听线程
-                    self._poll_thread = threading.Thread(target=self._background_poll, daemon=True)
+                    # 启动后台监听线程 (传递 session_id，避免旧线程竞争)
+                    self._poll_thread = threading.Thread(target=self._background_poll, args=(current_sid,), daemon=True)
                     self._poll_thread.start()
 
                     return {
@@ -200,16 +203,18 @@ class XiaomiQRAuth:
         self.error_msg = "获取二维码失败"
         return {"status": "error", "error": "获取二维码失败"}
 
-    def _background_poll(self):
+    def _background_poll(self, session_id):
         """后台长轮询米家扫码确认结果"""
         start_time = time.time()
-        while self.status == "waiting":
+        while self.status == "waiting" and self._session_id == session_id:
             if time.time() - start_time > self.timeout:
                 self.status = "expired"
                 self.error_msg = "扫码超时，请重新刷新二维码"
                 break
             try:
                 resp = self._session.get(self.lp_url, timeout=15)
+                if self._session_id != session_id:
+                    break
                 if resp.status_code == 200:
                     data = self.to_json(resp.text)
                     if "userId" in data and "ssecurity" in data:
@@ -232,8 +237,9 @@ class XiaomiQRAuth:
             except requests.exceptions.Timeout:
                 continue
             except Exception as e:
-                self.status = "error"
-                self.error_msg = str(e)
+                if self._session_id == session_id:
+                    self.status = "error"
+                    self.error_msg = str(e)
                 break
 
     def _sync_all_devices(self):
@@ -310,18 +316,19 @@ class XiaomiQRAuth:
 
     @staticmethod
     def _guess_key(name, model):
-        name_lower = name.lower()
-        if "lamp" in model or "light" in model or "灯" in name:
+        name_lower = (name or "").lower()
+        model_lower = (model or "").lower()
+        if "lamp" in model_lower or "light" in model_lower or "灯" in name_lower:
             return "台灯"
-        if "water" in model or "饮水" in name:
+        if "water" in model_lower or "饮水" in name_lower:
             return "饮水机"
-        if "kettle" in model or "水壶" in name:
+        if "kettle" in model_lower or "水壶" in name_lower:
             return "水壶"
-        if "tv" in model or "盒子" in name or "电视" in name:
+        if "tv" in model_lower or "盒子" in name_lower or "电视" in name_lower:
             return "电视盒子"
-        if "camera" in model or "摄像" in name:
+        if "camera" in model_lower or "摄像" in name_lower or "监控" in name_lower:
             return "摄像机"
-        return name
+        return name or "智能设备"
 
 # 全局单例
 qr_auth_manager = XiaomiQRAuth()

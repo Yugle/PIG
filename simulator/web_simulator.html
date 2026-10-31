@@ -1488,6 +1488,26 @@
       };
     }
 
+    function formatMarkdown(text) {
+      if (!text) return "";
+      return text
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/!\[(.*?)\]\((https?:\/\/[^\s\)]+)\)/g, '<img src="$2" alt="$1" style="max-width:190px; border-radius:8px; display:block; margin:8px 0; border:2px solid #ff6700; background:#fff; padding:6px;" />')
+        .replace(/\[(.*?)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" style="color:var(--cyan); text-decoration:underline;">$1</a>')
+        .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+        .replace(/\n/g, '<br>');
+    }
+
+    function appendChat(role, text) {
+      const chatLogs = document.getElementById("chatLogs");
+      if (!chatLogs) return;
+      const div = document.createElement("div");
+      div.className = `msg ${role === 'user' ? 'user' : 'bot'}`;
+      div.innerHTML = formatMarkdown(text);
+      chatLogs.appendChild(div);
+      chatLogs.scrollTop = chatLogs.scrollHeight;
+    }
+
     // 快捷气泡与清空对话记录
     function clearChatLogs() {
       const chatLogs = document.getElementById("chatLogs");
@@ -1557,7 +1577,7 @@
             contentHtml += `<div style="font-size:0.7rem; color:var(--cyan); margin-bottom:6px; background:rgba(0, 229, 255, 0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(0, 229, 255, 0.2);">🧠 ReAct 多步推理 (${res.steps.length} 轮): ${stepChain}</div>`;
           }
         }
-        contentHtml += `<div>${(res.reply || "收到啦！").replace(/\n/g, '<br>')}</div>`;
+        contentHtml += `<div>${formatMarkdown(res.reply || "收到啦！")}</div>`;
         botDiv.innerHTML = contentHtml;
         chatLogs.scrollTop = chatLogs.scrollHeight;
 
