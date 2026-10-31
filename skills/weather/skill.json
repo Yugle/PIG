@@ -1,15 +1,15 @@
 {
   "id": "weather",
-  "name": "实时天气与穿衣指南",
-  "version": "1.0.0",
+  "name": "实时天气与自动定位关怀",
+  "version": "1.2.0",
   "author": "Antigravity Lab",
   "category": "生活助手",
-  "description": "查询指定城市的天气、气温、湿度及穿衣出行关怀建议。",
+  "description": "查询指定城市或根据当前 IP / 主人记忆自动定位所在城市的天气、气温、湿度及穿衣出行关怀建议。",
   "parameters": {
     "city": {
       "type": "string",
-      "description": "城市中文名称或拼音，如 '北京', 'shanghai', '深圳'",
-      "default": "北京"
+      "description": "城市中文名称或拼音，若用户问'今天天气怎么样'或未指定具体城市，请直接传 'auto' 或留空",
+      "default": "auto"
     }
   },
   "default_behavior": {
