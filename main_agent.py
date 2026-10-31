@@ -422,6 +422,16 @@ def process_interaction(user_text: str):
 
     # 5. 音频结束瞬间，才归位复位
     time.sleep(0.2)
+    # 若刚生成了扫码二维码，直接在 2.4 寸屏幕上渲染二维码给主人扫码！
+    qr_file = os.path.join(DATA_DIR, "xiaomi_qr.png")
+    if os.path.exists(qr_file) and time.time() - os.path.getmtime(qr_file) < 20:
+        try:
+            from PIL import Image
+            qr_img = Image.open(qr_file).convert("RGB").resize((240, 240))
+            hal.display_face(qr_img)
+            time.sleep(4.0)
+        except Exception as e:
+            print(f"⚠️ [屏幕渲染二维码失败]: {e}")
     hal.display_face(eyes.render_eyes("NORMAL"))
     hal.set_angles(90, 90)
     idle_fsm.finish_active()

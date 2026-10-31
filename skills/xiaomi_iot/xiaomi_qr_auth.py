@@ -170,6 +170,17 @@ class XiaomiQRAuth:
                     self.error_msg = ""
                     self.synced_devices = []
 
+                    # 下载并缓存本地二维码图片，供树莓派 2.4 寸 ST7789 屏幕或 Web 实体直接调用
+                    try:
+                        qr_img_resp = self._session.get(self.qr_url, timeout=6)
+                        if qr_img_resp.status_code == 200:
+                            qr_file = self.config_path.parent / "xiaomi_qr.png"
+                            with open(qr_file, "wb") as f:
+                                f.write(qr_img_resp.content)
+                            self.local_qr_path = str(qr_file)
+                    except Exception as e:
+                        pass
+
                     # 启动后台监听线程
                     self._poll_thread = threading.Thread(target=self._background_poll, daemon=True)
                     self._poll_thread.start()
