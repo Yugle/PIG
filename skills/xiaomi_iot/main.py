@@ -60,6 +60,37 @@ def run(device="客厅灯", action="打开"):
     dev_name = (device or "").strip()
     act = (action or "").strip()
 
+    # 0. 判断是否为「米家 App 扫码登录/绑定」意图
+    is_qr_login = any(w in act or w in dev_name for w in ["扫码", "扫一扫", "二维码", "绑定", "登录小米", "绑定米家"])
+    if is_qr_login:
+        try:
+            from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
+        except Exception:
+            import sys
+            cur_dir = os.path.dirname(os.path.abspath(__file__))
+            if cur_dir not in sys.path:
+                sys.path.insert(0, cur_dir)
+            from xiaomi_qr_auth import qr_auth_manager
+
+        # 若已有刚扫码成功的设备
+        if qr_auth_manager.status == "success" and qr_auth_manager.synced_devices:
+            names = [d.get("name") for d in qr_auth_manager.synced_devices if d.get("name")]
+            return f"米家 App 扫码授权已成功！当前已为你自动同步 {len(names)} 个设备：{', '.join(names[:5])}。所有局域网 Token 与 IP 均已就绪，可直接语音控制！"
+
+        res = qr_auth_manager.start_qr_session()
+        if res.get("status") == "waiting":
+            qr_url = res.get("qr_url")
+            login_url = res.get("login_url")
+            return (
+                f"【米家 App 一键扫码授权】\n\n"
+                f"已为你生成米家登录二维码，请打开手机【米家 App】右上角「+」->「扫一扫」直接扫描下方二维码完成授权：\n\n"
+                f"![米家扫码登录]({qr_url})\n\n"
+                f"👉 授权完成后系统将自动同步全家米家设备局域网 Token！\n"
+                f"（备用网页登录链接：{login_url}）"
+            )
+        else:
+            return f"获取米家扫码二维码失败: {res.get('error', '未知错误')}"
+
     # 1. 判断是否为「扫描/查询设备列表」意图
     is_query = any(w in act or w in dev_name for w in ["查", "扫", "看", "列出", "列表", "什么设备", "有哪些", "list", "all", "所有"])
 
@@ -134,7 +165,9 @@ def run(device="客厅灯", action="打开"):
     # 2. 尝试局域网直连模式 (根据配置文件中的匹配设备)
     matched_lan = None
     for k, v in lan_devs.items():
-        if dev_name in k or k in dev_name:
+        aliases = v.get("aliases", []) if isinstance(v, dict) else []
+        name = v.get("name", "") if isinstance(v, dict) else ""
+        if dev_name in k or k in dev_name or any(dev_name in a or a in dev_name for a in aliases) or dev_name in name:
             matched_lan = (k, v)
             break
 
@@ -142,17 +175,27 @@ def run(device="客厅灯", action="打开"):
         k_name, v_info = matched_lan
         ip = v_info.get("ip")
         token = v_info.get("token")
+        model = v_info.get("model", "")
         if ip and token and len(token) == 32 and "填入" not in token:
             try:
                 from miio import Device
                 dev = Device(ip, token)
-                if power_on:
-                    dev.send("set_power", ["on"])
+                # 针对常见设备发送开关指令
+                if "yeelink" in model or "lamp" in model:
+                    if power_on:
+                        dev.send("set_power", ["on", "smooth", 500])
+                    else:
+                        dev.send("set_power", ["off", "smooth", 500])
                 else:
-                    dev.send("set_power", ["off"])
+                    cmd_val = ["on"] if power_on else ["off"]
+                    try:
+                        dev.send("set_power", cmd_val)
+                    except Exception:
+                        # 尝试 miot spec 指令
+                        dev.send("set_properties", [{"did": v_info.get("name", "dev"), "siid": 2, "piid": 1, "value": power_on}])
                 return f"已通过局域网直接向【{k_name} ({ip})】发送指令成功执行【{act}】！"
             except Exception as e:
-                return f"局域网连接【{k_name}】失败: {e}"
+                return f"局域网连接【{k_name} ({ip})】发送指令: {e}"
 
     # 3. 尚未配置真实凭据，给出友好引导与模拟确认
     return (

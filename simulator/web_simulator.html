@@ -660,6 +660,9 @@
       <div class="chat-panel-body">
         <!-- 快捷场景提问气泡 -->
         <div class="quick-chips-container">
+          <div class="quick-chip" onclick="openXiaomiQRModal()" style="border-color: #ff6700; color: #ff6700; background: rgba(255, 103, 0, 0.1);">📱 米家扫码绑定</div>
+          <div class="quick-chip" onclick="sendQuickChip('帮我查一下有哪些米家设备')">🔍 查米家设备</div>
+          <div class="quick-chip" onclick="sendQuickChip('帮我开一下台灯')">💡 打开台灯</div>
           <div class="quick-chip" onclick="sendQuickChip('今天天气怎么样？')">🌦️ 天气查询</div>
           <div class="quick-chip" onclick="sendQuickChip('10秒后提醒我关火')">⏰ 倒计时闹钟</div>
           <div class="quick-chip" onclick="sendQuickChip('跳个害羞舞看看')">💃 害羞舞</div>
@@ -2166,6 +2169,110 @@
         if (resDiv) resDiv.innerText = "❌ 执行出错: " + e;
       }
     }
+
+    // ====== 米家 App 一键扫码绑定 ======
+    let xiaomiQrPollTimer = null;
+
+    async function openXiaomiQRModal() {
+      const modal = document.getElementById("xiaomiQrModal");
+      modal.style.display = "flex";
+      await refreshXiaomiQR();
+    }
+
+    function closeXiaomiQRModal() {
+      const modal = document.getElementById("xiaomiQrModal");
+      modal.style.display = "none";
+      if (xiaomiQrPollTimer) {
+        clearInterval(xiaomiQrPollTimer);
+        xiaomiQrPollTimer = null;
+      }
+    }
+
+    async function refreshXiaomiQR() {
+      const qrImg = document.getElementById("xiaomiQrImg");
+      const statusText = document.getElementById("xiaomiQrStatus");
+      const devBox = document.getElementById("xiaomiSyncedDevices");
+      if (qrImg) qrImg.src = "";
+      if (statusText) statusText.innerHTML = '<span style="color:#ff9800;">⏳ 正在向小米服务器请求扫码凭证...</span>';
+      if (devBox) devBox.innerHTML = "";
+
+      try {
+        const resp = await fetch("/api/xiaomi/qr_start", { method: "POST" });
+        const data = await resp.json();
+        if (data && data.qr_url) {
+          if (qrImg) qrImg.src = data.qr_url;
+          if (statusText) statusText.innerHTML = '<span style="color:var(--cyan);">📱 请打开手机【米家 App】右上角「+」->「扫一扫」扫描二维码</span>';
+          startXiaomiQrPolling();
+        } else {
+          if (statusText) statusText.innerHTML = '<span style="color:#f44336;">❌ 请求二维码失败: ' + (data.error || "未知异常") + '</span>';
+        }
+      } catch (e) {
+        if (statusText) statusText.innerHTML = '<span style="color:#f44336;">❌ 网络请求失败: ' + e + '</span>';
+      }
+    }
+
+    function startXiaomiQrPolling() {
+      if (xiaomiQrPollTimer) clearInterval(xiaomiQrPollTimer);
+      xiaomiQrPollTimer = setInterval(async () => {
+        try {
+          const resp = await fetch("/api/xiaomi/qr_status");
+          if (!resp.ok) return;
+          const data = await resp.json();
+          const statusText = document.getElementById("xiaomiQrStatus");
+          const devBox = document.getElementById("xiaomiSyncedDevices");
+
+          if (data.status === "success") {
+            clearInterval(xiaomiQrPollTimer);
+            xiaomiQrPollTimer = null;
+            if (statusText) {
+              statusText.innerHTML = '<span style="color:#4caf50; font-weight:bold;">🎉 扫码授权成功！已自动拉取全家设备并生成 Token！</span>';
+            }
+            if (devBox && data.devices) {
+              devBox.innerHTML = `
+                <div style="margin-top:12px; padding:10px; background:rgba(76,175,80,0.1); border:1px solid #4caf50; border-radius:8px;">
+                  <div style="font-weight:bold; color:#4caf50; margin-bottom:6px;">✅ 已成功接入 ${data.devices.length} 个智能设备：</div>
+                  <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                    ${data.devices.map(d => `<span style="background:rgba(255,255,255,0.08); padding:3px 8px; border-radius:6px; font-size:0.75rem; color:#fff;">${d.name} (${d.ip || 'BLE'})</span>`).join('')}
+                  </div>
+                </div>
+              `;
+            }
+            appendChat('assistant', `🎉 **米家 App 扫码授权成功！**\n已为你全自动拉取并保存了 **${data.device_count || data.devices.length}** 个智能设备与局域网直控 Token。现在你可以直接说“帮我开一下台灯”或“关掉饮水机”！`);
+          } else if (data.status === "expired") {
+            clearInterval(xiaomiQrPollTimer);
+            xiaomiQrPollTimer = null;
+            if (statusText) statusText.innerHTML = '<span style="color:#f44336;">⏰ 二维码已超时过期，请点击下方刷新</span>';
+          }
+        } catch (e) {
+          console.error("Poll xiaomi qr error:", e);
+        }
+      }, 2000);
+    }
+  </script>
+
+  <!-- 📱 米家 App 扫码绑定弹窗 (Xiaomi QR Modal) -->
+  <div id="xiaomiQrModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
+    <div style="background:#0d1117; border:1px solid #ff6700; border-radius:14px; width:92%; max-width:480px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(255,103,0,0.25);">
+      <div style="padding:16px 20px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0; font-size:1.1rem; color:#ff6700; display:flex; align-items:center; gap:8px;">
+          <span>📱 米家 App 一键扫码授权</span>
+          <span style="font-size:0.72rem; background:rgba(255,103,0,0.2); color:#ff6700; padding:2px 8px; border-radius:12px;">免密码 · 免验证码</span>
+        </h3>
+        <button onclick="closeXiaomiQRModal()" class="btn" style="font-size:1.1rem; padding:4px 10px; cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:24px; text-align:center; display:flex; flex-direction:column; align-items:center;">
+        <div style="background:#fff; padding:12px; border-radius:12px; display:inline-block; box-shadow:0 4px 16px rgba(0,0,0,0.4); margin-bottom:14px;">
+          <img id="xiaomiQrImg" src="" alt="米家扫码登录" style="width:220px; height:220px; display:block; object-fit:contain;" />
+        </div>
+        <div id="xiaomiQrStatus" style="font-size:0.85rem; margin-bottom:12px; min-height:24px;"></div>
+        <p style="font-size:0.75rem; color:var(--text-sub); margin:0 0 16px 0; line-height:1.4;">
+          请打开手机 <b>【米家 App】</b> 首页 ➜ 点击右上角 <b>「+」</b> ➜ 选择 <b>「扫一扫」</b> 直接对准屏幕扫描。<br>手机授权确认后，系统将自动抓取全家设备与局域网 Token！
+        </p>
+        <button class="btn" style="background:#ff6700; color:#fff; border:none; padding:8px 20px; font-size:0.85rem; border-radius:8px; cursor:pointer;" onclick="refreshXiaomiQR()">🔄 刷新二维码</button>
+        <div id="xiaomiSyncedDevices" style="width:100%; text-align:left;"></div>
+      </div>
+    </div>
+  </div>
   </script>
 
   <!-- 动态 SVG 动图库画廊弹窗 -->

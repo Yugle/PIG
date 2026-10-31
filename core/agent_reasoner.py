@@ -157,9 +157,12 @@ class AgentReasoner:
                 if behaviors_candidate:
                     final_behaviors = behaviors_candidate
 
-                # 智能意图兜底：如果第一步用户明显要求查小米设备，但模型忘记输出 skill
+                # 智能意图兜底：如果第一步用户明显要求查小米设备或扫码绑定，但模型忘记输出 skill
                 if step == 1 and not (skill_call and isinstance(skill_call, dict) and skill_call.get("name")):
-                    if any(w in user_text for w in ["小米", "米家"]) and any(w in user_text for w in ["查", "看", "扫", "什么", "哪些", "设备", "完"]):
+                    if any(w in user_text for w in ["扫码", "绑定米家", "绑定小米", "登录小米", "米家扫码"]):
+                        skill_call = {"name": "xiaomi_iot", "args": {"device": "all", "action": "扫码登录"}}
+                        thought = "自动意图路由：检测到用户扫码绑定米家意图，主动调度 xiaomi_iot 扫码授权工具。"
+                    elif any(w in user_text for w in ["小米", "米家"]) and any(w in user_text for w in ["查", "看", "扫", "什么", "哪些", "设备", "完"]):
                         skill_call = {"name": "xiaomi_iot", "args": {"device": "all", "action": "查询设备列表"}}
                         thought = "自动意图路由：检测到用户查询米家设备意图，主动调度 xiaomi_iot 扫描工具。"
 

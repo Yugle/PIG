@@ -150,6 +150,26 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"enabled": face_tracker.enabled}).encode("utf-8"))
             return
 
+        # 小米米家扫码绑定状态查询
+        if self.path == "/api/xiaomi/qr_status":
+            try:
+                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                data = {
+                    "status": qr_auth_manager.status,
+                    "qr_url": qr_auth_manager.qr_url,
+                    "login_url": qr_auth_manager.login_url,
+                    "device_count": len(qr_auth_manager.synced_devices),
+                    "devices": qr_auth_manager.synced_devices,
+                    "error": qr_auth_manager.error_msg
+                }
+                self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
         # 获取活跃日程与闹钟列表
         if self.path == "/api/reminders":
             self.send_response(200)
@@ -290,6 +310,18 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        # 小米米家发起扫码绑定
+        if self.path == "/api/xiaomi/qr_start":
+            try:
+                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
+                res = qr_auth_manager.start_qr_session()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
         # 人脸视觉注视追踪开关切换
         if self.path == "/api/face_tracking":
             content_length = int(self.headers.get("Content-Length", 0))

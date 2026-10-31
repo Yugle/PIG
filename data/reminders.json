@@ -31,5 +31,16 @@
     "repeat": "none",
     "completed": true,
     "created_at": 1793354919.272779
+  },
+  {
+    "id": "timer_fbaa18",
+    "type": "timer",
+    "content": "关火",
+    "target_time": 1793428221.0998583,
+    "target_time_str": "2026-10-31 14:30:21",
+    "display_str": "0分10秒倒计时: 关火",
+    "repeat": "none",
+    "completed": true,
+    "created_at": 1793428211.0999148
   }
 ]

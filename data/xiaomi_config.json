@@ -1,19 +1,46 @@
 {
-  "_help": "这是小米米家控制配置文件。你可以选择【云端账号登录】或【局域网IP直连】任意一种方式。",
+  "_help": "这是小米米家控制配置文件，已录入局域网直连设备（支持毫秒级局域网 0 延迟控制）。",
   "cloud": {
     "enabled": false,
-    "username": "13800000000",
-    "password": "your_xiaomi_password",
+    "username": "15269693835",
+    "password": "your_password",
     "country": "cn"
   },
   "lan_devices": {
-    "客厅灯": {
-      "ip": "192.168.1.105",
-      "token": "在这里填入32位Token"
+    "台灯": {
+      "name": "Mijia LED Desk Lamp 1S Enhanced Edition (Black)",
+      "aliases": ["台灯", "米家台灯", "台灯1S"],
+      "ip": "192.168.10.95",
+      "token": "58fbbf382c31b128d0341e19e352e67b",
+      "model": "yeelink.light.lamp28"
     },
-    "智能插座": {
-      "ip": "192.168.1.106",
-      "token": "在这里填入32位Token"
+    "饮水机": {
+      "name": "Mijia Smart Pet Water Dispenser",
+      "aliases": ["宠物饮水机", "饮水机", "猫咪饮水机"],
+      "ip": "192.168.10.2",
+      "token": "c0aa448e9cd6a1e3854c5ef2ae2e903e",
+      "model": "mmgg.pet_waterer.s1"
+    },
+    "水壶": {
+      "name": "Xiaomi Smart Kettle 2 Pro",
+      "aliases": ["电水壶", "水壶", "烧水壶", "恒温水壶"],
+      "ip": "192.168.10.63",
+      "token": "a03b6f7c47a173381fb4a41e444f9514",
+      "model": "yunmi.kettle.v19"
+    },
+    "电视盒子": {
+      "name": "胖虎的电视盒子",
+      "aliases": ["电视盒子", "胖虎的电视盒子", "电视"],
+      "ip": "192.168.0.105",
+      "token": "6c7151543035716e783662615a6b354a",
+      "model": "xiaomi.tvbox.v1"
+    },
+    "摄像机": {
+      "name": "IMILAB Home Security Camera C21",
+      "aliases": ["摄像机", "摄像头", "监控"],
+      "ip": "192.168.10.5",
+      "token": "54534e6678395267786965344f787568",
+      "model": "chuangmi.camera.038a02"
     }
   }
 }
