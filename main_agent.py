@@ -16,6 +16,7 @@ from core.face_tracker import FaceTracker
 from core.idle_fsm import IdleFSM
 from core.skill_manager import SkillManager
 from core.evolution_engine import EvolutionEngine
+from core.agent_reasoner import AgentReasoner
 
 def parse_llm_json(content: str, reasoning: str = "") -> dict:
     """
@@ -322,89 +323,23 @@ def process_interaction(user_text: str):
         ]
     elif api_key and "YOUR_LLM_API_KEY" not in api_key:
         try:
-            url = f"{base_url}/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            # 注入已激活的动态技能插件与商店工具指令
-            sys_prompt += "\n" + skill_mgr.get_skills_tools_prompt()
-
-            # 记录作息时间戳并融合生物钟/反思画像
-            evolution_engine.record_interaction()
-            augmented_sys = evolution_engine.augment_prompt_with_evolution(sys_prompt)
-
-            # 组装包含记忆档案与短期历史的消息链
-            messages = mem.get_messages_for_llm(user_text, augmented_sys)
-            payload = {
-                "model": llm_model,
-                "messages": messages,
-                "response_format": {"type": "json_object"}
-            }
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
-            if response.status_code == 200:
-                resp_json = response.json()
-                choice = resp_json.get("choices", [{}])[0]
-                msg_obj = choice.get("message", {})
-                raw_content = msg_obj.get("content", "")
-                reasoning_content = msg_obj.get("reasoning", "")
-
-                parsed = parse_llm_json(raw_content, reasoning_content)
-                if parsed:
-                    reply_text = parsed.get("reply", reply_text)
-                    behaviors = parsed.get("behaviors", [])
-                    if not behaviors:
-                        behaviors = [{
-                            "emotion": parsed.get("emotion", "NORMAL"),
-                            "action": parsed.get("action", "NONE"),
-                            "pan": parsed.get("pan", 90),
-                            "tilt": parsed.get("tilt", 90),
-                            "delay": 700
-                        }]
-                    # 调度技能与动作自进化
-                    skill_call = parsed.get("skill")
-                    if skill_call and isinstance(skill_call, dict) and skill_call.get("name"):
-                        skill_res = skill_mgr.dispatch(skill_call)
-                        print(f"🎯 [Skill 调度完成]: {skill_call.get('name')} -> {skill_res}")
-                        # 若调用了插件技能 (如天气/智能家居/早报)，智能将执行结果融合进语音回答
-                        if isinstance(skill_res, str) and skill_res:
-                            if any(k in reply_text for k in ["查询", "看看", "稍等", "好的", "正在"]) or len(reply_text) < 18:
-                                reply_text = skill_res
-                            elif skill_res not in reply_text:
-                                reply_text = f"{reply_text} {skill_res}".strip()
-
-                        if skill_call.get("name") == "evolve_action":
-                            act_name = skill_call.get("args", {}).get("name", "")
-                            act_obj = skill_mgr.get_evolved_action(act_name)
-                            if act_obj and act_obj.get("keyframes"):
-                                behaviors = act_obj["keyframes"]
-
-                    # 若用户指令匹配已掌握的自创动作名称或描述，直接提取对应的关键帧进行高精复现
-                    if not (skill_call and skill_call.get("name") == "evolve_action"):
-                        for k, v in known_actions.items():
-                            short_desc = v.get("description", "").split("：")[0].replace("舞", "")
-                            if k in user_text.upper() or (short_desc and short_desc in user_text):
-                                if v.get("keyframes"):
-                                    behaviors = v["keyframes"]
-                                    break
-
-                    # 记录进记忆中枢
-                    mem.record_turn(user_text, reply_text)
-                else:
-                    print(f"⚠️ [Agent-LLM] 未能提取到有效回答，原始输出: {repr(raw_content)}")
-            else:
-                print(f"⚠️ [LLM 响应异常状态码 {response.status_code}]: {response.text}")
-                reply_text = "网络信号有些微弱，我没听清呢。"
-                behaviors = [{"emotion": "CONFUSED", "action": "NONE", "pan": 90, "tilt": 90, "delay": 600}]
-        except requests.exceptions.RequestException as net_err:
-            print(f"⚠️ [网络连接异常]: {net_err}")
-            reply_text = "主人，我的网络信号似乎断开啦，先待机等你连上Wi-Fi哟~"
-            behaviors = [
-                {"emotion": "CONFUSED", "action": "SHAKE", "pan": 90, "tilt": 85, "delay": 600},
-                {"emotion": "SAD", "action": "NONE", "pan": 90, "tilt": 95, "delay": 700}
-            ]
+            reasoner = AgentReasoner(
+                api_key=api_key,
+                base_url=base_url,
+                model=llm_model,
+                max_steps=4
+            )
+            react_out = reasoner.run_react_loop(
+                user_text=user_text,
+                base_sys_prompt=sys_prompt,
+                memory_manager=mem,
+                skill_manager=skill_mgr,
+                evolution_engine=evolution_engine
+            )
+            reply_text = react_out["reply"]
+            behaviors = react_out["behaviors"]
         except Exception as e:
-            print(f"⚠️ [LLM 推理解析异常]: {e}")
+            print(f"⚠️ [Agent-LLM ReAct Loop 异常]: {e}")
             reply_text = "刚才脑筋闪了一下，我们重来一次吧！"
             behaviors = [{"emotion": "CONFUSED", "action": "NONE", "pan": 90, "tilt": 90, "delay": 600}]
     else:

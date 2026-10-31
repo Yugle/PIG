@@ -14,6 +14,7 @@ from core.face_tracker import FaceTracker
 from core.idle_fsm import IdleFSM
 from core.skill_manager import SkillManager
 from core.evolution_engine import EvolutionEngine
+from core.agent_reasoner import AgentReasoner
 
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -476,6 +477,14 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     ],
     "skill": {{"name": "set_timer", "args": {{"seconds": 1800, "content": "关火"}}}}
   }}
+- 用户："帮我看一下我有什么小米设备可以控制" -> {{
+    "reply": "好的主人，马上为你扫描已配置的米家智能设备！",
+    "behaviors": [
+      {{"emotion": "THINKING", "action": "LOOK_UP", "pan": 95, "tilt": 80, "delay": 600}},
+      {{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 85, "delay": 800}}
+    ],
+    "skill": {{"name": "xiaomi_iot", "args": {{"device": "all", "action": "查询设备列表"}}}}
+  }}
 - 用户："做个开心的动作逗逗我" -> {{
     "reply": "看我的秘密开心摇摆！怎么样，有没有被我萌到呀？",
     "behaviors": [
@@ -484,6 +493,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     ],
     "skill": {{"name": "evolve_action", "args": {{"name": "JOY_BOUNCE", "description": "欢快左右小跳跃", "keyframes": [{{"pan": 80, "tilt": 80, "emotion": "HAPPY", "duration": 400}}, {{"pan": 100, "tilt": 80, "emotion": "LOVE", "duration": 400}}, {{"pan": 90, "tilt": 90, "emotion": "WINK", "duration": 400}}]}}}}
   }}
+
+【真实工具调用铁律】:
+1. 严禁口嗨欺骗用户！当用户提出查设备、查天气、设闹钟、控制电器等明确意图时，你必须在当轮直接输出 `skill` 调度真实工具，严禁使用“稍等我去查/马上为你扫描”等推脱口嗨用语假装后台在跑！
+2. 工具执行后系统会自动将插件真实结果回填给主人，绝不可凭空捏造虚假设备名称！
 """
             # 注入已激活的动态技能插件与商店工具指令
             sys_prompt += "\n" + skill_mgr.get_skills_tools_prompt()
@@ -507,70 +520,26 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 }
             elif api_key and "YOUR_LLM_API_KEY" not in api_key:
                 try:
-                    url = f"{base_url}/chat/completions"
-                    headers = {
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json"
-                    }
-                    # 记录作息时间戳并融合生物钟/反思画像
-                    evolution_engine.record_interaction()
-                    augmented_sys = evolution_engine.augment_prompt_with_evolution(sys_prompt)
-
-                    # 组装带记忆的系统提示词与上下文
-                    messages = mem.get_messages_for_llm(user_text, augmented_sys)
-                    payload = {
-                        "model": model,
-                        "messages": messages,
-                        "response_format": {"type": "json_object"}
-                    }
-                    resp = requests.post(url, headers=headers, json=payload, timeout=60)
-                    if resp.status_code == 200:
-                        choice = resp.json().get("choices", [{}])[0]
-                        msg_obj = choice.get("message", {})
-                        raw_content = msg_obj.get("content", "")
-                        reasoning_content = msg_obj.get("reasoning", "")
-
-                        parsed = parse_llm_json(raw_content, reasoning_content)
-                        if parsed:
-                            reply_data.update(parsed)
-                            # 调度并执行伴侣技能
-                            skill_call = parsed.get("skill")
-                            if skill_call and isinstance(skill_call, dict) and skill_call.get("name"):
-                                skill_res = skill_mgr.dispatch(skill_call)
-                                reply_data["skill_result"] = skill_res
-                                print(f"🎯 [Skill 调度完成]: {skill_call.get('name')} -> {skill_res}")
-                                # 如果是插件技能返回文本，智能融合进语音播报内容
-                                if isinstance(skill_res, str) and skill_res:
-                                    cur_rep = reply_data.get("reply", "")
-                                    if any(k in cur_rep for k in ["查询", "看看", "稍等", "好的", "正在"]) or len(cur_rep) < 18:
-                                        reply_data["reply"] = skill_res
-                                    elif skill_res not in cur_rep:
-                                        reply_data["reply"] = f"{cur_rep} {skill_res}".strip()
-
-                                # 若为动作自进化，动态将新动作关键帧作为 behaviors 演出
-                                if skill_call.get("name") == "evolve_action":
-                                    act_name = skill_call.get("args", {}).get("name", "")
-                                    act_obj = skill_mgr.get_evolved_action(act_name)
-                                    if act_obj and act_obj.get("keyframes"):
-                                        reply_data["behaviors"] = act_obj["keyframes"]
-
-                            # 若用户指令匹配已掌握的自创动作名称或描述，直接提取对应的关键帧进行高精复现
-                            if not (skill_call and skill_call.get("name") == "evolve_action"):
-                                for k, v in known_actions.items():
-                                    short_desc = v.get("description", "").split("：")[0].replace("舞", "")
-                                    if k in user_text.upper() or (short_desc and short_desc in user_text):
-                                        if v.get("keyframes"):
-                                            reply_data["behaviors"] = v["keyframes"]
-                                            break
-
-                            # 记录进入记忆中枢
-                            mem.record_turn(user_text, reply_data.get("reply", ""))
-                        else:
-                            print(f"⚠️ [Web-LLM] 未能提取到有效回答，原始输出: {repr(raw_content)}")
-                    else:
-                        print(f"⚠️ [Web-LLM HTTP 错误 {resp.status_code}]: {resp.text}")
+                    reasoner = AgentReasoner(
+                        api_key=api_key,
+                        base_url=base_url,
+                        model=model,
+                        max_steps=4
+                    )
+                    react_out = reasoner.run_react_loop(
+                        user_text=user_text,
+                        base_sys_prompt=sys_prompt,
+                        memory_manager=mem,
+                        skill_manager=skill_mgr,
+                        evolution_engine=evolution_engine
+                    )
+                    reply_data["reply"] = react_out["reply"]
+                    reply_data["behaviors"] = react_out["behaviors"]
+                    reply_data["skill_result"] = react_out.get("final_skill_res")
+                    reply_data["steps"] = react_out.get("steps", [])
                 except Exception as e:
-                    print(f"⚠️ [Web-LLM Error]: {e}")
+                    print(f"⚠️ [Web-LLM ReAct Loop Error]: {e}")
+                    reply_data["reply"] = "脑筋稍微转了一下，我们重试一次吧。"
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")

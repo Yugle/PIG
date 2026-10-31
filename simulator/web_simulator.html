@@ -1546,7 +1546,16 @@
           else if (["SURPRISED", "ANGRY"].includes(emo)) playChirp("surprise_squeak");
         }
 
-        botDiv.innerText = res.reply || "收到啦！";
+        let contentHtml = "";
+        if (res.steps && res.steps.length > 0) {
+          const actionSteps = res.steps.filter(s => s.action);
+          if (actionSteps.length > 0) {
+            const stepChain = actionSteps.map(s => `⚡ ${s.action}`).join(" ➔ ");
+            contentHtml += `<div style="font-size:0.7rem; color:var(--cyan); margin-bottom:6px; background:rgba(0, 229, 255, 0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(0, 229, 255, 0.2);">🧠 ReAct 多步推理 (${res.steps.length} 轮): ${stepChain}</div>`;
+          }
+        }
+        contentHtml += `<div>${(res.reply || "收到啦！").replace(/\n/g, '<br>')}</div>`;
+        botDiv.innerHTML = contentHtml;
         chatLogs.scrollTop = chatLogs.scrollHeight;
 
         // 启动音画毫秒级强同步时序控制
