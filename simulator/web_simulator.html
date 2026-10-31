@@ -536,18 +536,39 @@
           </button>
         </div>
 
-        <!-- ⏰ 闹钟日程与自进化动作 (Skills & Evolved Actions) -->
+        <!-- 🧩 统一技能中枢与应用生态 (Skills & Ecosystem) -->
         <div class="control-section">
           <div class="section-title">
-            <span>⏰ 闹钟日程与自进化动作</span>
-            <span id="remindersCountBadge" style="font-size:0.7rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:1px 6px; border-radius:10px;">0 个闹钟</span>
+            <span>🧩 统一技能与插件中枢</span>
+            <button class="btn" style="padding:2px 8px; font-size:0.7rem; color:var(--cyan); border-color:rgba(0, 229, 255, 0.4); background:rgba(0, 229, 255, 0.1);" onclick="openSkillStoreModal()">🏪 技能应用商店</button>
           </div>
-          <div id="remindersList" style="display:flex; flex-direction:column; gap:6px; max-height:110px; overflow-y:auto; font-size:0.78rem;">
-            <div style="color:var(--text-sub); text-align:center; padding:4px 0;">暂无活跃闹钟，试着说“10秒后提醒我关火”</div>
+          
+          <!-- 插件状态与闹钟 -->
+          <div style="font-size:0.75rem; color:var(--text-sub); display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span>🔌 <strong>已激活插件</strong>:</span>
+              <span id="pluginsCountBadge" style="color:var(--cyan); font-weight:600;">3 个</span>
+            </div>
+            <div id="installedPluginsBadges" style="display:flex; flex-wrap:wrap; gap:4px;">
+              <span class="btn" style="padding:2px 6px; font-size:0.7rem; color:#7ee787; border-color:#238636;">🌦️ weather</span>
+              <span class="btn" style="padding:2px 6px; font-size:0.7rem; color:#7ee787; border-color:#238636;">💡 smart_home</span>
+              <span class="btn" style="padding:2px 6px; font-size:0.7rem; color:#7ee787; border-color:#238636;">📰 news_briefing</span>
+            </div>
           </div>
+
+          <div style="border-top:1px dashed var(--border-color); padding-top:6px; font-size:0.75rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span style="color:var(--text-sub);">⏰ 活跃闹钟与倒计时:</span>
+              <span id="remindersCountBadge" style="font-size:0.7rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:1px 6px; border-radius:10px;">0 个</span>
+            </div>
+            <div id="remindersList" style="display:flex; flex-direction:column; gap:4px; max-height:80px; overflow-y:auto;">
+              <div style="color:var(--text-sub); text-align:center; padding:2px 0;">暂无活跃闹钟，试着说“10秒后提醒我关火”</div>
+            </div>
+          </div>
+
           <div style="border-top:1px dashed var(--border-color); padding-top:6px; font-size:0.75rem;">
             <div style="color:var(--text-sub); margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
-              <span>✨ 已自进化收录的新动作:</span>
+              <span>💃 自进化自创动作库:</span>
               <span id="actionsCountBadge" style="color:var(--cyan); font-weight:600;">1 个</span>
             </div>
             <div id="evolvedActionsBadges" style="display:flex; flex-wrap:wrap; gap:4px;">
@@ -1579,12 +1600,44 @@
       fetchReminders();
     }
 
+    async function fetchSkillsStore() {
+      try {
+        const resp = await fetch("/api/skills/store");
+        if (resp.ok) {
+          const data = await resp.json();
+          const installed = data.installed || [];
+          const countBadge = document.getElementById("pluginsCountBadge");
+          if (countBadge) countBadge.innerText = `${installed.length} 个`;
+          const listDiv = document.getElementById("installedPluginsBadges");
+          if (listDiv) {
+            listDiv.innerHTML = "";
+            installed.forEach(p => {
+              const span = document.createElement("span");
+              span.className = "btn";
+              span.style.cssText = "padding:2px 6px; font-size:0.7rem; color:#7ee787; border-color:#238636; cursor:pointer;";
+              span.innerText = `🔌 ${p.name || p.id}`;
+              span.title = p.description || "";
+              span.onclick = () => openSkillStoreModal();
+              listDiv.appendChild(span);
+            });
+            if (installed.length === 0) {
+              listDiv.innerHTML = `<span style="color:var(--text-sub); font-size:0.72rem;">暂无已安装插件，可前往商店安装</span>`;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("拉取已安装插件失败:", e);
+      }
+    }
+
     // 启动定时轮询
     setInterval(fetchReminders, 2000);
     setInterval(fetchEvolvedActions, 6000);
     setInterval(pollAlarmEvents, 1000);
+    setInterval(fetchSkillsStore, 4000);
     fetchReminders();
     fetchEvolvedActions();
+    fetchSkillsStore();
 
     // ==========================================
     // 2.8 🌱 生物钟作息与海马体反思管理
@@ -1828,12 +1881,44 @@
       fetchReminders();
     }
 
+    async function fetchSkillsStore() {
+      try {
+        const resp = await fetch("/api/skills/store");
+        if (resp.ok) {
+          const data = await resp.json();
+          const installed = data.installed || [];
+          const countBadge = document.getElementById("pluginsCountBadge");
+          if (countBadge) countBadge.innerText = `${installed.length} 个`;
+          const listDiv = document.getElementById("installedPluginsBadges");
+          if (listDiv) {
+            listDiv.innerHTML = "";
+            installed.forEach(p => {
+              const span = document.createElement("span");
+              span.className = "btn";
+              span.style.cssText = "padding:2px 6px; font-size:0.7rem; color:#7ee787; border-color:#238636; cursor:pointer;";
+              span.innerText = `🔌 ${p.name || p.id}`;
+              span.title = p.description || "";
+              span.onclick = () => openSkillStoreModal();
+              listDiv.appendChild(span);
+            });
+            if (installed.length === 0) {
+              listDiv.innerHTML = `<span style="color:var(--text-sub); font-size:0.72rem;">暂无已安装插件，可前往商店安装</span>`;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("拉取已安装插件失败:", e);
+      }
+    }
+
     // 启动定时轮询
     setInterval(fetchReminders, 2000);
     setInterval(fetchEvolvedActions, 6000);
     setInterval(pollAlarmEvents, 1000);
+    setInterval(fetchSkillsStore, 4000);
     fetchReminders();
     fetchEvolvedActions();
+    fetchSkillsStore();
 
     // ==========================================
     // 2.8 🌱 生物钟作息与海马体反思管理
@@ -2060,6 +2145,112 @@
         container.appendChild(card);
       });
     }
+
+    // ==========================================
+    // 4. 技能应用商店弹窗 (Skill Store Modal)
+    // ==========================================
+    function openSkillStoreModal() {
+      const modal = document.getElementById("skillStoreModal");
+      if (modal) modal.style.display = "flex";
+      loadSkillStoreCards();
+    }
+    function closeSkillStoreModal() {
+      const modal = document.getElementById("skillStoreModal");
+      if (modal) modal.style.display = "none";
+    }
+    async function loadSkillStoreCards() {
+      const container = document.getElementById("skillStoreGrid");
+      if (!container) return;
+      container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; color:var(--cyan); padding:20px;">正在加载技能商店目录...</div>`;
+      try {
+        const resp = await fetch("/api/skills/store");
+        if (resp.ok) {
+          const data = await resp.json();
+          const store = data.store || [];
+          container.innerHTML = "";
+          store.forEach(item => {
+            const card = document.createElement("div");
+            card.style.cssText = "background: rgba(13, 17, 23, 0.95); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.4);";
+
+            const btnHtml = item.is_installed
+              ? `<div style="display:flex; gap:8px; width:100%;">
+                   <button class="btn" style="flex:1; border-color:#f85149; color:#f85149; font-size:0.75rem; padding:6px 0;" onclick="uninstallSkill('${item.id}')">🗑️ 卸载</button>
+                   <button class="btn" style="flex:1; border-color:var(--cyan); color:var(--cyan); font-size:0.75rem; padding:6px 0;" onclick="testRunSkill('${item.id}')">▶️ 运行测试</button>
+                 </div>`
+              : `<button class="btn" style="width:100%; border-color:#238636; color:#7ee787; background:rgba(35, 134, 54, 0.15); font-size:0.75rem; padding:7px 0; font-weight:bold;" onclick="installSkill('${item.id}')">⬇️ 一键安装至机器人</button>`;
+
+            card.innerHTML = `
+              <div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+                  <span style="font-weight:bold; font-size:0.95rem; color:var(--text-main);">${item.name}</span>
+                  <span style="font-size:0.68rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:2px 6px; border-radius:10px;">${item.category || '插件'}</span>
+                </div>
+                <div style="font-size:0.72rem; color:var(--text-sub); margin-bottom:8px;">开发者: ${item.author} · v${item.version}</div>
+                <div style="font-size:0.78rem; color:var(--text-main); line-height:1.4; margin-bottom:8px;">${item.description}</div>
+              </div>
+              <div>
+                <div id="skill-result-${item.id}" style="font-size:0.72rem; color:#7ee787; margin-bottom:6px; min-height:16px;"></div>
+                ${btnHtml}
+              </div>
+            `;
+            container.appendChild(card);
+          });
+        }
+      } catch (e) {
+        container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; color:#f85149; padding:20px;">加载商店失败: ${e}</div>`;
+      }
+    }
+
+    async function installSkill(id) {
+      try {
+        const resp = await fetch("/api/skills/install", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ skill_id: id })
+        });
+        if (resp.ok) {
+          loadSkillStoreCards();
+          fetchSkillsStore();
+        }
+      } catch (e) {
+        alert("安装技能异常: " + e);
+      }
+    }
+
+    async function uninstallSkill(id) {
+      if (!confirm(`确定要从机器人中卸载【${id}】技能吗？`)) return;
+      try {
+        const resp = await fetch("/api/skills/uninstall", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ skill_id: id })
+        });
+        if (resp.ok) {
+          loadSkillStoreCards();
+          fetchSkillsStore();
+        }
+      } catch (e) {
+        alert("卸载技能异常: " + e);
+      }
+    }
+
+    async function testRunSkill(id) {
+      const resDiv = document.getElementById(`skill-result-${id}`);
+      if (resDiv) resDiv.innerText = "⏳ 正在执行...";
+      try {
+        const resp = await fetch("/api/skills/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ skill_id: id, params: {} })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (resDiv) resDiv.innerText = "💡 结果: " + data.result;
+        }
+      } catch (e) {
+        if (resDiv) resDiv.innerText = "❌ 执行出错: " + e;
+      }
+    }
   </script>
 
   <!-- 动态 SVG 动图库画廊弹窗 -->
@@ -2077,6 +2268,25 @@
       </div>
       <div style="padding:20px; overflow-y:auto; flex:1;">
         <div id="svgGalleryGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:16px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🏪 技能应用商店弹窗 (Skill Store Modal) -->
+  <div id="skillStoreModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
+    <div style="background:#0d1117; border:1px solid var(--border-color); border-radius:14px; width:92%; max-width:980px; max-height:88vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.8);">
+      <div style="padding:16px 20px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+            <span>🏪 具身智能体技能应用商店 (Skill Store)</span>
+            <span style="font-size:0.75rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:2px 8px; border-radius:12px;">热插拔 · 零重启 · 纯 Python 契约</span>
+          </h3>
+          <p style="margin:4px 0 0; font-size:0.78rem; color:var(--text-sub);">点击即可一键将技能下载安装至树莓派 skills/ 目录并动态热加载；支持大模型语音意图自主调用与直接执行。</p>
+        </div>
+        <button onclick="closeSkillStoreModal()" class="btn" style="font-size:1.1rem; padding:4px 10px; cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:20px; overflow-y:auto; flex:1;">
+        <div id="skillStoreGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px;"></div>
       </div>
     </div>
   </div>

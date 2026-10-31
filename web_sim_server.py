@@ -204,6 +204,19 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "ok", "emotions": emotions}, ensure_ascii=False).encode("utf-8"))
             return
 
+        # 获取技能商店列表与已安装技能
+        if self.path == "/api/skills/store":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            data = {
+                "status": "ok",
+                "store": skill_mgr.list_store_skills(),
+                "installed": skill_mgr.list_installed_skills()
+            }
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            return
+
         # 获取生物钟作息与反思元认知数据
         if self.path == "/api/circadian":
             self.send_response(200)
@@ -364,6 +377,43 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
             return
 
+        # 动态安装技能插件
+        if self.path == "/api/skills/install":
+            length = int(self.headers.get("Content-Length", 0))
+            req = json.loads(self.rfile.read(length).decode("utf-8"))
+            sid = req.get("skill_id", "")
+            ok = skill_mgr.install_skill(sid)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok" if ok else "error", "installed": ok}, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 动态卸载技能插件
+        if self.path == "/api/skills/uninstall":
+            length = int(self.headers.get("Content-Length", 0))
+            req = json.loads(self.rfile.read(length).decode("utf-8"))
+            sid = req.get("skill_id", "")
+            ok = skill_mgr.uninstall_skill(sid)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok" if ok else "error", "uninstalled": ok}, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 测试运行指定技能
+        if self.path == "/api/skills/run":
+            length = int(self.headers.get("Content-Length", 0))
+            req = json.loads(self.rfile.read(length).decode("utf-8"))
+            sid = req.get("skill_id", "")
+            params = req.get("params", {})
+            result = skill_mgr.execute_skill(sid, **params)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "result": result}, ensure_ascii=False).encode("utf-8"))
+            return
+
         if self.path == "/api/chat":
             content_length = int(self.headers.get("Content-Length", 0))
             post_data = self.rfile.read(content_length)
@@ -435,6 +485,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     "skill": {{"name": "evolve_action", "args": {{"name": "JOY_BOUNCE", "description": "欢快左右小跳跃", "keyframes": [{{"pan": 80, "tilt": 80, "emotion": "HAPPY", "duration": 400}}, {{"pan": 100, "tilt": 80, "emotion": "LOVE", "duration": 400}}, {{"pan": 90, "tilt": 90, "emotion": "WINK", "duration": 400}}]}}}}
   }}
 """
+            # 注入已激活的动态技能插件与商店工具指令
+            sys_prompt += "\n" + skill_mgr.get_skills_tools_prompt()
 
             reply_data = {
                 "reply": "我在听呢，有什么问题尽管问我吧！",
@@ -487,6 +539,14 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                                 skill_res = skill_mgr.dispatch(skill_call)
                                 reply_data["skill_result"] = skill_res
                                 print(f"🎯 [Skill 调度完成]: {skill_call.get('name')} -> {skill_res}")
+                                # 如果是插件技能返回文本，智能融合进语音播报内容
+                                if isinstance(skill_res, str) and skill_res:
+                                    cur_rep = reply_data.get("reply", "")
+                                    if any(k in cur_rep for k in ["查询", "看看", "稍等", "好的", "正在"]) or len(cur_rep) < 18:
+                                        reply_data["reply"] = skill_res
+                                    elif skill_res not in cur_rep:
+                                        reply_data["reply"] = f"{cur_rep} {skill_res}".strip()
+
                                 # 若为动作自进化，动态将新动作关键帧作为 behaviors 演出
                                 if skill_call.get("name") == "evolve_action":
                                     act_name = skill_call.get("args", {}).get("name", "")

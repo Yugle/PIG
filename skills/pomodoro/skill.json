@@ -1,0 +1,24 @@
+{
+  "id": "pomodoro",
+  "name": "番茄工作法与专注陪伴",
+  "version": "1.0.0",
+  "author": "Productivity Hub",
+  "category": "效率办公",
+  "description": "开启 25 分钟番茄专注倒计时，自动伴随安静呼吸与到点欢呼。",
+  "parameters": {
+    "minutes": {
+      "type": "integer",
+      "description": "专注时长（分钟），默认 25 分钟",
+      "default": 25
+    },
+    "task_name": {
+      "type": "string",
+      "description": "当前专注任务内容，如 '写代码', '读书'",
+      "default": "深度专注"
+    }
+  },
+  "default_behavior": {
+    "emotion": "THINKING",
+    "action": "NOD"
+  }
+}

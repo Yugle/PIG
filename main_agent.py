@@ -327,6 +327,9 @@ def process_interaction(user_text: str):
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             }
+            # 注入已激活的动态技能插件与商店工具指令
+            sys_prompt += "\n" + skill_mgr.get_skills_tools_prompt()
+
             # 记录作息时间戳并融合生物钟/反思画像
             evolution_engine.record_interaction()
             augmented_sys = evolution_engine.augment_prompt_with_evolution(sys_prompt)
@@ -363,6 +366,13 @@ def process_interaction(user_text: str):
                     if skill_call and isinstance(skill_call, dict) and skill_call.get("name"):
                         skill_res = skill_mgr.dispatch(skill_call)
                         print(f"🎯 [Skill 调度完成]: {skill_call.get('name')} -> {skill_res}")
+                        # 若调用了插件技能 (如天气/智能家居/早报)，智能将执行结果融合进语音回答
+                        if isinstance(skill_res, str) and skill_res:
+                            if any(k in reply_text for k in ["查询", "看看", "稍等", "好的", "正在"]) or len(reply_text) < 18:
+                                reply_text = skill_res
+                            elif skill_res not in reply_text:
+                                reply_text = f"{reply_text} {skill_res}".strip()
+
                         if skill_call.get("name") == "evolve_action":
                             act_name = skill_call.get("args", {}).get("name", "")
                             act_obj = skill_mgr.get_evolved_action(act_name)
