@@ -528,10 +528,13 @@ class SkillManager:
                     if folder_path not in sys.path:
                         sys.path.insert(0, folder_path)
 
-                    # 动态导入 main.py 模块
-                    spec = importlib.util.spec_from_file_location(f"skill_{folder}", code_file)
+                    # 动态导入 main.py 模块 (清除旧缓存以支持即时热更新)
+                    mod_name = f"skill_{folder}"
+                    sys.modules.pop(mod_name, None)
+                    spec = importlib.util.spec_from_file_location(mod_name, code_file)
                     if spec and spec.loader:
                         module = importlib.util.module_from_spec(spec)
+                        sys.modules[mod_name] = module
                         spec.loader.exec_module(module)
 
                         self.installed_plugins[folder] = {
