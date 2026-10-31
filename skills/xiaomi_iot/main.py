@@ -57,8 +57,44 @@ def run(device="客厅灯", action="打开"):
     cloud_cfg = config.get("cloud", {})
     lan_devs = config.get("lan_devices", {})
 
-    dev_name = device.strip()
-    act = action.strip()
+    dev_name = (device or "").strip()
+    act = (action or "").strip()
+
+    # 1. 判断是否为「扫描/查询设备列表」意图
+    is_query = any(w in act or w in dev_name for w in ["查", "扫", "看", "列出", "列表", "什么设备", "有哪些", "list", "all", "所有"])
+
+    if is_query:
+        # A. 云端模式真实扫描
+        if cloud_cfg.get("enabled") and cloud_cfg.get("username") != "13800000000":
+            try:
+                from micloud import MiCloud
+                mc = MiCloud(cloud_cfg.get("username"), cloud_cfg.get("password"))
+                if mc.login():
+                    devs = mc.get_devices(country=cloud_cfg.get("country", "cn"))
+                    names = [d.get("name") for d in devs if d.get("name")]
+                    if names:
+                        return f"米家真实设备扫描完毕！你账号下当前绑定的设备有：{', '.join(names)}。请问需要我帮你开或关哪一个？"
+                    else:
+                        return "米家账号登录成功，但当前账号下未发现绑定的智能设备。"
+                else:
+                    return "米家云端登录失败，请检查 data/xiaomi_config.json 中的账号和密码是否正确。"
+            except ImportError:
+                return "树莓派尚未安装 micloud 库，安装后即可自动扫描云端设备。"
+            except Exception as e:
+                return f"米家云端扫描出现异常: {e}"
+
+        # B. 局域网模式设备扫描
+        valid_lan = [k for k, v in lan_devs.items() if v.get("token") and "填入" not in v.get("token")]
+        if valid_lan:
+            return f"局域网米家设备扫描完毕！当前已配置的本地设备有：{', '.join(valid_lan)}。需要我帮你控制哪一个？"
+
+        # C. 尚未配置真实凭据，真实如实告知（绝不瞎编幻觉）
+        return (
+            "【米家设备扫描结果】报告主人，当前尚未检测到绑定的真实小米设备！\n"
+            "因为 data/xiaomi_config.json 里的账号和局域网 Token 目前仍为默认初始模板。"
+            "只要在配置文件中填入你的小米账号密码，我就能真正扫出你家里的全部电器啦！"
+        )
+
     power_on = any(w in act for w in ["开", "启动", "运行", "亮"])
 
     # 1. 尝试云端账号模式

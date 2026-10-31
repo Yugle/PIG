@@ -1,20 +1,20 @@
 {
   "id": "xiaomi_iot",
   "name": "小米米家生态直控",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Mijia Eco Team",
   "category": "智能物联",
-  "description": "绑定小米账号或局域网，语音直接操控家中米家灯光、风扇、加湿器与智能插座。",
+  "description": "绑定小米账号或局域网，扫描查询家里的小米设备列表，或语音直接操控米家灯光、风扇、加湿器与智能插座。",
   "parameters": {
     "device": {
       "type": "string",
-      "description": "目标设备名，如 '客厅灯', '风扇', '智能插座', '空调'",
-      "default": "客厅灯"
+      "description": "目标设备名，如 '客厅灯', '风扇', '智能插座', 或查询所有设备时传 'all'",
+      "default": "all"
     },
     "action": {
       "type": "string",
-      "description": "动作指令，如 '打开', '关闭', '调至2档'",
-      "default": "打开"
+      "description": "动作指令，如 '打开', '关闭', '查询设备列表', '扫描设备'",
+      "default": "查询设备列表"
     }
   },
   "default_behavior": {
