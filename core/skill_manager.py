@@ -66,56 +66,26 @@ def run(city="北京"):
         return f"查询{city}天气时网络稍有延迟，不过别担心，出门前记得随时看下窗外～"
 """
     },
-    "smart_home": {
-        "id": "smart_home",
-        "name": "智能家居设备中控",
-        "version": "1.0.0",
-        "author": "IoT Ecosystem",
+    "xiaomi_iot": {
+        "id": "xiaomi_iot",
+        "name": "小米米家生态直控",
+        "version": "1.2.0",
+        "author": "Mijia Eco Team",
         "category": "智能物联",
-        "description": "模拟与控制房间智能设备（客厅灯、空调、加湿器、智能插座等）。",
+        "description": "米家 App 扫码一键绑定全家设备，局域网毫秒级直连操控台灯、饮水机、电水壶、插座等真实设备。",
         "parameters": {
             "device": {
                 "type": "string",
-                "description": "目标设备，如 '客厅灯', '卧室灯', '空调', '加湿器'",
-                "default": "客厅灯"
+                "description": "目标设备名，如 '台灯', '水壶', '饮水机', 或 'all' 查询设备",
+                "default": "all"
             },
             "action": {
                 "type": "string",
-                "description": "执行指令，如 '打开', '关闭', '调至26度'",
-                "default": "打开"
+                "description": "动作指令，如 '打开', '关闭', '查询设备列表', '扫码绑定'",
+                "default": "查询设备列表"
             }
         },
-        "default_behavior": { "emotion": "HAPPY", "action": "NOD" },
-        "code_template": """import json
-import os
-
-STATE_FILE = "/tmp/smart_home_state.json"
-
-def _load_state():
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {"客厅灯": "关闭", "卧室灯": "关闭", "空调": "关闭 (26°C)", "加湿器": "关闭"}
-
-def _save_state(state):
-    try:
-        with open(STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False)
-    except Exception:
-        pass
-
-def run(device="客厅灯", action="打开"):
-    state = _load_state()
-    dev_key = device.strip()
-    act = action.strip()
-
-    state[dev_key] = act
-    _save_state(state)
-    return f"指令已下发！已为你成功将【{dev_key}】执行【{act}】操作，当前设备状态已同步更新。"
-"""
+        "default_behavior": { "emotion": "WINK", "action": "NOD" }
     },
     "news_briefing": {
         "id": "news_briefing",
@@ -524,7 +494,7 @@ class SkillManager:
     # ------------------ 动态插件体系 (Plugin Skills) ------------------
     def _init_starter_skills(self):
         """如果 skills 目录为空，自动预装 3 个高频精选入门技能"""
-        starter_ids = ["weather", "smart_home", "news_briefing"]
+        starter_ids = ["weather", "xiaomi_iot", "news_briefing"]
         for sid in starter_ids:
             s_dir = os.path.join(self.skills_dir, sid)
             if not os.path.exists(s_dir):
