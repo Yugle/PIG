@@ -118,6 +118,8 @@ else:
     hal = RobotHAL(model_path=scene_file)
 
 eyes = EyeRenderer(240, 320)
+if is_raspberry_pi and not cfg.get("simulation", False):
+    eyes.start_live_animation(hal, fps=25)
 tts = TTSEngine(
     mode=cfg.get("tts_mode", "edge"),
     custom_voice_id=cfg.get("custom_voice_id", ""),

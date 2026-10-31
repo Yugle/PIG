@@ -4,8 +4,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from hal_simulation import SimulationRobotHAL
-from eye_renderer import EyeRenderer
+from drivers.hal_simulation import SimulationRobotHAL
+from drivers.eye_renderer import EyeRenderer
 
 def test_simulation_hal():
     print("🤖 测试仿真 HAL 运动与表情调度...")

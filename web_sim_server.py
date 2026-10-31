@@ -178,6 +178,32 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "ok", "events": events}, ensure_ascii=False).encode("utf-8"))
             return
 
+        # 获取指定情绪的纯 CSS3 动力学动态 SVG 图像
+        if self.path.startswith("/api/svg?"):
+            from urllib.parse import urlparse, parse_qs
+            from core.svg_animator import SVGAnimator
+            query = parse_qs(urlparse(self.path).query)
+            emotion = query.get("emotion", ["NORMAL"])[0].upper()
+            svg_content = SVGAnimator.generate_svg(emotion)
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(svg_content.encode("utf-8"))
+            return
+
+        # 获取全部 12 款动态 SVG 清单
+        if self.path == "/api/svg_list":
+            emotions = [
+                "NORMAL", "HAPPY", "BLINK", "CONFUSED", "SAD", "ANGRY",
+                "SURPRISED", "LOVE", "WINK", "SLEEPY", "DIZZY", "THINKING"
+            ]
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "emotions": emotions}, ensure_ascii=False).encode("utf-8"))
+            return
+
         # 获取生物钟作息与反思元认知数据
         if self.path == "/api/circadian":
             self.send_response(200)

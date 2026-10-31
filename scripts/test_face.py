@@ -4,7 +4,7 @@ import sys
 # 将上一级目录加入 sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from eye_renderer import EyeRenderer
+from drivers.eye_renderer import EyeRenderer
 
 def test_all_emotions():
     renderer = EyeRenderer(width=240, height=320)

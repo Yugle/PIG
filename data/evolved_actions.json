@@ -93,5 +93,23 @@
         "duration": 800
       }
     ]
+  },
+  "SURPRISE_LOVE": {
+    "description": "惊讶转爱心眼卖萌表情",
+    "created_at": "2026-10-31 11:21:30",
+    "keyframes": [
+      {
+        "pan": 90,
+        "tilt": 80,
+        "emotion": "SURPRISED",
+        "duration": 600
+      },
+      {
+        "pan": 95,
+        "tilt": 85,
+        "emotion": "LOVE",
+        "duration": 700
+      }
+    ]
   }
 }

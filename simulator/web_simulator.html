@@ -531,6 +531,9 @@
             <button class="btn" onclick="setEmotion('ANGRY')">😡 愤怒</button>
             <button class="btn" onclick="setEmotion('BLINK')">😑 闭目</button>
           </div>
+          <button class="btn" style="margin-top: 8px; width: 100%; border-color: #ff007f; color: #ff4081; font-weight: bold; background: rgba(255, 64, 129, 0.08); display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="openSvgGalleryModal()">
+            🎨 查看 / 下载 12 款动态 SVG 动图库
+          </button>
         </div>
 
         <!-- ⏰ 闹钟日程与自进化动作 (Skills & Evolved Actions) -->
@@ -586,58 +589,159 @@
 
   <script>
     // ==========================================
-    // 1. 2.4 寸屏幕 Canvas 眼球动态渲染器
+    // 1. 2.4 寸屏幕 Canvas 高帧率灵动微表情引擎 (60 FPS)
     // ==========================================
     const eyeCanvas = document.getElementById("eyeCanvas");
     const eyeCtx = eyeCanvas.getContext("2d");
+    
     let currentEmotion = "NORMAL";
+    let targetEmotion = "NORMAL";
+    
     let lookOffset = { x: 0, y: 0 };
-    let blinkTimer = null;
+    let targetLookOffset = { x: 0, y: 0 };
+    let saccadeOffset = { x: 0, y: 0 };
+    let nextSaccadeTime = performance.now() + 2500;
+    
+    let isBlinking = false;
+    let blinkStartTime = 0;
+    const blinkDuration = 160;
+    let nextBlinkTime = performance.now() + 3000;
+
+    function triggerBlink() {
+      isBlinking = true;
+      blinkStartTime = performance.now();
+    }
+
+    function setEmotion(emo) {
+      targetEmotion = (emo || "NORMAL").toUpperCase();
+      currentEmotion = targetEmotion;
+      const tag = document.getElementById("current-emotion-tag");
+      if (tag) tag.innerText = "表情: " + targetEmotion;
+      if (typeof pointLight !== "undefined" && pointLight) {
+        if (targetEmotion === "ANGRY") pointLight.color.setHex(0xff3838);
+        else if (targetEmotion === "LOVE") pointLight.color.setHex(0xff4081);
+        else pointLight.color.setHex(0x00e5ff);
+      }
+    }
 
     function drawEyes(emotion = currentEmotion, lookX = lookOffset.x, lookY = lookOffset.y) {
+      if (emotion) targetEmotion = emotion;
+      if (lookX !== undefined) targetLookOffset.x = lookX;
+      if (lookY !== undefined) targetLookOffset.y = lookY;
+      renderEyeFrame(performance.now());
+    }
+
+    function renderEyeFrame(now) {
+      // 1. 拟真眨眼动力学
+      let blinkScale = 1.0;
+      if (!isBlinking && now >= nextBlinkTime) {
+        isBlinking = true;
+        blinkStartTime = now;
+        nextBlinkTime = now + 3000 + Math.random() * 3000;
+      }
+      if (isBlinking) {
+        const dt = now - blinkStartTime;
+        if (dt < blinkDuration) {
+          const phase = dt / blinkDuration;
+          blinkScale = Math.max(0.06, 1.0 - Math.sin(phase * Math.PI) * 0.94);
+        } else {
+          isBlinking = false;
+          blinkScale = 1.0;
+        }
+      }
+
+      // 2. 仿生呼吸律动
+      const breatheScale = 1.0 + 0.035 * Math.sin(now / 520);
+
+      // 3. 微扫视与平滑视线插值
+      if (now >= nextSaccadeTime) {
+        saccadeOffset.x = (Math.random() - 0.5) * 8;
+        saccadeOffset.y = (Math.random() - 0.5) * 5;
+        nextSaccadeTime = now + 2500 + Math.random() * 2500;
+      }
+      lookOffset.x += (targetLookOffset.x + saccadeOffset.x - lookOffset.x) * 0.2;
+      lookOffset.y += (targetLookOffset.y + saccadeOffset.y - lookOffset.y) * 0.2;
+
+      // 4. 清除与绘制底色
       eyeCtx.fillStyle = "#0a0e14";
       eyeCtx.fillRect(0, 0, 240, 320);
 
-      const eyeColor = emotion === "ANGRY" ? "#ff3838" : "#00e5ff";
+      const cy = 160 + lookOffset.y;
+      const lx = 60 + lookOffset.x;
+      const rx = 180 + lookOffset.x;
+
+      const baseW = 72 * breatheScale;
+      let baseH = 100 * breatheScale * blinkScale;
+      if (baseH < 6) baseH = 6;
+
+      const emo = targetEmotion;
+      const eyeColor = emo === "ANGRY" ? "#ff3344" : "#00e5ff";
       eyeCtx.fillStyle = eyeColor;
 
-      const cy = 160 + lookY;
-      const lx = 60 + lookX;
-      const rx = 180 + lookX;
-
-      if (emotion === "NORMAL") {
+      if (emo === "NORMAL") {
+        const radius = Math.min(22, baseH / 2);
         [lx, rx].forEach(cx => {
-          roundRect(eyeCtx, cx - 36, cy - 50, 72, 100, 22, true);
-          eyeCtx.fillStyle = "#ffffff";
-          eyeCtx.beginPath();
-          eyeCtx.ellipse(cx - 14, cy - 30, 8, 8, 0, 0, Math.PI * 2);
-          eyeCtx.fill();
-          eyeCtx.fillStyle = eyeColor;
+          roundRect(eyeCtx, cx - baseW / 2, cy - baseH / 2, baseW, baseH, radius, true);
+          if (blinkScale > 0.4) {
+            eyeCtx.fillStyle = "#ffffff";
+            eyeCtx.beginPath();
+            eyeCtx.ellipse(cx - 16, cy - 30 * breatheScale, 8, 8, 0, 0, Math.PI * 2);
+            eyeCtx.fill();
+            eyeCtx.fillStyle = eyeColor;
+          }
         });
-      } else if (emotion === "BLINK") {
-        [lx, rx].forEach(cx => {
-          roundRect(eyeCtx, cx - 36, cy - 4, 72, 8, 3, true);
-        });
-      } else if (emotion === "HAPPY") {
+      } else if (emo === "HAPPY") {
+        const bounce = Math.sin(now / 180) * 4;
         eyeCtx.lineWidth = 14;
         eyeCtx.strokeStyle = eyeColor;
         eyeCtx.lineCap = "round";
         [lx, rx].forEach(cx => {
           eyeCtx.beginPath();
-          eyeCtx.arc(cx, cy + 10, 36, Math.PI * 1.15, Math.PI * 1.85, false);
+          eyeCtx.arc(cx, cy + 10 + bounce, 36, Math.PI * 1.15, Math.PI * 1.85, false);
           eyeCtx.stroke();
         });
-      } else if (emotion === "CONFUSED") {
-        // 左大右小
-        roundRect(eyeCtx, lx - 36, cy - 50, 72, 100, 22, true);
-        eyeCtx.fillStyle = "#ffffff";
+        // 腮红
+        eyeCtx.fillStyle = "rgba(255, 64, 129, 0.45)";
         eyeCtx.beginPath();
-        eyeCtx.ellipse(lx - 14, cy - 30, 8, 8, 0, 0, Math.PI * 2);
+        eyeCtx.ellipse(lx - 20, cy + 32, 14, 7, 0, 0, Math.PI * 2);
+        eyeCtx.ellipse(rx + 20, cy + 32, 14, 7, 0, 0, Math.PI * 2);
         eyeCtx.fill();
-        eyeCtx.fillStyle = eyeColor;
-        roundRect(eyeCtx, rx - 24, cy - 24, 48, 48, 14, true);
-      } else if (emotion === "ANGRY") {
-        [lx, rx].forEach((cx, idx) => {
+      } else if (emo === "BLINK") {
+        [lx, rx].forEach(cx => {
+          roundRect(eyeCtx, cx - baseW / 2, cy - 4, baseW, 8, 3, true);
+        });
+      } else if (emo === "CONFUSED") {
+        const rLeft = Math.min(22, baseH / 2);
+        roundRect(eyeCtx, lx - baseW / 2, cy - baseH / 2, baseW, baseH, rLeft, true);
+        if (blinkScale > 0.4) {
+          eyeCtx.fillStyle = "#ffffff";
+          eyeCtx.beginPath();
+          eyeCtx.ellipse(lx - 16, cy - 30 * breatheScale, 8, 8, 0, 0, Math.PI * 2);
+          eyeCtx.fill();
+          eyeCtx.fillStyle = eyeColor;
+        }
+        const rw = 48 * breatheScale;
+        const rh = 48 * breatheScale * blinkScale;
+        roundRect(eyeCtx, rx - rw / 2, cy - rh / 2, rw, rh, 14, true);
+      } else if (emo === "SAD") {
+        eyeCtx.lineWidth = 13;
+        eyeCtx.strokeStyle = eyeColor;
+        eyeCtx.lineCap = "round";
+        [lx, rx].forEach(cx => {
+          eyeCtx.beginPath();
+          eyeCtx.arc(cx, cy - 5, 36, Math.PI * 0.15, Math.PI * 0.85, false);
+          eyeCtx.stroke();
+        });
+        // 滑落泪滴
+        const tearProgress = (now % 2000) / 2000;
+        const tearY = cy + 20 + tearProgress * 35;
+        eyeCtx.fillStyle = "#00e5ff";
+        eyeCtx.beginPath();
+        eyeCtx.ellipse(rx + 20, tearY, 5, 6, 0, 0, Math.PI * 2);
+        eyeCtx.fill();
+      } else if (emo === "ANGRY") {
+        const quiver = Math.sin(now / 35) * 2;
+        [lx + quiver, rx + quiver].forEach((cx, idx) => {
           roundRect(eyeCtx, cx - 36, cy - 45, 72, 90, 18, true);
           eyeCtx.fillStyle = "#0a0e14";
           eyeCtx.beginPath();
@@ -653,75 +757,94 @@
           eyeCtx.fill();
           eyeCtx.fillStyle = eyeColor;
         });
-      } else if (emotion === "SURPRISED") {
+      } else if (emo === "SURPRISED") {
+        const shock = 1.0 + 0.08 * Math.sin(now / 120);
+        const radOuter = 46 * shock;
         [lx, rx].forEach(cx => {
           eyeCtx.beginPath();
-          eyeCtx.ellipse(cx, cy, 45, 55, 0, 0, Math.PI * 2);
+          eyeCtx.ellipse(cx, cy, radOuter, radOuter, 0, 0, Math.PI * 2);
           eyeCtx.fill();
           eyeCtx.fillStyle = "#0a0e14";
           eyeCtx.beginPath();
-          eyeCtx.ellipse(cx, cy - 10, 20, 20, 0, 0, Math.PI * 2);
+          eyeCtx.ellipse(cx, cy, 18, 18, 0, 0, Math.PI * 2);
+          eyeCtx.fill();
+          eyeCtx.fillStyle = "#ffffff";
+          eyeCtx.beginPath();
+          eyeCtx.ellipse(cx - 10, cy - 10, 6, 6, 0, 0, Math.PI * 2);
           eyeCtx.fill();
           eyeCtx.fillStyle = eyeColor;
         });
-      } else if (emotion === "LOVE") {
-        // 粉红桃心
-        eyeCtx.fillStyle = "#ff4d8d";
+      } else if (emo === "LOVE") {
+        const phase = (now % 1200) / 1200;
+        let heartScale = 1.0;
+        if (phase < 0.15) heartScale = 1.0 + (phase / 0.15) * 0.24;
+        else if (phase < 0.30) heartScale = 1.24 - ((phase - 0.15) / 0.15) * 0.18;
+        else if (phase < 0.45) heartScale = 1.06 + ((phase - 0.30) / 0.15) * 0.14;
+        else if (phase < 0.60) heartScale = 1.20 - ((phase - 0.45) / 0.15) * 0.20;
+
+        eyeCtx.fillStyle = "#ff4081";
         [lx, rx].forEach(cx => {
+          const r = 16 * heartScale;
           eyeCtx.beginPath();
-          eyeCtx.arc(cx - 15, cy - 10, 16, Math.PI, 0, false);
-          eyeCtx.arc(cx + 15, cy - 10, 16, Math.PI, 0, false);
-          eyeCtx.lineTo(cx, cy + 30);
+          eyeCtx.arc(cx - r, cy - r, r, Math.PI, 0, false);
+          eyeCtx.arc(cx + r, cy - r, r, Math.PI, 0, false);
+          eyeCtx.lineTo(cx, cy + r * 1.8);
           eyeCtx.closePath();
           eyeCtx.fill();
-          // 小高光
+          // 高光
           eyeCtx.fillStyle = "#ffffff";
           eyeCtx.beginPath();
-          eyeCtx.ellipse(cx - 15, cy - 12, 4, 4, 0, 0, Math.PI * 2);
+          eyeCtx.ellipse(cx - r, cy - r, 4, 4, 0, 0, Math.PI * 2);
           eyeCtx.fill();
-          eyeCtx.fillStyle = "#ff4d8d";
+          eyeCtx.fillStyle = "#ff4081";
         });
-      } else if (emotion === "WINK") {
-        // 左眼笑眼，右眼睁眼
+      } else if (emo === "WINK") {
         eyeCtx.lineWidth = 14;
         eyeCtx.strokeStyle = eyeColor;
         eyeCtx.lineCap = "round";
         eyeCtx.beginPath();
         eyeCtx.arc(lx, cy + 10, 36, Math.PI * 1.15, Math.PI * 1.85, false);
         eyeCtx.stroke();
-        roundRect(eyeCtx, rx - 36, cy - 50, 72, 100, 22, true);
-        eyeCtx.fillStyle = "#ffffff";
-        eyeCtx.beginPath();
-        eyeCtx.ellipse(rx - 14, cy - 30, 8, 8, 0, 0, Math.PI * 2);
-        eyeCtx.fill();
-      } else if (emotion === "SLEEPY") {
-        // 困倦微眯
+
+        const radius = Math.min(22, baseH / 2);
+        roundRect(eyeCtx, rx - baseW / 2, cy - baseH / 2, baseW, baseH, radius, true);
+        if (blinkScale > 0.4) {
+          eyeCtx.fillStyle = "#ffffff";
+          eyeCtx.beginPath();
+          eyeCtx.ellipse(rx - 16, cy - 30 * breatheScale, 8, 8, 0, 0, Math.PI * 2);
+          eyeCtx.fill();
+        }
+      } else if (emo === "SLEEPY") {
         [lx, rx].forEach(cx => {
-          roundRect(eyeCtx, cx - 32, cy + 10, 64, 10, 4, true);
+          roundRect(eyeCtx, cx - 32, cy + 8, 64, 14, 5, true);
         });
+        const zy1 = cy - 30 - ((now / 35) % 40);
+        const zy2 = cy - 55 - (((now / 35) + 20) % 40);
         eyeCtx.fillStyle = "#00e5ff";
-        eyeCtx.font = "bold 20px monospace";
-        eyeCtx.fillText("z", rx + 20, cy - 40);
-        eyeCtx.font = "bold 26px monospace";
-        eyeCtx.fillText("Z", rx + 32, cy - 65);
-      } else if (emotion === "DIZZY") {
-        // 螺旋圈圈眼
-        eyeCtx.strokeStyle = "#ffb020";
-        eyeCtx.lineWidth = 6;
-        [lx, rx].forEach(cx => {
-          [34, 22, 10].forEach(r => {
+        eyeCtx.font = "bold 20px sans-serif";
+        eyeCtx.fillText("z", rx + 18, zy1);
+        eyeCtx.font = "bold 26px sans-serif";
+        eyeCtx.fillText("Z", rx + 30, zy2);
+      } else if (emo === "DIZZY") {
+        eyeCtx.strokeStyle = "#ff9800";
+        const angle = (now / 10) % 360;
+        const rad = angle * Math.PI / 180;
+        [lx, rx].forEach((cx, idx) => {
+          const dir = idx === 0 ? 1 : -1;
+          [36, 24, 12].forEach((r, i) => {
+            eyeCtx.lineWidth = 6 - i;
             eyeCtx.beginPath();
-            eyeCtx.arc(cx, cy, r, 0, Math.PI * 1.7, false);
+            eyeCtx.arc(cx, cy, r, rad * dir, rad * dir + Math.PI * 1.6, false);
             eyeCtx.stroke();
           });
         });
-      } else if (emotion === "THINKING") {
-        // 向上思考
+      } else if (emo === "THINKING") {
+        const scanX = Math.sin(now / 380) * 8;
         [lx, rx].forEach(cx => {
-          roundRect(eyeCtx, cx - 36, cy - 30, 72, 80, 18, true);
+          roundRect(eyeCtx, cx - 36, cy - 32, 72, 75, 18, true);
           eyeCtx.fillStyle = "#ffffff";
           eyeCtx.beginPath();
-          eyeCtx.ellipse(cx + 8, cy - 14, 10, 10, 0, 0, Math.PI * 2);
+          eyeCtx.ellipse(cx + 6 + scanX, cy - 20, 9, 9, 0, 0, Math.PI * 2);
           eyeCtx.fill();
           eyeCtx.fillStyle = eyeColor;
         });
@@ -742,42 +865,6 @@
       ctx.closePath();
       if (fill) ctx.fill();
     }
-
-    function setEmotion(emo) {
-      currentEmotion = emo;
-      const tag = document.getElementById("current-emotion-tag");
-      if (tag) tag.innerText = "表情: " + emo;
-      if (typeof pointLight !== "undefined" && pointLight) {
-        if (emo === "ANGRY") pointLight.color.setHex(0xff3838);
-        else if (emo === "LOVE") pointLight.color.setHex(0xff4d8d);
-        else pointLight.color.setHex(0x00e5ff);
-      }
-      drawEyes(emo);
-    }
-
-    // 随机生命体征：自然眨眼 + 视线微动跳跃 (Saccades)
-    setInterval(() => {
-      if (currentEmotion === "NORMAL") {
-        const rand = Math.random();
-        if (rand < 0.4) {
-          // 眨眼
-          drawEyes("BLINK");
-          setTimeout(() => drawEyes("NORMAL"), 180);
-        } else if (rand < 0.7) {
-          // 灵巧小眼神注视偏移
-          lookOffset.x = (Math.random() - 0.5) * 24;
-          lookOffset.y = (Math.random() - 0.5) * 16;
-          drawEyes("NORMAL");
-          setTimeout(() => {
-            lookOffset.x = 0;
-            lookOffset.y = 0;
-            drawEyes("NORMAL");
-          }, 1400);
-        }
-      }
-    }, 2600);
-
-    drawEyes("NORMAL");
 
 
     // ==========================================
@@ -1908,7 +1995,10 @@
       neckYawGroup.rotation.y = -THREE.MathUtils.degToRad(currentPan - 90);
       headPitchGroup.rotation.x = THREE.MathUtils.degToRad(currentTilt - 90);
 
-      // 保持 Canvas 2.4" 面部纹理高帧率同步贴附于 3D 模型面部
+      // 保持 Canvas 2.4" 面部纹理高帧率 60 FPS 呼吸与微表情动力学
+      if (typeof renderEyeFrame === "function") {
+        renderEyeFrame(performance.now());
+      }
       if (typeof screenTexture !== "undefined" && screenTexture) {
         screenTexture.needsUpdate = true;
       }
@@ -1925,6 +2015,70 @@
     });
 
     animate();
+
+    // ==========================================
+    // 3. 动态 SVG 动图库画廊弹窗 (Modal)
+    // ==========================================
+    function openSvgGalleryModal() {
+      const modal = document.getElementById("svgGalleryModal");
+      if (modal) modal.style.display = "flex";
+      loadSvgGalleryCards();
+    }
+    function closeSvgGalleryModal() {
+      const modal = document.getElementById("svgGalleryModal");
+      if (modal) modal.style.display = "none";
+    }
+    async function loadSvgGalleryCards() {
+      const container = document.getElementById("svgGalleryGrid");
+      if (!container || container.children.length > 0) return;
+      const emotions = [
+        { id: "NORMAL", name: "😊 常规仿生", desc: "呼吸律动 + 自然眨眼 + 视线微扫视" },
+        { id: "HAPPY", name: "😄 欢喜笑眼", desc: "弯月微笑 + 律动微跃 + 俏皮腮红" },
+        { id: "LOVE", name: "❤️ 心动爱意", desc: "高保真 Lub-Dub 心脏搏动节律" },
+        { id: "WINK", name: "😉 单眼眨眨", desc: "单侧俏皮眨眼，左笑右睁" },
+        { id: "CONFUSED", name: "🤔 好奇困惑", desc: "非对称一大一小探寻视线" },
+        { id: "THINKING", name: "🧐 深度思考", desc: "眼球向上注视 + 水平来回扫视" },
+        { id: "SURPRISED", name: "😳 震撼吃惊", desc: "瞳孔骤放缩放冲击波" },
+        { id: "SLEEPY", name: "😴 困倦打盹", desc: "半闭眼皮 + 浮动上升 z Z 泡泡" },
+        { id: "DIZZY", name: "🌀 眩晕蚊香", desc: "双眼同心三层反向螺旋旋转" },
+        { id: "SAD", name: "🥺 委屈沮丧", desc: "眼角下垂 + 周期性滑落水滴" },
+        { id: "ANGRY", name: "😡 认真愤怒", desc: "斜切怒目 + 高频微颤" },
+        { id: "BLINK", name: "😑 闭眼养神", desc: "舒缓闭合细线呼吸" }
+      ];
+      container.innerHTML = "";
+      emotions.forEach(emo => {
+        const card = document.createElement("div");
+        card.style.cssText = "background: rgba(13, 17, 23, 0.95); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);";
+        card.innerHTML = `
+          <div style="width: 120px; height: 160px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(0, 229, 255, 0.25); background: #0a0e14; display: flex; align-items: center; justify-content: center;">
+            <img src="/api/svg?emotion=${emo.id}" style="width: 100%; height: 100%; object-fit: contain;" alt="${emo.name}" />
+          </div>
+          <div style="font-weight: bold; font-size: 0.85rem; color: var(--text-main);">${emo.name}</div>
+          <div style="font-size: 0.72rem; color: var(--text-sub); text-align: center; height: 32px; line-height: 1.3;">${emo.desc}</div>
+          <a href="/api/svg?emotion=${emo.id}" download="${emo.id.toLowerCase()}_eye.svg" class="btn" style="width: 100%; text-align: center; text-decoration: none; font-size: 0.75rem; padding: 4px 0; background: rgba(0, 229, 255, 0.1); border-color: var(--cyan); color: var(--cyan);">⬇️ 下载 SVG</a>
+        `;
+        container.appendChild(card);
+      });
+    }
   </script>
+
+  <!-- 动态 SVG 动图库画廊弹窗 -->
+  <div id="svgGalleryModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
+    <div style="background:#0d1117; border:1px solid var(--border-color); border-radius:14px; width:92%; max-width:980px; max-height:88vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.8);">
+      <div style="padding:16px 20px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+            <span>🎨 纯 CSS3 动力学矢量动态 SVG 表情库</span>
+            <span style="font-size:0.75rem; background:rgba(255, 64, 129, 0.2); color:#ff4081; padding:2px 8px; border-radius:12px;">12 款全套 · 零依赖 · 60 FPS</span>
+          </h3>
+          <p style="margin:4px 0 0; font-size:0.78rem; color:var(--text-sub);">内置仿生呼吸微动、非线性眨眼、视线微扫视漫游与情绪专属循环动画，支持全尺寸无损缩放与右键另存。</p>
+        </div>
+        <button onclick="closeSvgGalleryModal()" class="btn" style="font-size:1.1rem; padding:4px 10px; cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:20px; overflow-y:auto; flex:1;">
+        <div id="svgGalleryGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:16px;"></div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
