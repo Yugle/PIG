@@ -7,8 +7,11 @@ from PIL import Image, ImageDraw
 
 try:
     from core.svg_animator import SVGAnimator
-except ImportError:
-    from ..core.svg_animator import SVGAnimator
+except Exception:
+    try:
+        from ..core.svg_animator import SVGAnimator
+    except Exception:
+        SVGAnimator = None
 
 
 class EyeRenderer:
@@ -340,6 +343,8 @@ class EyeRenderer:
         导出当前情绪的纯 CSS3 动力学高清矢量 SVG 动图。
         支持无损缩放与全平台原生 60 帧 GPU 渲染。
         """
+        if SVGAnimator is None:
+            return ""
         if output_path:
             return SVGAnimator.export_svg(emotion, output_path)
         return SVGAnimator.generate_svg(emotion, self.width, self.height)

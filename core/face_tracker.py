@@ -7,7 +7,10 @@
 """
 
 import os
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 import numpy as np
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -26,7 +29,7 @@ class FaceTracker:
         self.alpha = 0.35  # 平滑系数
 
     def _init_detector(self):
-        if not os.path.exists(MODEL_PATH):
+        if cv2 is None or not os.path.exists(MODEL_PATH):
             return
         try:
             self.detector = cv2.FaceDetectorYN_create(
@@ -49,7 +52,7 @@ class FaceTracker:
         输入 BGR 图像，输出人脸中心在画面中的相对偏移 [-1.0, 1.0] (0.0 为正中)
         返回: (has_face: bool, offset_x: float, offset_y: float)
         """
-        if not self.enabled or self.detector is None or frame_bgr is None:
+        if not self.enabled or self.detector is None or frame_bgr is None or cv2 is None:
             return False, 0.0, 0.0
 
         h, w = frame_bgr.shape[:2]
