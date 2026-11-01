@@ -16,6 +16,7 @@ config.json
 # Runtime Memory state & User Data
 memory.json
 data/memory.json
+data/proactive_state.json
 data/miot_specs/
 data/*.png
 

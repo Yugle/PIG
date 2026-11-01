@@ -47,6 +47,14 @@ def execute(action="status", scene="morning", snooze_minutes=120, **kwargs):
             "behavior": {"emotion": "NORMAL", "action": "BOW"}
         }
 
+    elif act in ["unsnooze", "unmute"]:
+        pcm.unsnooze()
+        return {
+            "status": "success",
+            "message": "🔔 已为您解除免打扰，小猪恢复主动关怀守护！",
+            "behavior": {"emotion": "HAPPY", "action": "NOD"}
+        }
+
     elif act == "test":
         sc = scene or "morning"
         payload = pcm.trigger_test(scene=sc)
@@ -70,5 +78,12 @@ def execute(action="status", scene="morning", snooze_minutes=120, **kwargs):
             "behavior": {"emotion": "HAPPY", "action": "NOD"}
         }
 
+def run(action="status", scene="morning", snooze_minutes=120, **kwargs):
+    """供 SkillManager 与 ReAct 动态技能调用的标准入口"""
+    res = execute(action=action, scene=scene, snooze_minutes=snooze_minutes, **kwargs)
+    if isinstance(res, dict):
+        return res.get("message", str(res))
+    return str(res)
+
 if __name__ == "__main__":
-    print(execute(action="status"))
+    print(run(action="status"))

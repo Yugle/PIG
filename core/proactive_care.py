@@ -30,12 +30,24 @@ class ProactiveCareManager:
         self.config = config or {}
 
         self.state_file = os.path.join(storage_dir, "proactive_state.json")
+        self._last_mtime = os.path.getmtime(self.state_file) if os.path.exists(self.state_file) else 0.0
         self.state = self._load_state()
 
         # 连续专注/活动时间跟踪
         self.continuous_active_seconds = 0
         self.last_tick_time = time.time()
         self.quiet_seconds = 0
+
+    def _sync_state(self):
+        """如果外部进程（如 CLI 技能或独立指令）修改了状态文件，热重载最新状态"""
+        try:
+            if os.path.exists(self.state_file):
+                mtime = os.path.getmtime(self.state_file)
+                if mtime > getattr(self, "_last_mtime", 0.0):
+                    self.state = self._load_state()
+                    self._last_mtime = mtime
+        except Exception:
+            pass
 
     def _load_state(self) -> Dict[str, Any]:
         default = {
@@ -63,6 +75,7 @@ class ProactiveCareManager:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self.state, f, ensure_ascii=False, indent=2)
             os.replace(tmp, self.state_file)
+            self._last_mtime = os.path.getmtime(self.state_file)
         except Exception as e:
             if os.path.exists(tmp):
                 try: os.remove(tmp)
@@ -70,9 +83,11 @@ class ProactiveCareManager:
             print(f"⚠️ [ProactiveCare] 保存状态异常: {e}")
 
     def is_enabled(self) -> bool:
+        self._sync_state()
         return self.state.get("enabled", True)
 
     def set_enabled(self, enabled: bool) -> bool:
+        self._sync_state()
         self.state["enabled"] = bool(enabled)
         self._save_state()
         print(f"❤️ [ProactiveCare] 主动关怀守护状态已切换为: {'开启' if enabled else '关闭'}")
@@ -83,14 +98,24 @@ class ProactiveCareManager:
 
     def snooze(self, minutes: int = 120):
         """一键暂止防打扰（例如主人正在开会或专注）"""
+        self._sync_state()
         self.state["snooze_until"] = time.time() + (minutes * 60)
         self._save_state()
         print(f"🔕 [ProactiveCare] 已开启静音防打扰，将在 {minutes} 分钟后恢复主动关怀")
 
+    def unsnooze(self):
+        """立即解除防打扰静音"""
+        self._sync_state()
+        self.state["snooze_until"] = 0.0
+        self._save_state()
+        print("🔔 [ProactiveCare] 已解除静音防打扰，恢复主动关怀守护")
+
     def is_snoozed(self) -> bool:
+        self._sync_state()
         return time.time() < self.state.get("snooze_until", 0.0)
 
     def get_status(self) -> Dict[str, Any]:
+        self._sync_state()
         return {
             "enabled": self.is_enabled(),
             "is_snoozed": self.is_snoozed(),
@@ -99,6 +124,22 @@ class ProactiveCareManager:
             "last_morning_date": self.state.get("last_morning_date", ""),
             "continuous_active_min": int(self.continuous_active_seconds / 60)
         }
+
+    def _clean_reflection_text(self, ref_care: str) -> str:
+        """
+        清洗反思指令中的元指令（如'明天主动询问'、'保持温暖关心的语气'等），转化为自然亲切的第一人称伴侣对话
+        """
+        if not ref_care:
+            return ""
+        import re
+        text = ref_care.strip()
+        # 1. 过滤末尾关于语气/态度/格式的元要求
+        text = re.sub(r'[，,、\s]*(?:保持|注意|语气|体现|多用|尽量|减少).*?(?:语气|态度|关怀|陪伴|支持)?$', '', text)
+        # 2. 过滤开头的指令性动词
+        text = re.sub(r'^(?:明天|次日|今天)?(?:主动|记得|务必|尽量)?(?:询问|关心|问候|跟进|问问|提醒)', '', text)
+        # 3. 将“明天”替换为“今天”
+        text = text.replace("明天", "今天").strip("，,。！？ \n")
+        return text
 
     # ==========================================
     # 关怀话术与肢体表情生成器
@@ -110,11 +151,11 @@ class ProactiveCareManager:
 
         if scene == "morning":
             # 1. 尝试联动昨日记忆反思 (如胃痛、失眠、重要任务)
-            ref_care = ""
+            clean_care = ""
             if self.memory and getattr(self.memory, "long_term_data", None):
                 ref = self.memory.long_term_data.get("daily_reflection", {})
                 if ref and ref.get("next_day_care"):
-                    ref_care = ref.get("next_day_care")
+                    clean_care = self._clean_reflection_text(ref.get("next_day_care"))
 
             # 2. 检查今日待办闹钟
             rem_str = ""
@@ -126,8 +167,11 @@ class ProactiveCareManager:
                 except Exception:
                     pass
 
-            if ref_care:
-                text = f"{user_name}，早呀！新的一天开始啦。昨晚我一直记着你说的：{ref_care}。今天感觉好些了吗？空腹记得先喝口温水哦。"
+            if clean_care:
+                if "情况" in clean_care or "好些" in clean_care or "恢复" in clean_care:
+                    text = f"{user_name}，早呀！昨晚我心里一直挂念着你：{clean_care}，现在感觉好些了吗？空腹记得先喝口温水哦。"
+                else:
+                    text = f"{user_name}，早安！昨晚我心里一直惦记着你：{clean_care}。新的一天开始啦，空腹记得先喝口温水暖暖胃哦。"
             else:
                 text = f"{user_name}，早安！新的一天开始啦，今天天气不错，记得吃个热乎的早饭，今天也要元气满满呀。"
 
@@ -194,8 +238,17 @@ class ProactiveCareManager:
         :return: 若满足触发条件，返回关怀 payload；否则返回 None
         """
         now = time.time()
-        dt = now - self.last_tick_time
+        raw_dt = now - self.last_tick_time
         self.last_tick_time = now
+
+        # 防止长时间休眠或刚启动时 dt 暴增导致久坐误判
+        dt = min(10.0, max(0.0, raw_dt))
+        if raw_dt > 300.0:
+            # 距离上次巡检超过 5 分钟，判定为系统休眠或关机重连，重置连续活动统计
+            self.continuous_active_seconds = 0
+            self.quiet_seconds = 0
+
+        self._sync_state()
 
         if not self.is_enabled() or self.is_snoozed():
             return None

@@ -2330,6 +2330,8 @@
         streamingPlayer.reset();
       } else if (ev.type === "proactive_care") {
         stopThinkingCadence();
+        currentTwinBotDiv = null;
+        accumulatedTwinReply = "";
         const chatLogs = document.getElementById("chatLogs");
         if (chatLogs) {
           const careDiv = document.createElement("div");
@@ -2592,7 +2594,12 @@
       const badge = document.getElementById("care-badge");
       if (!label || !badge) return;
       const enabled = data ? data.enabled : isProactiveCareEnabled;
-      if (enabled) {
+      if (data && data.is_snoozed) {
+        label.innerText = `🤫 静音中 (${data.snooze_remaining_min}m)`;
+        label.style.color = "#ffb74d";
+        badge.style.borderColor = "#ffb74d";
+        badge.style.background = "rgba(255, 183, 77, 0.1)";
+      } else if (enabled) {
         label.innerText = "❤️ 主动关怀: 开启";
         label.style.color = "#ff4081";
         badge.style.borderColor = "#ff4081";

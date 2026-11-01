@@ -320,13 +320,28 @@ class HardwareAgent:
                         "status": self.STATE_SPEAKING,
                         "message": payload.get("title", "❤️ 主动关怀")
                     })
-                    audio_data = self.tts_engine.synthesize(text)
-                    if audio_data:
-                        self.emit_event("robot_chunk", {
-                            "text": text,
-                            "audio": base64.b64encode(audio_data).decode("utf-8"),
-                            "seq": 0
-                        })
+                    try:
+                        audio_path, duration = self.tts_engine.synthesize(text)
+                        audio_bytes = b""
+                        if audio_path and os.path.exists(audio_path):
+                            with open(audio_path, "rb") as f:
+                                audio_bytes = f.read()
+                        if audio_bytes:
+                            self.emit_event("robot_chunk", {
+                                "text": text,
+                                "audio": base64.b64encode(audio_bytes).decode("utf-8"),
+                                "seq": 0
+                            })
+                        # 物理硬件播放 (树莓派直连或声卡)
+                        if audio_path and os.path.exists(audio_path):
+                            dur = duration if duration > 0 else self.tts_engine.get_audio_duration(audio_path)
+                            self.tts_engine.play_async(audio_path, dur)
+                            play_start = time.time()
+                            while self.tts_engine.is_playing() and (time.time() - play_start) < (dur + 0.5):
+                                time.sleep(0.05)
+                    except Exception as e:
+                        logger.warning(f"主动关怀语音播报异常: {e}")
+
                     self.emit_event("done", {"reply": text})
                     self.state = self.STATE_IDLE
                     self.emit_event("status_change", {
@@ -568,9 +583,17 @@ class HardwareAgent:
 
         meter_counter = 0
         while self._running:
-            # 若处于纯网页仿真模式或无麦克风，线程低频休眠保活
+            # 若处于纯网页仿真模式或无麦克风，线程低频休眠保活，同时定期巡检主动关怀
             if self.mode != "twin" or not self.has_mic or not self.audio_stream:
                 time.sleep(0.5)
+                if self.proactive_care and self.state == self.STATE_IDLE:
+                    sim_counter = getattr(self, "_sim_care_tick_counter", 0) + 1
+                    self._sim_care_tick_counter = sim_counter
+                    if sim_counter >= 4:  # 每 ~2.0 秒巡检一次
+                        self._sim_care_tick_counter = 0
+                        care_payload = self.proactive_care.tick(energy=0.0, is_talking=False)
+                        if care_payload:
+                            self.trigger_proactive_care_payload(care_payload)
                 continue
 
             try:

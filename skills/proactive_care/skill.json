@@ -8,7 +8,7 @@
   "parameters": {
     "action": {
       "type": "string",
-      "description": "操作类型：'enable' (开启主动关怀), 'disable' (关闭主动关怀), 'toggle' (切换开关), 'snooze' (静音防打扰), 'status' (查询状态), 'test' (立即测试关怀)",
+      "description": "操作类型：'enable' (开启主动关怀), 'disable' (关闭主动关怀), 'toggle' (切换开关), 'snooze' (静音防打扰), 'unsnooze' (解除静音), 'status' (查询状态), 'test' (立即测试关怀)",
       "default": "status"
     },
     "scene": {

@@ -498,6 +498,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     proactive_care.toggle()
                 elif body.get("action") == "snooze":
                     proactive_care.snooze(body.get("minutes", 120))
+                elif body.get("action") == "unsnooze":
+                    proactive_care.unsnooze()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
