@@ -289,6 +289,7 @@ class XiaomiQRAuth:
                     "ip": ip,
                     "token": token,
                     "model": model,
+                    "spec_type": d.get("spec_type", ""),
                     "aliases": aliases
                 }
 

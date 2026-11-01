@@ -8,7 +8,7 @@ import json
 import logging
 import re
 import requests
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger("AgentReasoner")
 
@@ -87,29 +87,15 @@ class AgentReasoner:
             augmented_sys = base_sys_prompt
 
         # 注入当前已激活的动态技能列表
+        from core.prompt_builder import PromptBuilder
         tools_prompt = skill_manager.get_skills_tools_prompt()
-        full_sys_prompt = augmented_sys + "\n" + tools_prompt + """
-
-【ReAct 多步自主执行铁律】:
-1. 你是一个具备多步动作规划能力的桌面实体机器人。分析主人意图后，如果你需要通过工具获取信息或控制硬件，必须在 `thought` 中说明思考，并在 `skill` 字段中输出具体调用。
-2. 严禁口嗨欺骗主人！绝不能在没调用工具时就假装说“让我去查/稍等我去扫描”；调用工具后系统会将真实的执行结果作为【Observation 观察反馈】立即追加给你进行下一步思考！
-3. 当你收集到足够的事实或所有动作都已执行完毕后，将 `skill` 设为 null，并在 `reply` 中给出直接面向主人的温情口语回答。
-4. 严格输出标准 JSON 格式：
-{
-  "thought": "你的心路思考：分析当前进展，决定下一步动作或准备最终回复",
-  "skill": { "name": "工具名称", "args": { "参数名": "参数值" } } 或 null,
-  "reply": "此时你想对主人说的话 (若本轮已完成所有任务，请给出最终结论答复)",
-  "behaviors": [
-    { "emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 85, "delay": 700 }
-  ]
-}
-"""
+        full_sys_prompt = augmented_sys + "\n" + tools_prompt + "\n" + PromptBuilder.get_react_guidelines_prompt()
 
         # 构造包含短期上下文的基础消息链
         messages = memory_manager.get_messages_for_llm(user_text, full_sys_prompt)
 
         steps_log: List[Dict[str, Any]] = []
-        final_reply = "我在听呢，有什么问题尽管跟我说吧！"
+        final_reply = None
         final_behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
         last_observation = None
 
@@ -132,7 +118,7 @@ class AgentReasoner:
                 resp = requests.post(url, headers=headers, json=payload, timeout=60)
                 if resp.status_code != 200:
                     logger.error(f"LLM 调用失败 [{resp.status_code}]: {resp.text}")
-                    final_reply = f"网络通信有些延迟 (状态码 {resp.status_code})，我们重试一下吧。"
+                    final_reply = f"认知大模型调用失败 (状态码 {resp.status_code})：{resp.text[:120]}"
                     break
 
                 resp_json = resp.json()
@@ -144,7 +130,7 @@ class AgentReasoner:
                 parsed = parse_llm_json(raw_content, reasoning)
                 if not parsed:
                     logger.warning(f"无法解析 LLM JSON 输出: {raw_content}")
-                    final_reply = raw_content or "我脑筋转了一下，请再说一次吧！"
+                    final_reply = raw_content or "大模型输出格式解析失败，未能完成操作。"
                     break
 
                 thought = parsed.get("thought", "")
@@ -157,14 +143,6 @@ class AgentReasoner:
                 if behaviors_candidate:
                     final_behaviors = behaviors_candidate
 
-                # 智能意图兜底：如果第一步用户明显要求查小米设备或扫码绑定，但模型忘记输出 skill
-                if step == 1 and not (skill_call and isinstance(skill_call, dict) and skill_call.get("name")):
-                    if any(w in user_text for w in ["扫码", "绑定米家", "绑定小米", "登录小米", "米家扫码"]):
-                        skill_call = {"name": "xiaomi_iot", "args": {"device": "all", "action": "扫码登录"}}
-                        thought = "自动意图路由：检测到用户扫码绑定米家意图，主动调度 xiaomi_iot 扫码授权工具。"
-                    elif any(w in user_text for w in ["小米", "米家"]) and any(w in user_text for w in ["查", "看", "扫", "什么", "哪些", "设备", "完"]):
-                        skill_call = {"name": "xiaomi_iot", "args": {"device": "all", "action": "查询设备列表"}}
-                        thought = "自动意图路由：检测到用户查询米家设备意图，主动调度 xiaomi_iot 扫描工具。"
 
                 # 检查是否需要调用工具
                 has_valid_tool = (
@@ -200,6 +178,16 @@ class AgentReasoner:
                         if act_obj and act_obj.get("keyframes"):
                             final_behaviors = act_obj["keyframes"]
 
+                    # 若已达到最大步数，无法继续循环推理，直接输出当前真实执行反馈，绝不掩饰
+                    if step >= self.max_steps:
+                        logger.warning(f"⚠️ ReAct 循环达到最大步数 ({self.max_steps})")
+                        is_fail = any(k in str(observation) for k in ["失败", "错误", "未找到", "超时", "异常", "未能", "离线"])
+                        if is_fail:
+                            final_reply = f"操作未完全达成：{observation}"
+                        else:
+                            final_reply = str(observation)
+                        break
+
                     # 将本轮的思考和工具执行结果喂回上下文，让大模型继续下一轮推理！
                     assistant_turn_content = json.dumps({
                         "thought": thought,
@@ -210,7 +198,9 @@ class AgentReasoner:
                     messages.append({"role": "assistant", "content": assistant_turn_content})
                     observation_prompt = (
                         f"【系统工具执行反馈 (Observation)】:\n{observation}\n\n"
-                        f"请根据上述真实工具反馈，继续思考下一步行动；若任务已完成，请将 skill 设为 null，并在 reply 中向主人给出最终口语答复。"
+                        f"请根据上述真实工具反馈继续思考：\n"
+                        f"- 若工具执行失败或报错，必须在 reply 中直接向主人坦白失败原因，严禁敷衍！\n"
+                        f"- 若任务已完成，请立即将 skill 设为 null，并在 reply 中向主人给出最终清晰口语答复。"
                     )
                     messages.append({"role": "user", "content": observation_prompt})
 
@@ -227,16 +217,24 @@ class AgentReasoner:
 
             except Exception as e:
                 logger.error(f"ReAct 循环执行异常: {e}")
-                final_reply = "执行过程中遇到了一点小意外，我们再试一次吧。"
+                final_reply = f"执行过程中发生异常错误：{e}，未能完成操作。"
                 break
 
-        # 兜底检查：仅当大模型最终答复依然是推脱/未完成的敷衍口嗨词（如“稍等我去查/马上为您扫描”），
-        # 且没有表达完成态词汇（“已/完成/好了/成功/二维码已生成/扫描结果”）时，才智能降级到工具真实观察结果
+        # 诚实汇报铁律（失败就直接说出来，严禁任何形式的敷衍掩饰与兜底）：
+        # 1. 检查工具真实执行结果是否包含失败报错
         if last_observation and isinstance(last_observation, str):
-            is_deferral = any(k in final_reply for k in ["稍等", "正在帮您", "让我先", "正在查询", "正在扫描", "马上为您", "这就去", "我来查"])
-            has_completion = any(k in final_reply for k in ["已", "完成", "好了", "成功", "二维码", "扫描完毕", "查到", "为你", "打开了", "关闭了"])
-            if is_deferral and not has_completion:
-                final_reply = last_observation
+            is_tool_failure = any(k in last_observation for k in ["失败", "错误", "未找到", "超时", "异常", "未能", "离线", "失效"])
+            if is_tool_failure:
+                # 若工具明确失败，但大模型未报告失败，直接以真实工具报错为准纠正，绝不掩饰欺骗主人
+                if not final_reply or not any(k in str(final_reply) for k in ["失败", "错误", "未能", "未找到", "离线", "异常", "失效"]):
+                    final_reply = f"操作未能成功：{last_observation}"
+
+        # 2. 如果最终答复仍然是推脱/未完成的敷衍口嗨词或空值，直接降级展示工具真实反馈
+        if not final_reply or any(k in str(final_reply) for k in ["稍等", "正在帮您", "让我先", "正在查询", "正在扫描", "马上为您", "这就去", "我来查", "我在听呢", "有什么问题尽管跟我说"]):
+            if last_observation:
+                final_reply = str(last_observation)
+            else:
+                final_reply = "抱歉主人，未能成功执行该操作，请重试。"
 
         # 检查是否匹配用户自创的已知舞蹈动作
         known_actions = skill_manager.list_evolved_actions()
@@ -256,3 +254,187 @@ class AgentReasoner:
             "steps": steps_log,
             "final_skill_res": last_observation
         }
+
+    def run_react_loop_stream(
+        self,
+        user_text: str,
+        base_sys_prompt: str,
+        memory_manager,
+        skill_manager,
+        evolution_engine=None
+    ) -> Generator[Dict[str, Any], None, None]:
+        """
+        高响应流式 ReAct 自主执行循环：
+        当命中最终口语答复时，实时边吐字边断句发射，驱动 TTS 抢先发声；
+        当命中工具调用时，无缝衔接执行与下一步观察。
+        """
+        from core.streaming_pipeline import StreamingJsonReplyExtractor
+
+        if evolution_engine:
+            evolution_engine.record_interaction()
+            augmented_sys = evolution_engine.augment_prompt_with_evolution(base_sys_prompt)
+        else:
+            augmented_sys = base_sys_prompt
+
+        from core.prompt_builder import PromptBuilder
+        tools_prompt = skill_manager.get_skills_tools_prompt()
+        full_sys_prompt = augmented_sys + "\n" + tools_prompt + "\n" + PromptBuilder.get_react_guidelines_prompt()
+        messages = memory_manager.get_messages_for_llm(user_text, full_sys_prompt)
+
+        steps_log: List[Dict[str, Any]] = []
+        final_reply = None
+        final_behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
+        last_observation = None
+
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        step = 0
+        while step < self.max_steps:
+            step += 1
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": True
+            }
+
+            try:
+                resp = requests.post(url, headers=headers, json=payload, stream=True, timeout=60)
+                if resp.status_code != 200:
+                    logger.error(f"LLM 流式调用失败 [{resp.status_code}]: {resp.text}")
+                    err_msg = f"大模型连接异常 (状态码 {resp.status_code})，未能完成操作。"
+                    final_reply = err_msg
+                    yield {"type": "sentence", "text": err_msg}
+                    break
+
+                extractor = StreamingJsonReplyExtractor()
+                raw_tokens = []
+
+                for line in resp.iter_lines():
+                    if line:
+                        line_str = line.decode("utf-8")
+                        if line_str.startswith("data: ") and line_str != "data: [DONE]":
+                            try:
+                                chunk_json = json.loads(line_str[6:])
+                                choices = chunk_json.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {}).get("content", "")
+                                    if delta:
+                                        raw_tokens.append(delta)
+                                        sentences = extractor.feed(delta)
+                                        for s in sentences:
+                                            yield {"type": "sentence", "text": s}
+                            except Exception:
+                                pass
+
+                for rem in extractor.flush():
+                    yield {"type": "sentence", "text": rem}
+
+                raw_content = "".join(raw_tokens)
+                parsed = parse_llm_json(raw_content, "")
+                if not parsed:
+                    final_reply = raw_content or "大模型输出格式解析失败，未能完成操作。"
+                    break
+
+                thought = parsed.get("thought", "")
+                skill_call = parsed.get("skill") or parsed.get("skill_call")
+                reply_candidate = parsed.get("reply", "") or extractor.full_reply_text
+                behaviors_candidate = parsed.get("behaviors", [])
+
+                if reply_candidate:
+                    final_reply = reply_candidate
+                if behaviors_candidate:
+                    final_behaviors = behaviors_candidate
+
+                has_valid_tool = (
+                    skill_call and
+                    isinstance(skill_call, dict) and
+                    skill_call.get("name") and
+                    str(skill_call.get("name")).lower() not in ["none", "null", "false"]
+                )
+
+                if has_valid_tool:
+                    tool_name = skill_call.get("name")
+                    tool_args = skill_call.get("args") or skill_call.get("params") or {}
+                    yield {"type": "tool_start", "name": tool_name, "args": tool_args}
+
+                    observation = skill_manager.dispatch(skill_call)
+                    last_observation = observation
+                    yield {"type": "observation", "name": tool_name, "result": str(observation)}
+
+                    steps_log.append({
+                        "step": step,
+                        "thought": thought,
+                        "action": tool_name,
+                        "args": tool_args,
+                        "observation": str(observation)
+                    })
+
+                    if step >= self.max_steps:
+                        final_reply = str(observation)
+                        yield {"type": "sentence", "text": final_reply}
+                        break
+
+                    assistant_turn_content = json.dumps({
+                        "thought": thought,
+                        "skill": skill_call,
+                        "reply": reply_candidate
+                    }, ensure_ascii=False)
+                    messages.append({"role": "assistant", "content": assistant_turn_content})
+                    observation_prompt = (
+                        f"【系统工具执行反馈 (Observation)】:\n{observation}\n\n"
+                        f"请根据上述真实工具反馈继续思考：\n"
+                        f"- 若工具执行失败或报错，必须在 reply 中直接向主人坦白失败原因，严禁敷衍！\n"
+                        f"- 若任务已完成，请立即将 skill 设为 null，并在 reply 中向主人给出最终清晰口语答复。"
+                    )
+                    messages.append({"role": "user", "content": observation_prompt})
+
+                else:
+                    steps_log.append({
+                        "step": step,
+                        "thought": thought or "所有任务与信息已就绪，向主人生成最终答复。",
+                        "action": None,
+                        "observation": None
+                    })
+                    break
+
+            except Exception as e:
+                logger.error(f"ReAct 流式循环执行异常: {e}")
+                err_msg = f"执行过程中发生异常错误：{e}，未能完成操作。"
+                final_reply = err_msg
+                yield {"type": "sentence", "text": err_msg}
+                break
+
+        if last_observation and isinstance(last_observation, str):
+            is_tool_failure = any(k in last_observation for k in ["失败", "错误", "未找到", "超时", "异常", "未能", "离线", "失效"])
+            if is_tool_failure:
+                if not final_reply or not any(k in str(final_reply) for k in ["失败", "错误", "未能", "未找到", "离线", "异常", "失效"]):
+                    final_reply = f"操作未能成功：{last_observation}"
+
+        if not final_reply or any(k in str(final_reply) for k in ["稍等", "正在帮您", "让我先", "正在查询", "正在扫描", "马上为您", "这就去", "我来查", "我在听呢", "有什么问题尽管跟我说"]):
+            if last_observation:
+                final_reply = str(last_observation)
+            else:
+                final_reply = "抱歉主人，未能成功执行该操作，请重试。"
+
+        known_actions = skill_manager.list_evolved_actions()
+        for k, v in known_actions.items():
+            short_desc = v.get("description", "").split("：")[0].replace("舞", "")
+            if k in user_text.upper() or (short_desc and short_desc in user_text):
+                if v.get("keyframes"):
+                    final_behaviors = v["keyframes"]
+                    break
+
+        memory_manager.record_turn(user_text, final_reply)
+
+        yield {
+            "type": "done",
+            "reply": final_reply,
+            "behaviors": final_behaviors,
+            "steps": steps_log,
+            "final_skill_res": last_observation
+        }
+

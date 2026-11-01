@@ -34,6 +34,7 @@
    * 局域网远程代播服务 (`services/remote_server.py`)
    * OTA 自动化静默升级 (`services/ota_updater.py`)
 9. [系统守护与保活部署 (systemd)](#九系统守护与保活部署-systemd)
+10. [核心架构设计与开发准则 (`docs/ARCHITECTURE_GUIDELINES.md`)](docs/ARCHITECTURE_GUIDELINES.md)
 
 ---
 

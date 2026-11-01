@@ -1,11 +1,11 @@
 import http.server
-import socketserver
 import os
 import json
-import re
-import requests
 import subprocess
 import threading
+import queue
+import asyncio
+import base64
 from datetime import datetime
 from drivers.asr_engine import BaiduASR
 from core.memory_manager import MemoryManager
@@ -15,6 +15,8 @@ from core.idle_fsm import IdleFSM
 from core.skill_manager import SkillManager
 from core.evolution_engine import EvolutionEngine
 from core.agent_reasoner import AgentReasoner
+from core.prompt_builder import PromptBuilder
+from core.hardware_agent import HardwareAgent
 
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -45,6 +47,34 @@ def load_config():
             return json.load(f)
     return {}
 
+# 初始化真机硬件与数字孪生工作中枢
+server_cfg = load_config()
+hardware_agent = HardwareAgent(
+    config=server_cfg,
+    memory_manager=mem,
+    skill_manager=skill_mgr,
+    evolution_engine=evolution_engine
+)
+hardware_agent.start()
+
+# Web 实时数字孪生 SSE 订阅广播总线
+agent_event_subscribers = []
+subscribers_lock = threading.Lock()
+
+def on_agent_event_broadcast(event_dict):
+    with subscribers_lock:
+        dead_subs = []
+        for q in agent_event_subscribers:
+            try:
+                q.put_nowait(event_dict)
+            except Exception:
+                dead_subs.append(q)
+        for d in dead_subs:
+            if d in agent_event_subscribers:
+                agent_event_subscribers.remove(d)
+
+hardware_agent.register_event_listener(on_agent_event_broadcast)
+
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
@@ -62,6 +92,52 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 self.send_error(404, "HTML simulator page not found")
                 return
+
+        # 实时数字孪生虚实同步长连接 (Server-Sent Events)
+        if self.path == "/api/agent/events":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+
+            client_q = queue.Queue(maxsize=100)
+            with subscribers_lock:
+                agent_event_subscribers.append(client_q)
+
+            try:
+                init_ev = {"type": "connected", "status": hardware_agent.get_status()}
+                self.wfile.write(f"data: {json.dumps(init_ev, ensure_ascii=False)}\n\n".encode("utf-8"))
+                self.wfile.flush()
+
+                while True:
+                    try:
+                        ev = client_q.get(timeout=20.0)
+                        msg = f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                        self.wfile.write(msg.encode("utf-8"))
+                        self.wfile.flush()
+                    except queue.Empty:
+                        self.wfile.write(b": keepalive\n\n")
+                        self.wfile.flush()
+            except Exception:
+                pass
+            finally:
+                with subscribers_lock:
+                    if client_q in agent_event_subscribers:
+                        agent_event_subscribers.remove(client_q)
+            return
+
+        # 查询当前运行模式与硬件状态
+        if self.path == "/api/system/mode":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "ok",
+                "hardware_status": hardware_agent.get_status()
+            }, ensure_ascii=False).encode("utf-8"))
+            return
 
         # 获取记忆中枢档案状态
         if self.path == "/api/memory":
@@ -208,7 +284,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(404, "Sound not found")
                 return
 
-        # 高拟真中文语音合成 (Edge-TTS zh-CN-XiaoxiaoNeural)
+        # 高拟真中文语音合成 (支持 小米 MiMo-TTS 与 Edge-TTS)
         if self.path.startswith("/api/tts"):
             from urllib.parse import parse_qs, urlparse
             query = parse_qs(urlparse(self.path).query)
@@ -218,6 +294,33 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
             try:
+                cfg = load_config()
+                mode = cfg.get("tts_mode", "edge")
+                mimo_key = cfg.get("mimo_api_key", "")
+                mimo_voice = cfg.get("mimo_voice", "冰糖")
+
+                # 若启用小米 MiMo 语音模型 (支持预置、克隆、设计)
+                if mode == "mimo" and mimo_key:
+                    from drivers.tts_engine import TTSEngine
+                    sim_tts = TTSEngine(
+                        mode="mimo",
+                        mimo_api_key=mimo_key,
+                        mimo_voice=mimo_voice,
+                        mimo_clone_audio=cfg.get("mimo_clone_audio", ""),
+                        mimo_design_prompt=cfg.get("mimo_design_prompt", "")
+                    )
+                    out_path, _ = sim_tts.synthesize(text, out_file="/tmp/web_mimo_tts.mp3")
+                    if os.path.exists(out_path):
+                        with open(out_path, "rb") as f:
+                            audio_data = f.read()
+                        self.send_response(200)
+                        self.send_header("Content-Type", "audio/mpeg")
+                        self.send_header("Content-Length", str(len(audio_data)))
+                        self.send_header("Cache-Control", "no-cache")
+                        self.end_headers()
+                        self.wfile.write(audio_data)
+                        return
+
                 import asyncio
                 import edge_tts
 
@@ -246,6 +349,38 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        # 切换运行模式: 'twin' (真机孪生) 或 'simulation' (纯网页仿真)
+        if self.path == "/api/system/mode":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            req_json = json.loads(post_data.decode("utf-8")) if post_data else {}
+            target_mode = req_json.get("mode", "twin")
+
+            msg = hardware_agent.set_mode(target_mode)
+
+            # 持久化到 config.json
+            cfg_file = os.path.join(DIRECTORY, "config.json")
+            if os.path.exists(cfg_file):
+                try:
+                    with open(cfg_file, "r", encoding="utf-8") as f:
+                        cur_cfg = json.load(f)
+                    cur_cfg["run_mode"] = target_mode
+                    with open(cfg_file, "w", encoding="utf-8") as f:
+                        json.dump(cur_cfg, f, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "ok",
+                "message": msg,
+                "mode": target_mode,
+                "hardware_status": hardware_agent.get_status()
+            }, ensure_ascii=False).encode("utf-8"))
+            return
+
         # 小米米家发起扫码绑定
         if self.path == "/api/xiaomi/qr_start":
             try:
@@ -383,6 +518,97 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "ok", "result": result}, ensure_ascii=False).encode("utf-8"))
             return
 
+        # 现场编写 / 自主进化新技能插件
+        if self.path == "/api/skills/create":
+            length = int(self.headers.get("Content-Length", 0))
+            req = json.loads(self.rfile.read(length).decode("utf-8"))
+            sid = req.get("skill_id", "")
+            s_name = req.get("name", "")
+            desc = req.get("description", "")
+            code = req.get("code", "")
+            params = req.get("parameters", {})
+            res = skill_mgr.create_custom_skill(sid, s_name, desc, code, params)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # ⚡ 流式即时推理与断句语音合成输出接口 (Server-Sent Events)
+        if self.path == "/api/chat/stream":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                req_json = json.loads(post_data.decode("utf-8"))
+                user_text = req_json.get("text", "")
+            except Exception:
+                user_text = ""
+
+            cfg = load_config()
+            api_key = cfg.get("api_key", "")
+            base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
+            model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
+            max_len = cfg.get("max_reply_length", 150)
+
+            sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=skill_mgr)
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+
+            from core.streaming_pipeline import get_tts_streamer
+            tts_streamer = get_tts_streamer(cfg)
+
+            reasoner = AgentReasoner(
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+                max_steps=4
+            )
+
+            seq = 0
+            try:
+                for event in reasoner.run_react_loop_stream(
+                    user_text=user_text,
+                    base_sys_prompt=sys_prompt,
+                    memory_manager=mem,
+                    skill_manager=skill_mgr,
+                    evolution_engine=evolution_engine
+                ):
+                    ev_type = event.get("type")
+                    if ev_type == "sentence":
+                        sentence_text = event.get("text", "").strip()
+                        if sentence_text:
+                            seq += 1
+                            audio_b = asyncio.run(tts_streamer.synthesize_chunk(sentence_text))
+                            b64 = base64.b64encode(audio_b).decode("utf-8") if audio_b else ""
+                            payload = {
+                                "type": "chunk",
+                                "seq": seq,
+                                "text": sentence_text,
+                                "audio": b64
+                            }
+                            msg = f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                            self.wfile.write(msg.encode("utf-8"))
+                            self.wfile.flush()
+
+                    elif ev_type in ["tool_start", "observation", "done"]:
+                        msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                        self.wfile.write(msg.encode("utf-8"))
+                        self.wfile.flush()
+
+            except Exception as e:
+                err_ev = {"type": "error", "message": str(e)}
+                try:
+                    self.wfile.write(f"data: {json.dumps(err_ev, ensure_ascii=False)}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                except Exception:
+                    pass
+            return
+
         if self.path == "/api/chat":
             content_length = int(self.headers.get("Content-Length", 0))
             post_data = self.rfile.read(content_length)
@@ -398,21 +624,24 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
             max_len = cfg.get("max_reply_length", 150)
 
-            now_dt = datetime.now()
-            weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-            current_time_str = f"{now_dt.strftime('%Y-%m-%d %H:%M:%S')} ({weekdays[now_dt.weekday()]})"
+            sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=skill_mgr)
 
-            known_actions = skill_mgr.list_evolved_actions()
-            actions_desc = ", ".join([f"{k}({v.get('description', '')})" for k, v in known_actions.items()]) if known_actions else "暂无自创动作"
-
-            sys_prompt = f"""你是桌面的具身实体机器人搭子。根据主人的话，输出富有真实生命体征、连续起伏的肢体语言与回答。
-当前系统时间为：{current_time_str}。
-你已永久掌握的自进化动作库包括：【{actions_desc}】。
-回答风格要求：口语化、亲切真诚，富有生命体征感与陪伴感，回复字数控制在 {max_len} 字以内。
-"""
+            if not user_text.strip():
+                reply_data = {
+                    "reply": "没有听到你说话呢，请对我说点什么吧~",
+                    "action": "NONE",
+                    "emotion": "CONFUSED",
+                    "pan": 90,
+                    "tilt": 90
+                }
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps(reply_data, ensure_ascii=False).encode("utf-8"))
+                return
 
             reply_data = {
-                "reply": "我在听呢，有什么问题尽管问我吧！",
+                "reply": "",
                 "action": "NONE",
                 "emotion": "HAPPY",
                 "pan": 90,
@@ -449,7 +678,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     reply_data["steps"] = react_out.get("steps", [])
                 except Exception as e:
                     print(f"⚠️ [Web-LLM ReAct Loop Error]: {e}")
-                    reply_data["reply"] = "脑筋稍微转了一下，我们重试一次吧。"
+                    reply_data["reply"] = f"抱歉主人，执行过程遇到异常错误：{e}，未能完成操作。"
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")

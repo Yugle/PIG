@@ -5,7 +5,6 @@ import time
 import wave
 import signal
 import math
-import re
 
 from drivers.eye_renderer import EyeRenderer
 from drivers.tts_engine import TTSEngine
@@ -17,65 +16,7 @@ from core.idle_fsm import IdleFSM
 from core.skill_manager import SkillManager
 from core.evolution_engine import EvolutionEngine
 from core.agent_reasoner import AgentReasoner
-
-def parse_llm_json(content: str, reasoning: str = "") -> dict:
-    """
-    五重容错解析大模型输出，确保绝不丢失回答内容：
-    1. 纯 JSON 解析
-    2. Markdown ```json 代码块提取
-    3. 正则匹配最外层花括号 {...}
-    4. 纯自然语言回答回退（保留大模型生成文本，自动附赠生动表情动作）
-    5. reasoning 思考尾部语义回退
-    """
-    content = (content or "").strip()
-    reasoning = (reasoning or "").strip()
-
-    try:
-        data = json.loads(content)
-        if isinstance(data, dict) and ("reply" in data or "behaviors" in data):
-            return data
-    except Exception:
-        pass
-
-    md_match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", content, re.IGNORECASE)
-    if md_match:
-        try:
-            data = json.loads(md_match.group(1))
-            if isinstance(data, dict):
-                return data
-        except Exception:
-            pass
-
-    brace_match = re.search(r"(\{[\s\S]*\})", content)
-    if brace_match:
-        try:
-            data = json.loads(brace_match.group(1))
-            if isinstance(data, dict):
-                return data
-        except Exception:
-            pass
-
-    clean_text = re.sub(r"```[\s\S]*?```", "", content).strip()
-    if clean_text and len(clean_text) > 1:
-        clean_text = re.sub(r"^(?:回答|回复|小猪|机器小猪)[:：]\s*", "", clean_text).strip()
-        return {
-            "reply": clean_text,
-            "behaviors": [
-                {"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 85, "delay": 700}
-            ]
-        }
-
-    if reasoning:
-        r_brace = re.search(r"(\{[\s\S]*\})", reasoning)
-        if r_brace:
-            try:
-                data = json.loads(r_brace.group(1))
-                if isinstance(data, dict):
-                    return data
-            except Exception:
-                pass
-
-    return None
+from core.prompt_builder import PromptBuilder
 
 # 自动判定运行环境：根据 /proc/device-tree/model 识别树莓派真机或 PC 仿真
 is_raspberry_pi = False
@@ -124,7 +65,11 @@ if is_raspberry_pi and not cfg.get("simulation", False):
 tts = TTSEngine(
     mode=cfg.get("tts_mode", "edge"),
     custom_voice_id=cfg.get("custom_voice_id", ""),
-    api_key=cfg.get("custom_tts_api_key", "")
+    api_key=cfg.get("custom_tts_api_key", ""),
+    mimo_api_key=cfg.get("mimo_api_key", ""),
+    mimo_voice=cfg.get("mimo_voice", "冰糖"),
+    mimo_clone_audio=cfg.get("mimo_clone_audio", ""),
+    mimo_design_prompt=cfg.get("mimo_design_prompt", "")
 )
 
 import requests
@@ -263,47 +208,13 @@ def process_interaction(user_text: str):
     print(f"\n👤 [用户表达]: {user_text}")
 
     max_len = cfg.get("max_reply_length", 150)
-    now_dt = datetime.now()
-    weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-    current_time_str = f"{now_dt.strftime('%Y-%m-%d %H:%M:%S')} ({weekdays[now_dt.weekday()]})"
+    sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=skill_mgr)
 
-    known_actions = skill_mgr.list_evolved_actions()
-    actions_desc = ", ".join([f"{k}({v.get('description', '')})" for k, v in known_actions.items()]) if known_actions else "暂无自创动作"
-
-    sys_prompt = f"""你是桌面的具身实体机器人搭子。根据主人的话，输出富有真实生命体征、连续起伏的肢体语言与回答。
-当前系统时间为：{current_time_str}。
-你已永久掌握的自进化动作库包括：【{actions_desc}】。
-
-严格输出 JSON 结构，不要包含任何 markdown 或其他文本：
-{{
-  "reply": "你说话的内容 (口语化、亲切真诚，建议 {max_len} 字以内)",
-  "behaviors": [
-    {{
-      "emotion": "NORMAL | HAPPY | LOVE | WINK | CONFUSED | THINKING | SURPRISED | SLEEPY | DIZZY | SAD | ANGRY",
-      "action": "NOD | SHAKE | NONE | LOOK_UP | SURPRISE",
-      "pan": 90,
-      "tilt": 80,
-      "delay": 700
-    }}
-  ],
-  "skill": {{
-    "name": "set_timer | set_alarm | cancel_reminder | list_reminders | evolve_action",
-    "args": {{ ... }}
-  }}
-}}
-说明：
-- behaviors: 输出 1 到 3 个连续递进的动作表情时序步骤！模拟真人的情绪起伏波澜演变过程。
-- pan: 水平头部朝向 [30, 150]，90 为正中；tilt: 俯仰头部朝向 [70, 110]，90 为平视，80 为轻微抬头看人；delay: 毫秒数 [500, 1200]。
-- skill (可选调度字段，非必须):
-  1. 用户要求倒计时(如“10分钟后叫我喝水”) -> "skill": {{"name": "set_timer", "args": {{"seconds": 600, "content": "喝水"}}}}
-  2. 用户要求设闹钟/提醒(如“明天早上8点叫我”、“下午3点提醒开会”) -> 根据当前系统时间推算，输出 "skill": {{"name": "set_alarm", "args": {{"time_str": "08:00", "content": "起床"}}}}
-  3. 用户要求取消闹钟(如“取消喝水提醒”) -> "skill": {{"name": "cancel_reminder", "args": {{"keyword": "喝水"}}}}
-  4. 用户要求查有哪些闹钟 -> "skill": {{"name": "list_reminders", "args": {{}}}}
-  5. 用户夸赞、教你新动作、或你想自创一套复合肢体动作时 -> "skill": {{"name": "evolve_action", "args": {{"name": "HAPPY_WIGGLE", "description": "开心扭动舞步", "keyframes": [{{"pan": 80, "tilt": 95, "emotion": "HAPPY", "duration": 400}}, {{"pan": 100, "tilt": 95, "emotion": "HAPPY", "duration": 400}}]}}}}
-"""
-
-    reply_text = "我在听呢，有什么我可以帮你的吗？"
+    reply_text = "没有听清你的声音呢，请再说一次吧~"
     behaviors = []
+
+    # 全双工打断 (Barge-in): 只要主人开启新一轮交互，立即打断并停止上一句正在播放的语音
+    tts.stop()
 
     # 通知闲置状态机已进入活跃交互
     idle_fsm.notify_active()
@@ -312,6 +223,8 @@ def process_interaction(user_text: str):
     sound_effects.play_sound("thinking_hum")
     hal.set_angles(85, 78) # 好奇歪头
     hal.display_face(eyes.render_eyes("THINKING", look_x=10, look_y=-14))
+
+    stream_played = False
 
     # 清空记忆指令拦截
     if any(k in user_text for k in ["清空记忆", "重置记忆", "忘记我"]):
@@ -329,18 +242,44 @@ def process_interaction(user_text: str):
                 model=llm_model,
                 max_steps=4
             )
-            react_out = reasoner.run_react_loop(
+            # 开启高并发流式推理：首句边思考边发声 (TTFA ~1.5s)
+            stream_sentences = []
+            for ev in reasoner.run_react_loop_stream(
                 user_text=user_text,
                 base_sys_prompt=sys_prompt,
                 memory_manager=mem,
                 skill_manager=skill_mgr,
                 evolution_engine=evolution_engine
-            )
-            reply_text = react_out["reply"]
-            behaviors = react_out["behaviors"]
+            ):
+                ev_type = ev.get("type")
+                if ev_type == "tool_start":
+                    print(f"⚡ [技能调用] 正在执行: {ev.get('name')}({ev.get('args')})")
+                elif ev_type == "observation":
+                    print(f"🔍 [观察反馈] {ev.get('name')} ➔ {str(ev.get('result'))[:60]}")
+                elif ev_type == "sentence":
+                    s_text = ev.get("text", "").strip()
+                    if s_text:
+                        stream_sentences.append(s_text)
+                        print(f"🗣️ [流式断句语音]: {s_text}")
+                        try:
+                            s_path, s_dur = tts.synthesize(s_text)
+                            tts.play_async(s_path, s_dur)
+                            stream_played = True
+                            # 播报期间微动伴随
+                            hal.set_angles(90, 85)
+                            hal.display_face(eyes.render_eyes("HAPPY"))
+                            t_start = time.time()
+                            while (time.time() - t_start < s_dur) and tts.is_playing():
+                                time.sleep(0.08)
+                        except Exception as e:
+                            print(f"⚠️ [流式单句音频播放异常]: {e}")
+                elif ev_type == "done":
+                    reply_text = ev.get("reply") or "".join(stream_sentences) or "收到啦！"
+                    behaviors = ev.get("behaviors", [])
+
         except Exception as e:
             print(f"⚠️ [Agent-LLM ReAct Loop 异常]: {e}")
-            reply_text = "刚才脑筋闪了一下，我们重来一次吧！"
+            reply_text = f"抱歉主人，执行过程遇到异常错误：{e}，未能完成操作。"
             behaviors = [{"emotion": "CONFUSED", "action": "NONE", "pan": 90, "tilt": 90, "delay": 600}]
     else:
         # Mock 规则匹配
@@ -363,12 +302,13 @@ def process_interaction(user_text: str):
     elif first_emo in ["SURPRISED", "ANGRY"]:
         sound_effects.play_sound("surprise_squeak")
 
-    # 1. 预先合成语音并精准获取音频毫秒级时长 (真实硬件核心保障)
-    audio_path, total_dur = tts.synthesize(reply_text)
-    print(f"🔊 [TTS 准备就绪，音频实测总长: {total_dur:.2f}秒]: {reply_text}")
-
-    # 2. 启动异步无阻塞播放
-    tts.play_async(audio_path, total_dur)
+    # 若未走流式播放（如规则模式或流式降级），进行整段合成播报
+    if not stream_played and reply_text:
+        audio_path, total_dur = tts.synthesize(reply_text)
+        print(f"🔊 [TTS 准备就绪，音频实测总长: {total_dur:.2f}秒]: {reply_text}")
+        tts.play_async(audio_path, total_dur)
+    else:
+        total_dur = 2.0
 
     # 3. 将真实音频总长等分给各个动作阶段，确保每个动作在播放中平滑展开
     if not behaviors:
@@ -420,9 +360,18 @@ def process_interaction(user_text: str):
         hal.set_angles(p_val, t_val + math.sin(phase) * 2.0, smooth=False)
         time.sleep(0.12)
 
-    # 5. 音频结束瞬间，才归位复位
-    time.sleep(0.2)
-    # 若刚生成了扫码二维码，直接在 2.4 寸屏幕上渲染二维码给主人扫码！
+    # 5. 话音刚落：进入 1.8 秒“专注倾听与情感余韵” (Emotional Afterglow & Attentive Listening)
+    # 保持最后的情绪与肢体姿态，轻微呼吸注视主人，绝不机械面瘫秒归位
+    print("👂 [情感余韵] 保持姿态注视主人，等待互动反馈...")
+    afterglow_start = time.time()
+    phase = 0.0
+    while time.time() - afterglow_start < 1.8:
+        phase += 0.35
+        # 极轻柔的专注倾听呼吸微动 (幅度 < 1.0度)
+        hal.set_angles(p_val, t_val + math.sin(phase) * 0.9, smooth=False)
+        time.sleep(0.08)
+
+    # 6. 自然平滑淡出回日常待机态
     qr_file = os.path.join(DATA_DIR, "xiaomi_qr.png")
     if os.path.exists(qr_file) and time.time() - os.path.getmtime(qr_file) < 20:
         try:

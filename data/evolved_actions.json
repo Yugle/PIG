@@ -111,5 +111,32 @@
         "duration": 700
       }
     ]
+  },
+  "BOUNCE_JOY": {
+    "description": "欢乐弹跳：先小跳两下，然后歪头眨眼，最后转个圈挥手，展现满满的元气和活力",
+    "created_at": "2026-10-31 18:30:36",
+    "keyframes": [
+      {
+        "emotion": "HAPPY",
+        "action": "BOUNCE",
+        "pan": 50,
+        "tilt": 50,
+        "delay": 300
+      },
+      {
+        "emotion": "EXCITED",
+        "action": "WINK",
+        "pan": 70,
+        "tilt": 60,
+        "delay": 500
+      },
+      {
+        "emotion": "HAPPY",
+        "action": "TWIRL",
+        "pan": 90,
+        "tilt": 80,
+        "delay": 700
+      }
+    ]
   }
 }

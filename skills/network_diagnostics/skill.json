@@ -1,0 +1,13 @@
+{
+  "id": "network_diagnostics",
+  "name": "局域网与网络体检",
+  "version": "1.0.0",
+  "author": "Geek Toolkit",
+  "category": "极客工具",
+  "description": "诊断树莓派与当前家庭网络质量、WiFi 信号、内网 IP 地址及外网延迟。",
+  "parameters": {},
+  "default_behavior": {
+    "emotion": "NORMAL",
+    "action": "NOD"
+  }
+}

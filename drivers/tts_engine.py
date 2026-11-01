@@ -3,6 +3,7 @@ import time
 import asyncio
 import subprocess
 import requests
+import base64
 
 try:
     import pygame
@@ -18,15 +19,30 @@ except ImportError:
 class TTSEngine:
     """
     语音合成与毫秒级时长感知适配器。
-    支持 Edge-TTS (微软晓晓/小艺高保真中文女声) 与云端克隆音色 API。
+    支持 小米 MiMo-V2.5-TTS、Edge-TTS (微软晓晓) 与云端克隆音色 API。
     提供精确时长感知与非阻塞异步播放，确保树莓派物理机上动作与语音 100% 毫秒级同步。
     """
 
-    def __init__(self, mode="edge", custom_voice_id="", api_key="", default_voice="zh-CN-XiaoxiaoNeural"):
+    def __init__(
+        self,
+        mode="edge",
+        custom_voice_id="",
+        api_key="",
+        default_voice="zh-CN-XiaoxiaoNeural",
+        mimo_api_key="",
+        mimo_voice="冰糖",
+        mimo_clone_audio="",
+        mimo_design_prompt=""
+    ):
         self.mode = mode
         self.custom_voice_id = custom_voice_id
         self.api_key = api_key
         self.default_voice = default_voice
+        self.mimo_api_key = mimo_api_key
+        self.mimo_voice = mimo_voice
+        self.mimo_clone_audio = mimo_clone_audio
+        self.mimo_design_prompt = mimo_design_prompt
+        self._clone_audio_b64 = None
         self.audio_available = False
 
         self._start_time = 0
@@ -77,15 +93,20 @@ class TTSEngine:
         if not text:
             return ("", 0.0)
 
-        voice = voice or self.default_voice
-
-        # 分支 1: 自定义克隆音色
-        if self.mode == "custom" and self.api_key and self.custom_voice_id:
+        # 分支 1: 小米 MiMo-V2.5-TTS
+        if self.mode == "mimo" and self.mimo_api_key:
+            success = self._mimo_tts(text, out_file, voice)
+            if not success:
+                self._edge_fallback(text, out_file, self.default_voice)
+        # 分支 2: 自定义克隆音色 (如 Fish Audio)
+        elif self.mode == "custom" and self.api_key and self.custom_voice_id:
+            voice = voice or self.default_voice
             success = self._custom_tts(text, out_file)
             if not success:
                 self._edge_fallback(text, out_file, voice)
         else:
-            # 分支 2: Edge-TTS
+            # 分支 3: Edge-TTS
+            voice = voice or self.default_voice
             self._edge_fallback(text, out_file, voice)
 
         duration = self.get_audio_duration(out_file, text)
@@ -131,6 +152,80 @@ class TTSEngine:
         self.play_async(path, dur)
         while self.is_playing():
             time.sleep(0.05)
+
+    def _mimo_tts(self, text: str, path: str, voice: str = None) -> bool:
+        """
+        调用小米 MiMo-V2.5-TTS 语音大模型套件:
+        1. 声音克隆 (mimo-v2.5-tts-voiceclone): 当配置了 mimo_clone_audio 参考音频文件时
+        2. 音色设计 (mimo-v2.5-tts-voicedesign): 当配置了 mimo_design_prompt 描述词时
+        3. 预置音色 (mimo-v2.5-tts): 默认模式，可选音色: 冰糖, 茉莉, 苏打, 白桦等
+        """
+        if not self.mimo_api_key:
+            return False
+        try:
+            url = "https://api.xiaomimimo.com/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {self.mimo_api_key}",
+                "Content-Type": "application/json"
+            }
+
+            # 判定子模型与参数
+            clone_path = self.mimo_clone_audio
+            if clone_path and not os.path.exists(clone_path):
+                proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+                cand = os.path.join(proj_root, clone_path)
+                if os.path.exists(cand):
+                    clone_path = cand
+
+            if clone_path and os.path.exists(clone_path):
+                model = "mimo-v2.5-tts-voiceclone"
+                user_prompt = "亲切、自然、真实的对话语气"
+                # 读取并缓存克隆参考音频的 base64
+                if self._clone_audio_b64 is None:
+                    with open(clone_path, "rb") as f:
+                        ext = os.path.splitext(clone_path)[1].lower().replace(".", "") or "mp3"
+                        mime = "audio/wav" if ext == "wav" else "audio/mp3"
+                        b64_str = base64.b64encode(f.read()).decode("utf-8")
+                        self._clone_audio_b64 = f"data:{mime};base64,{b64_str}"
+                audio_voice = self._clone_audio_b64
+            elif self.mimo_design_prompt:
+                model = "mimo-v2.5-tts-voicedesign"
+                user_prompt = self.mimo_design_prompt
+                audio_voice = None
+            else:
+                model = "mimo-v2.5-tts"
+                user_prompt = "自然、亲切、生动的日常对话语气"
+                audio_voice = voice or self.mimo_voice or "冰糖"
+
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "user", "content": user_prompt},
+                    {"role": "assistant", "content": text}
+                ],
+                "audio": {
+                    "format": "mp3"
+                }
+            }
+            if audio_voice is not None:
+                payload["audio"]["voice"] = audio_voice
+
+            res = requests.post(url, json=payload, headers=headers, timeout=20)
+            if res.status_code == 200:
+                data = res.json()
+                msg = data.get("choices", [{}])[0].get("message", {})
+                audio_info = msg.get("audio", {})
+                b64_data = audio_info.get("data", "")
+                if b64_data:
+                    audio_bytes = base64.b64decode(b64_data)
+                    with open(path, "wb") as f:
+                        f.write(audio_bytes)
+                    return True
+            print(f"⚠️ [TTS] 小米 MiMo 调用异常 ({res.status_code}): {res.text[:200]}")
+            return False
+        except Exception as e:
+            print(f"⚠️ [TTS] 小米 MiMo 请求失败: {e}")
+            return False
 
     def _custom_tts(self, text: str, path: str) -> bool:
         try:

@@ -1,0 +1,19 @@
+{
+  "id": "pet_tamagotchi",
+  "name": "电子小猪萌宠养成",
+  "version": "1.0.0",
+  "author": "Virtual Pet Lab",
+  "category": "娱乐互动",
+  "description": "虚拟投喂零食、摸摸肚子和头顶，积累好感度与饱食度，解锁专属隐藏动画。",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "互动操作，如 '摸头', '挠痒痒', '喂西瓜', '喂苹果'",
+      "default": "摸头"
+    }
+  },
+  "default_behavior": {
+    "emotion": "LOVE",
+    "action": "NOD"
+  }
+}

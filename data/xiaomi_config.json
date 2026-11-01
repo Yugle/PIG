@@ -3,11 +3,23 @@
   "cloud": {
     "enabled": true,
     "userId": "884276197",
-    "serviceToken": "xJr1VonfgtnD99CgiWuVAilY+ts/ppa+7pMwvl5Y2O5gBK3ccDlauhCUXpdsZoQHqknM+tskUSV95apOxisDjiuhTqPd1fIEv1Sc9/5pHptRltbjkul8nnhIA7pOEtmIhrQpF4k7GUVMIDAjmxce8ODJkJxZAzlmZb4DSjxuJnc=",
-    "ssecurity": "0QZICAZomnrH89P1lNTawg==",
+    "serviceToken": "YWGB4tMcpj8NQPtUalZ6zy9JbSFPTHC6kjX+alQfkmfGwz872PZagFlFiW82UQOtD0etpVkwSvJyPnG5cEYAtOmGMPz+CuwiQm8mQgR4ZVXUm6MIyL4J/m02I6sRsLIvpkCBl1chHkX3hMox0DCrOh6MQxyTxE89W++6bv0xRuA=",
+    "ssecurity": "B3mSgHpItgurHC6AyIim0Q==",
     "country": "cn"
   },
   "lan_devices": {
+    "小米手环8 NFC版": {
+      "name": "小米手环8 NFC版",
+      "did": "689624840",
+      "mac": "D0:62:2C:D1:8E:6C",
+      "ip": "",
+      "token": "81c06835d249568638b041575cadd912",
+      "model": "miwear.watch.m66nfc",
+      "aliases": [
+        "小米手环8 NFC版"
+      ],
+      "spec_type": null
+    },
     "台灯": {
       "name": "米家台灯1S增强版 耀夜黑",
       "did": "749743837",
@@ -20,7 +32,8 @@
         "台灯",
         "米家台灯",
         "灯"
-      ]
+      ],
+      "spec_type": "urn:miot-spec-v2:device:light:0000A001:yeelink-lamp28:1"
     },
     "水壶": {
       "name": "米家恒温电水壶2 Pro",
@@ -34,7 +47,8 @@
         "水壶",
         "电水壶",
         "烧水壶"
-      ]
+      ],
+      "spec_type": "urn:miot-spec-v2:device:kettle:0000A009:yunmi-v19:2"
     },
     "小米手环6 NFC版": {
       "name": "小米手环6 NFC版",
@@ -45,7 +59,8 @@
       "model": "hmpace.motion.v6nfc",
       "aliases": [
         "小米手环6 NFC版"
-      ]
+      ],
+      "spec_type": null
     },
     "电视盒子": {
       "name": "胖虎的电视盒子",
@@ -58,7 +73,8 @@
         "胖虎的电视盒子",
         "电视盒子",
         "电视"
-      ]
+      ],
+      "spec_type": "urn:miot-spec-v2:device:tv-box:0000A020:xiaomi-v1:2"
     },
     "摄像机": {
       "name": "小白智能摄像机Y2 云台尊享版",
@@ -72,7 +88,8 @@
         "摄像机",
         "摄像头",
         "监控"
-      ]
+      ],
+      "spec_type": "urn:miot-spec-v2:device:camera:0000A01C:chuangmi-038a02:1"
     },
     "饮水机": {
       "name": "米家智能宠物饮水机",
@@ -86,18 +103,8 @@
         "饮水机",
         "宠物饮水机",
         "猫咪饮水机"
-      ]
-    },
-    "小米手环8 NFC版": {
-      "name": "小米手环8 NFC版",
-      "did": "738711479",
-      "mac": "D0:62:2C:1E:E8:D9",
-      "ip": "",
-      "token": "6cac544fcfa5a14b7da8130ccdc17c08",
-      "model": "miwear.watch.m66nfc",
-      "aliases": [
-        "小米手环8 NFC版"
-      ]
+      ],
+      "spec_type": "urn:miot-spec-v2:device:pet-drinking-fountain:0000A067:mmgg-s1:1"
     }
   }
 }

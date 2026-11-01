@@ -106,16 +106,52 @@ class MemoryManager:
             if fact not in self.long_term_data["facts"]:
                 self.long_term_data["facts"].append(fact)
 
-        # 限制长期事实最多 15 条最相关的
-        if len(self.long_term_data["facts"]) > 15:
-            self.long_term_data["facts"] = self.long_term_data["facts"][-15:]
+        # 限制长期事实库最多持久化 30 条核心画像
+        if len(self.long_term_data["facts"]) > 30:
+            self.long_term_data["facts"] = self.long_term_data["facts"][-30:]
 
-    def build_prompt_with_memory(self, base_system_prompt: str) -> str:
-        """将长期记忆档案注入到系统提示词中"""
+    def get_relevant_facts(self, query: str = "", max_facts: int = 5) -> list:
+        """
+        基于当前用户表达，轻量打分筛选 Top-K 最相关的长期事实与偏好，
+        避免所有事实盲目塞入 Prompt 导致注意力涣散与 Token 浪费。
+        """
+        all_facts = self.long_term_data.get("facts", [])
+        if not all_facts:
+            return []
+        if len(all_facts) <= max_facts or not query:
+            return all_facts[-max_facts:]
+
+        scored = []
+        q_lower = query.lower()
+        q_chars = set(q_lower)
+
+        for idx, fact in enumerate(all_facts):
+            f_clean = fact.lower()
+            score = 0.0
+
+            # 核心喜好实体词命中（权重最高）
+            for prefix in ["喜欢", "讨厌", "爱", "职业是", "是个", "做"]:
+                core_val = f_clean.replace(prefix, "")
+                if core_val and core_val in q_lower:
+                    score += 6.0
+
+            # 字符交集打分
+            overlap = len(set(f_clean) & q_chars)
+            score += overlap
+
+            # 越靠近当下的记忆附带微小时效分加权
+            score += (idx / len(all_facts)) * 0.5
+            scored.append((score, idx, fact))
+
+        scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        return [item[2] for item in scored[:max_facts]]
+
+    def build_prompt_with_memory(self, base_system_prompt: str, user_text: str = "") -> str:
+        """将检索后的最相关长期记忆档案注入到系统提示词中"""
         user_name = self.long_term_data.get("user_name", "主人")
         intimacy = self.long_term_data.get("intimacy_level", 1)
         count = self.long_term_data.get("interaction_count", 0)
-        facts = self.long_term_data.get("facts", [])
+        facts = self.get_relevant_facts(user_text, max_facts=5)
 
         facts_str = "、".join(facts) if facts else "暂无特殊喜好记录"
 
@@ -124,14 +160,14 @@ class MemoryManager:
 【伴侣记忆中枢与主人档案】
 - 主人称呼：{user_name} (请自然称呼主人)
 - 亲密指数：Lv.{intimacy} (总互动已达 {count} 次)
-- 已知喜好与事实：{facts_str}
+- 当前关联偏好与事实：{facts_str}
 - 记忆原则：请自然融入这些记忆，如果主人之前聊过某件事，在回答时要表现出连贯的记忆感和默契！
 """
         return base_system_prompt + memory_section
 
     def get_messages_for_llm(self, user_text: str, base_system_prompt: str) -> list:
         """组装完整的 [System + 短期历史 + 当前用户输入] 消息链"""
-        augmented_sys = self.build_prompt_with_memory(base_system_prompt)
+        augmented_sys = self.build_prompt_with_memory(base_system_prompt, user_text=user_text)
         messages = [{"role": "system", "content": augmented_sys}]
 
         # 附带短期滑动窗口对话

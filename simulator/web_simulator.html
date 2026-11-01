@@ -453,6 +453,14 @@
     .chat-input-bar button:hover {
       background: #33ebff;
     }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .cursor-blink {
+      animation: blink 0.8s infinite;
+    }
   </style>
 
   <!-- 引入 Three.js 3D 渲染库 -->
@@ -466,7 +474,19 @@
       🤖 桌面具身 AI 伴侣机器人
       <span class="badge">Sim-to-Real 3D 仿真工作台</span>
     </div>
-    <div style="display: flex; align-items: center; gap: 14px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <!-- 双模切换开关 -->
+      <div id="mode-badge" onclick="toggleRunMode()" style="cursor:pointer; font-size: 0.78rem; background: rgba(0, 229, 255, 0.08); border: 1px solid var(--cyan); padding: 4px 10px; border-radius: 12px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;" title="点击切换：真机数字孪生模式 / 纯网页仿真模式">
+        <span style="color:var(--text-sub);">模式:</span>
+        <span id="mode-name" style="color: var(--cyan); font-weight: 600;">🤖 孪生真机</span>
+      </div>
+
+      <!-- 硬件/麦克风状态指示器 -->
+      <div id="hw-badge" style="font-size: 0.78rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 12px; color: var(--text-sub); display: flex; align-items: center; gap: 6px;" title="物理蓝牙/USB麦克风与硬件连通状态">
+        <div id="hw-dot" class="status-dot"></div>
+        <span id="hw-status-label">🎙️ 硬件检测中...</span>
+      </div>
+
       <div id="memory-badge" style="font-size: 0.78rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 12px; color: var(--text-sub); display: flex; align-items: center; gap: 6px;">
         <span>🧠 伴侣记忆:</span>
         <span id="mem-name" style="color: var(--cyan); font-weight: 600;">主人</span>
@@ -1128,6 +1148,10 @@
     let thinkingInterval = null;
 
     function triggerThinkingCadence() {
+      if (typeof afterglowTimer !== "undefined" && afterglowTimer) {
+        clearTimeout(afterglowTimer);
+        afterglowTimer = null;
+      }
       recordUserAction();
       isThinking = true;
       playChirp("thinking_hum");
@@ -1345,9 +1369,14 @@
     let currentAudio = null;
     let isSpeaking = false;
     let speechTimer = null;
+    let afterglowTimer = null;
 
     function startSpeakingChoreography(durationMs, behaviors) {
       if (speechTimer) clearTimeout(speechTimer);
+      if (afterglowTimer) {
+        clearTimeout(afterglowTimer);
+        afterglowTimer = null;
+      }
       stopActionSequence();
 
       isSpeaking = true;
@@ -1388,7 +1417,7 @@
       // 启动动作序列
       runActionSequence();
 
-      // 安全兜底定时器：语音播完后复位
+      // 安全兜底定时器：语音播完后进入余韵与倾听时序
       speechTimer = setTimeout(() => {
         stopSpeakingChoreography();
       }, durationMs + 250);
@@ -1401,11 +1430,30 @@
         clearTimeout(speechTimer);
         speechTimer = null;
       }
+      if (afterglowTimer) {
+        clearTimeout(afterglowTimer);
+        afterglowTimer = null;
+      }
 
       stopActionSequence();
-      document.getElementById("overlay-action").innerText = "待机 (IDLE)";
-      setEmotion("NORMAL");
-      updateAngles(90, 90);
+
+      // 阶段 1: 话音刚落，进入“专注倾听与情感余韵” (Afterglow Stance)
+      // 保持当前动作姿态与脸部情感注视主人，绝不机械面瘫秒归位
+      document.getElementById("overlay-action").innerText = "👂 倾听注视与情感余韵 (AFTERGLOW)...";
+      lastInteractionTime = Date.now();
+
+      // 阶段 2: 保持 2.0 秒后，自然眨眼闭目瞬间平滑淡出回日常待机
+      afterglowTimer = setTimeout(() => {
+        if (!isSpeaking && !isThinking) {
+          triggerBlink();
+          setTimeout(() => {
+            setEmotion("NORMAL");
+            updateAngles(90, 90);
+            document.getElementById("overlay-action").innerText = "待机 (IDLE)";
+          }, 100);
+        }
+        afterglowTimer = null;
+      }, 2000);
     }
 
     // 播放语音并与动作进行毫秒级锁频同步
@@ -1524,6 +1572,121 @@
       }
     }
 
+    // ==========================================
+    // 2.4 极速低延迟流式语音队列播放器 (AudioChunkQueue)
+    // ==========================================
+    class StreamingAudioPlayer {
+      constructor() {
+        this.queue = [];
+        this.isPlaying = false;
+        this.currentAudio = null;
+        this.onChunkStart = null;
+        this.onAllFinished = null;
+        this.streamEnded = false;
+      }
+
+      reset() {
+        this.stop();
+        this.queue = [];
+        this.isPlaying = false;
+        this.streamEnded = false;
+      }
+
+      stop() {
+        if (this.currentAudio) {
+          try {
+            this.currentAudio.pause();
+          } catch (e) {}
+          this.currentAudio = null;
+        }
+        this.isPlaying = false;
+      }
+
+      enqueue(base64Audio, text, seq) {
+        if (!base64Audio) return;
+        this.queue.push({ base64: base64Audio, text: text, seq: seq });
+        if (!this.isPlaying) {
+          this._playNext();
+        }
+      }
+
+      markStreamDone() {
+        this.streamEnded = true;
+        if (!this.isPlaying && this.queue.length === 0) {
+          if (this.onAllFinished) this.onAllFinished();
+        }
+      }
+
+      _playNext() {
+        if (this.queue.length === 0) {
+          this.isPlaying = false;
+          this.currentAudio = null;
+          if (this.streamEnded) {
+            if (this.onAllFinished) this.onAllFinished();
+          }
+          return;
+        }
+
+        this.isPlaying = true;
+        const item = this.queue.shift();
+        const audioUrl = "data:audio/mp3;base64," + item.base64;
+        const audio = new Audio(audioUrl);
+        this.currentAudio = audio;
+
+        let hasStarted = false;
+        audio.oncanplay = () => {
+          if (!hasStarted) {
+            hasStarted = true;
+            const durMs = (audio.duration && !isNaN(audio.duration) && audio.duration > 0)
+              ? (audio.duration * 1000)
+              : Math.max(1200, item.text.length * 220);
+            if (this.onChunkStart) {
+              this.onChunkStart(item.text, durMs, item.seq);
+            }
+          }
+        };
+
+        audio.onended = () => {
+          this._playNext();
+        };
+
+        audio.onerror = (e) => {
+          console.warn("音频分片解码或播放异常，跳到下一句:", e);
+          this._playNext();
+        };
+
+        audio.play().catch(e => {
+          console.warn("音频分片自动播放拦截或错误:", e);
+          this._playNext();
+        });
+      }
+    }
+
+    const streamingPlayer = new StreamingAudioPlayer();
+
+    function startChunkSpeakingChoreography(chunkText, durationMs, behaviors) {
+      if (speechTimer) clearTimeout(speechTimer);
+      if (afterglowTimer) {
+        clearTimeout(afterglowTimer);
+        afterglowTimer = null;
+      }
+      isSpeaking = true;
+      document.getElementById("overlay-action").innerText = "🗣️ 语音流式播报中...";
+
+      let b = (behaviors && behaviors.length > 0) ? behaviors[0] : { emotion: "HAPPY", action: "NOD", pan: 90, tilt: 85 };
+      setEmotion(b.emotion || "HAPPY");
+
+      const pan = b.pan !== undefined ? b.pan : 90;
+      const tilt = b.tilt !== undefined ? b.tilt : 85;
+
+      actionSequence = [
+        { pan: pan, tilt: Math.max(70, tilt - 5), emotion: b.emotion || "HAPPY", delay: 180 },
+        { pan: pan, tilt: Math.min(105, tilt + 5), emotion: b.emotion || "HAPPY", delay: 180 },
+        { pan: pan, tilt: tilt, emotion: b.emotion || "HAPPY", delay: Math.max(200, durationMs - 360) }
+      ];
+      runActionSequence();
+    }
+
     async function sendChat() {
       const input = document.getElementById("chatInput");
       const text = input.value.trim();
@@ -1538,7 +1701,7 @@
 
       const botDiv = document.createElement("div");
       botDiv.className = "msg bot";
-      botDiv.innerText = "💭 商汤日日新大模型正在思考...";
+      botDiv.innerHTML = '<span style="color:var(--text-sub);">💭 具身大脑实时思考中...</span>';
       chatLogs.appendChild(botDiv);
       chatLogs.scrollTop = chatLogs.scrollHeight;
 
@@ -1551,45 +1714,155 @@
 
       // P0: 触发零延迟即时垫音与好奇歪头思考时序 (Thinking Cadence)
       triggerThinkingCadence();
+      streamingPlayer.reset();
+
+      let accumulatedReply = "";
+      let toolStepsHtml = "";
+      let finalBehaviors = [];
+      let hasReceivedAudio = false;
+
+      streamingPlayer.onChunkStart = (chunkText, durationMs, seq) => {
+        stopThinkingCadence();
+        startChunkSpeakingChoreography(chunkText, durationMs, finalBehaviors);
+      };
+
+      streamingPlayer.onAllFinished = () => {
+        stopSpeakingChoreography();
+      };
 
       try {
-        const resp = await fetch("/api/chat", {
+        const resp = await fetch("/api/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: text })
         });
-        const res = await resp.json();
-        stopThinkingCadence();
 
-        // P2: 根据回复情绪播放对应萌音
-        if (res.behaviors && res.behaviors.length > 0) {
-          const emo = res.behaviors[0].emotion;
-          if (["HAPPY", "LOVE", "WINK"].includes(emo)) playChirp("happy_chirp");
-          else if (["CONFUSED", "THINKING"].includes(emo)) playChirp("confused_boop");
-          else if (["SURPRISED", "ANGRY"].includes(emo)) playChirp("surprise_squeak");
+        if (!resp.ok || !resp.body) {
+          throw new Error(`Stream HTTP error status: ${resp.status}`);
         }
 
-        let contentHtml = "";
-        if (res.steps && res.steps.length > 0) {
-          const actionSteps = res.steps.filter(s => s.action);
-          if (actionSteps.length > 0) {
-            const stepChain = actionSteps.map(s => `⚡ ${s.action}`).join(" ➔ ");
-            contentHtml += `<div style="font-size:0.7rem; color:var(--cyan); margin-bottom:6px; background:rgba(0, 229, 255, 0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(0, 229, 255, 0.2);">🧠 ReAct 多步推理 (${res.steps.length} 轮): ${stepChain}</div>`;
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split("\n\n");
+          buffer = blocks.pop(); // 保持未闭合的分片
+
+          for (const block of blocks) {
+            const trimmed = block.trim();
+            if (!trimmed.startsWith("data: ")) continue;
+            const jsonStr = trimmed.slice(6);
+            if (!jsonStr) continue;
+
+            let ev;
+            try {
+              ev = JSON.parse(jsonStr);
+            } catch (e) {
+              continue;
+            }
+
+            if (ev.type === "tool_start") {
+              stopThinkingCadence();
+              toolStepsHtml += `<div style="font-size:0.72rem; color:var(--cyan); margin-bottom:4px; background:rgba(0, 229, 255, 0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(0, 229, 255, 0.2);">⚡ 正在调用技能: <b>${ev.name || "工具"}</b>...</div>`;
+              botDiv.innerHTML = `${toolStepsHtml}<div style="color:var(--text-sub); font-size:0.75rem;">正在与物理环境/智能硬件交互...</div>`;
+              chatLogs.scrollTop = chatLogs.scrollHeight;
+            } else if (ev.type === "observation") {
+              toolStepsHtml += `<div style="font-size:0.7rem; color:#7ee787; margin-bottom:4px; background:rgba(126, 231, 135, 0.08); padding:2px 8px; border-radius:4px; border:1px solid rgba(126, 231, 135, 0.2);">✔️ [${ev.name || "观察反馈"}]: 执行完成</div>`;
+              botDiv.innerHTML = `${toolStepsHtml}`;
+              chatLogs.scrollTop = chatLogs.scrollHeight;
+            } else if (ev.type === "chunk") {
+              stopThinkingCadence();
+              accumulatedReply += ev.text;
+              botDiv.innerHTML = `${toolStepsHtml}<div>${formatMarkdown(accumulatedReply)}<span class="cursor-blink" style="display:inline-block; width:6px; height:12px; background:var(--cyan); margin-left:3px; vertical-align:middle;"></span></div>`;
+              chatLogs.scrollTop = chatLogs.scrollHeight;
+
+              if (ev.audio) {
+                hasReceivedAudio = true;
+                streamingPlayer.enqueue(ev.audio, ev.text, ev.seq);
+              }
+            } else if (ev.type === "done") {
+              stopThinkingCadence();
+              finalBehaviors = ev.behaviors || [];
+
+              if (finalBehaviors.length > 0) {
+                const emo = finalBehaviors[0].emotion;
+                if (["HAPPY", "LOVE", "WINK"].includes(emo)) playChirp("happy_chirp");
+                else if (["CONFUSED", "THINKING"].includes(emo)) playChirp("confused_boop");
+                else if (["SURPRISED", "ANGRY"].includes(emo)) playChirp("surprise_squeak");
+              }
+
+              let summaryHtml = "";
+              if (ev.steps && ev.steps.length > 0) {
+                const actionSteps = ev.steps.filter(s => s.action);
+                if (actionSteps.length > 0) {
+                  const stepChain = actionSteps.map(s => `⚡ ${s.action}`).join(" ➔ ");
+                  summaryHtml = `<div style="font-size:0.7rem; color:var(--cyan); margin-bottom:6px; background:rgba(0, 229, 255, 0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(0, 229, 255, 0.2);">🧠 ReAct 多步推理 (${ev.steps.length} 轮): ${stepChain}</div>`;
+                }
+              }
+
+              const displayReply = ev.reply || accumulatedReply || "收到啦！";
+              botDiv.innerHTML = `${summaryHtml}<div>${formatMarkdown(displayReply)}</div>`;
+              chatLogs.scrollTop = chatLogs.scrollHeight;
+
+              streamingPlayer.markStreamDone();
+
+              if (!hasReceivedAudio) {
+                speakAndSync(displayReply, finalBehaviors);
+              }
+
+              updateMemoryBadge();
+              fetchReminders();
+              fetchEvolvedActions();
+            } else if (ev.type === "error") {
+              stopThinkingCadence();
+              botDiv.innerHTML = `<div style="color:#f85149;">⚠️ 具身大脑交互异常: ${ev.message || "未知错误"}</div>`;
+            }
           }
         }
-        contentHtml += `<div>${formatMarkdown(res.reply || "收到啦！")}</div>`;
-        botDiv.innerHTML = contentHtml;
-        chatLogs.scrollTop = chatLogs.scrollHeight;
-
-        // 启动音画毫秒级强同步时序控制
-        speakAndSync(res.reply, res.behaviors || []);
-        updateMemoryBadge();
-        fetchReminders();
-        fetchEvolvedActions();
       } catch (err) {
-        stopThinkingCadence();
-        botDiv.innerText = "网络异常，未能连接到大模型。";
-        console.error(err);
+        console.warn("流式通道异常，平滑降级至阻塞式请求:", err);
+        try {
+          const resp = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: text })
+          });
+          const res = await resp.json();
+          stopThinkingCadence();
+
+          if (res.behaviors && res.behaviors.length > 0) {
+            const emo = res.behaviors[0].emotion;
+            if (["HAPPY", "LOVE", "WINK"].includes(emo)) playChirp("happy_chirp");
+            else if (["CONFUSED", "THINKING"].includes(emo)) playChirp("confused_boop");
+            else if (["SURPRISED", "ANGRY"].includes(emo)) playChirp("surprise_squeak");
+          }
+
+          let contentHtml = "";
+          if (res.steps && res.steps.length > 0) {
+            const actionSteps = res.steps.filter(s => s.action);
+            if (actionSteps.length > 0) {
+              const stepChain = actionSteps.map(s => `⚡ ${s.action}`).join(" ➔ ");
+              contentHtml += `<div style="font-size:0.7rem; color:var(--cyan); margin-bottom:6px; background:rgba(0, 229, 255, 0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(0, 229, 255, 0.2);">🧠 ReAct 多步推理 (${res.steps.length} 轮): ${stepChain}</div>`;
+            }
+          }
+          contentHtml += `<div>${formatMarkdown(res.reply || "收到啦！")}</div>`;
+          botDiv.innerHTML = contentHtml;
+          chatLogs.scrollTop = chatLogs.scrollHeight;
+
+          speakAndSync(res.reply, res.behaviors || []);
+          updateMemoryBadge();
+          fetchReminders();
+          fetchEvolvedActions();
+        } catch (fallbackErr) {
+          stopThinkingCadence();
+          botDiv.innerText = "网络异常，未能连接到大模型。";
+          console.error(fallbackErr);
+        }
       } finally {
         const pill = document.getElementById("chatStatusPill");
         if (pill) {
@@ -1872,6 +2145,205 @@
 
     setInterval(fetchCircadianAndReflection, 5000);
     fetchCircadianAndReflection();
+
+    // ==========================================
+    // 2.9 🤖 真机与虚实数字孪生实时同步引擎 (Digital Twin SSE)
+    // ==========================================
+    let currentRunMode = "twin";
+    let twinEventSource = null;
+    let currentTwinBotDiv = null;
+    let accumulatedTwinReply = "";
+
+    function initDigitalTwinSync() {
+      if (twinEventSource) {
+        try { twinEventSource.close(); } catch (e) {}
+      }
+
+      twinEventSource = new EventSource("/api/agent/events");
+
+      twinEventSource.onmessage = (event) => {
+        try {
+          const ev = JSON.parse(event.data);
+          handleDigitalTwinEvent(ev);
+        } catch (e) {}
+      };
+
+      twinEventSource.onerror = () => {
+        setTimeout(initDigitalTwinSync, 4000);
+      };
+    }
+
+    function handleDigitalTwinEvent(ev) {
+      if (!ev || !ev.type) return;
+
+      if (ev.type === "connected" || ev.type === "init") {
+        if (ev.status) updateHardwareStatusUI(ev.status);
+        return;
+      }
+
+      if (ev.type === "mode_changed") {
+        updateHardwareStatusUI(ev);
+        return;
+      }
+
+      if (ev.type === "status_change") {
+        const pill = document.getElementById("chatStatusPill");
+        const hwLabel = document.getElementById("hw-status-label");
+        const hwDot = document.getElementById("hw-dot");
+
+        if (ev.status === "WAKING") {
+          if (pill) {
+            pill.innerText = `🔔 唤醒: ${ev.wake_word || 'Hey Jarvis'}`;
+            pill.style.color = "#ffb020";
+            pill.style.borderColor = "#ffb020";
+          }
+          if (hwLabel) hwLabel.innerText = `🔔 已唤醒: ${ev.wake_word || 'Hey Jarvis'}`;
+          if (hwDot) hwDot.style.background = "#ffb020";
+          triggerBlink();
+        } else if (ev.status === "LISTENING") {
+          if (pill) {
+            pill.innerText = "🎙️ 正在收音倾听...";
+            pill.style.color = "#00e5ff";
+            pill.style.borderColor = "rgba(0, 229, 255, 0.4)";
+          }
+          if (hwLabel) hwLabel.innerText = "🎙️ 正在收音 (说话中)...";
+          if (hwDot) hwDot.style.background = "#00e5ff";
+        } else if (ev.status === "THINKING") {
+          if (pill) {
+            pill.innerText = "🤔 思考推演中...";
+            pill.style.color = "#00e5ff";
+            pill.style.borderColor = "rgba(0, 229, 255, 0.4)";
+          }
+          if (hwLabel) hwLabel.innerText = "🤔 思考推演中...";
+          if (hwDot) hwDot.style.background = "#00e5ff";
+          triggerThinkingCadence();
+        } else if (ev.status === "AFTERGLOW") {
+          if (pill) {
+            pill.innerText = "👂 倾听注视余韵...";
+            pill.style.color = "#7ee787";
+          }
+          if (hwLabel) hwLabel.innerText = "👂 倾听注视余韵...";
+        } else if (ev.status === "IDLE") {
+          if (pill) {
+            pill.innerText = "就绪 (Online)";
+            pill.style.color = "#7ee787";
+            pill.style.borderColor = "#238636";
+          }
+          fetchHardwareStatus();
+        }
+      } else if (ev.type === "user_spoken") {
+        stopThinkingCadence();
+        const chatLogs = document.getElementById("chatLogs");
+        if (chatLogs) {
+          const userDiv = document.createElement("div");
+          userDiv.className = "msg user";
+          userDiv.innerHTML = `<span>🎙️ <b>[物理麦克风]</b> ${formatMarkdown(ev.text)}</span>`;
+          chatLogs.appendChild(userDiv);
+
+          currentTwinBotDiv = document.createElement("div");
+          currentTwinBotDiv.className = "msg bot";
+          currentTwinBotDiv.innerHTML = '<span style="color:var(--text-sub);">💭 正在规划动作与生成答复...</span>';
+          chatLogs.appendChild(currentTwinBotDiv);
+          chatLogs.scrollTop = chatLogs.scrollHeight;
+        }
+        accumulatedTwinReply = "";
+        streamingPlayer.reset();
+      } else if (ev.type === "pose_sync") {
+        if (ev.pan !== undefined && ev.tilt !== undefined) {
+          updateAngles(ev.pan, ev.tilt);
+        }
+        if (ev.emotion) {
+          setEmotion(ev.emotion);
+        }
+      } else if (ev.type === "robot_chunk") {
+        stopThinkingCadence();
+        accumulatedTwinReply += ev.text;
+        if (currentTwinBotDiv) {
+          currentTwinBotDiv.innerHTML = `<div>${formatMarkdown(accumulatedTwinReply)}<span class="cursor-blink" style="display:inline-block; width:6px; height:12px; background:var(--cyan); margin-left:3px; vertical-align:middle;"></span></div>`;
+          const chatLogs = document.getElementById("chatLogs");
+          if (chatLogs) chatLogs.scrollTop = chatLogs.scrollHeight;
+        }
+        if (ev.audio) {
+          streamingPlayer.enqueue(ev.audio, ev.text, ev.seq);
+        }
+      } else if (ev.type === "done") {
+        stopThinkingCadence();
+        if (currentTwinBotDiv) {
+          let summaryHtml = "";
+          if (ev.steps && ev.steps.length > 0) {
+            const actionSteps = ev.steps.filter(s => s.action);
+            if (actionSteps.length > 0) {
+              const stepChain = actionSteps.map(s => `⚡ ${s.action}`).join(" ➔ ");
+              summaryHtml = `<div style="font-size:0.7rem; color:var(--cyan); margin-bottom:6px; background:rgba(0, 229, 255, 0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(0, 229, 255, 0.2);">🧠 ReAct 多步推理 (${ev.steps.length} 轮): ${stepChain}</div>`;
+            }
+          }
+          const displayReply = ev.reply || accumulatedTwinReply || "收到啦！";
+          currentTwinBotDiv.innerHTML = `${summaryHtml}<div>${formatMarkdown(displayReply)}</div>`;
+          const chatLogs = document.getElementById("chatLogs");
+          if (chatLogs) chatLogs.scrollTop = chatLogs.scrollHeight;
+        }
+        streamingPlayer.markStreamDone();
+        updateMemoryBadge();
+        fetchReminders();
+        fetchEvolvedActions();
+      }
+    }
+
+    async function fetchHardwareStatus() {
+      try {
+        const resp = await fetch("/api/system/mode");
+        if (resp.ok) {
+          const data = await resp.json();
+          updateHardwareStatusUI(data.hardware_status);
+        }
+      } catch (e) {}
+    }
+
+    function updateHardwareStatusUI(status) {
+      if (!status) return;
+      currentRunMode = status.mode || currentRunMode;
+      const modeName = document.getElementById("mode-name");
+      if (modeName) {
+        modeName.innerText = currentRunMode === "twin" ? "🤖 孪生真机" : "💻 纯网页仿真";
+        modeName.style.color = currentRunMode === "twin" ? "var(--cyan)" : "#ffb020";
+      }
+      const hwLabel = document.getElementById("hw-status-label");
+      const hwDot = document.getElementById("hw-dot");
+      if (hwLabel && hwDot) {
+        if (currentRunMode === "simulation") {
+          hwLabel.innerText = "💻 纯网页仿真 (免硬件)";
+          hwDot.style.background = "#ffb020";
+        } else if (status.has_mic) {
+          hwLabel.innerText = `🎙️ 物理监听 ("${status.wakeword_model || 'hey_jarvis'}")`;
+          hwDot.style.background = "#7ee787";
+        } else {
+          hwLabel.innerText = "🎙️ 物理麦克风未接入 (可插蓝牙/USB麦)";
+          hwDot.style.background = "#8b949e";
+        }
+      }
+    }
+
+    async function toggleRunMode() {
+      const target = currentRunMode === "twin" ? "simulation" : "twin";
+      try {
+        const resp = await fetch("/api/system/mode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: target })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          currentRunMode = data.mode;
+          updateHardwareStatusUI(data.hardware_status);
+        }
+      } catch (e) {
+        console.warn("切换运行模式失败:", e);
+      }
+    }
+
+    // 启动数字孪生 SSE 实时同步
+    initDigitalTwinSync();
+    fetchHardwareStatus();
 
     // ==========================================
     // 3. 麦克风录音与百度 ASR 语音识别
@@ -2320,10 +2792,10 @@
       <div style="padding:16px 20px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
         <div>
           <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); display:flex; align-items:center; gap:8px;">
-            <span>🏪 具身智能体技能应用商店 (Skill Store)</span>
-            <span style="font-size:0.75rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:2px 8px; border-radius:12px;">热插拔 · 零重启 · 纯 Python 契约</span>
+            <span>🌐 开源社区技能市场 & ✨ 伴侣自进化工坊</span>
+            <span style="font-size:0.75rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:2px 8px; border-radius:12px;">社区开源生态 · 大模型现场编程 · 零重启热加载</span>
           </h3>
-          <p style="margin:4px 0 0; font-size:0.78rem; color:var(--text-sub);">点击即可一键将技能下载安装至树莓派 skills/ 目录并动态热加载；支持大模型语音意图自主调用与直接执行。</p>
+          <p style="margin:4px 0 0; font-size:0.78rem; color:var(--text-sub);">公共通用技能可一键下载安装；长尾或私密需求可直接语音对小猪说“帮我新整一个xxx技能”，大模型现场手写代码并热加载为永久本能！</p>
         </div>
         <button onclick="closeSkillStoreModal()" class="btn" style="font-size:1.1rem; padding:4px 10px; cursor:pointer;">✕</button>
       </div>

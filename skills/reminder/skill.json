@@ -1,0 +1,44 @@
+{
+  "id": "reminder",
+  "name": "闹钟与日程提醒",
+  "version": "1.0.0",
+  "author": "Antigravity Lab",
+  "category": "生活助手",
+  "description": "设定闹钟、倒计时定时器、查询正在等待触发的提醒或取消闹钟。支持相对时间倒计时（如'10分钟后提醒我喝水'）和绝对时间闹钟（如'明天08:00叫我起床'）。",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "操作类型：'set_alarm' (设定闹钟), 'set_timer' (设定倒计时), 'cancel' (取消闹钟), 'list' (查看所有闹钟)",
+      "default": "list"
+    },
+    "time_str": {
+      "type": "string",
+      "description": "闹钟的具体时间，如 '08:00', '14:30', '2026-10-31 09:00'",
+      "default": ""
+    },
+    "seconds": {
+      "type": "number",
+      "description": "倒计时的秒数（如 60, 300, 1800）",
+      "default": 0
+    },
+    "content": {
+      "type": "string",
+      "description": "提醒的具体事件内容，如 '喝水', '关火', '起床', '开会'",
+      "default": "日程提醒"
+    },
+    "repeat": {
+      "type": "string",
+      "description": "重复周期：'none' (单次), 'daily' (每天重复)",
+      "default": "none"
+    },
+    "keyword": {
+      "type": "string",
+      "description": "取消提醒时的搜索关键字或ID",
+      "default": ""
+    }
+  },
+  "default_behavior": {
+    "emotion": "HAPPY",
+    "action": "NOD"
+  }
+}

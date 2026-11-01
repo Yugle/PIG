@@ -13,8 +13,11 @@ build/
 config.json
 !config.json.example
 
-# Runtime Memory state
+# Runtime Memory state & User Data
 memory.json
+data/memory.json
+data/miot_specs/
+data/*.png
 
 # Temporary media files
 *.wav

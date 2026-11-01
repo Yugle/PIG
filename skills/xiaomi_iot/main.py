@@ -92,12 +92,17 @@ def run(device="台灯", action="打开", value=""):
         else:
             return f"获取米家扫码二维码失败: {res.get('error', '未知错误')}"
 
-    # 1. 判断是否为「扫描/查询设备列表」意图
-    is_query = any(w in act or w in dev_name for w in ["查", "扫", "看", "列出", "列表", "什么设备", "有哪些", "list", "all", "所有"])
+    # 1. 判断是否为「扫描/查询设备列表」意图 (排除将设备名“扫地机”误判为查询)
+    is_query = (
+        any(w in act for w in ["查", "看", "列出", "列表", "有哪些", "什么设备", "清单", "list"]) or
+        dev_name.lower() in ["all", "所有", "全部", "所有设备", "设备列表", "设备清单"]
+    )
 
     if is_query:
-        # A. 云端模式真实扫描
-        if cloud_cfg.get("enabled") and cloud_cfg.get("username") != "13800000000":
+        if lan_devs:
+            dev_names = list(lan_devs.keys())
+            return f"米家设备扫描完毕！你账号下当前已绑定的设备有：{', '.join(dev_names)}。请问需要我帮你开或关哪一个？"
+        elif cloud_cfg.get("enabled") and cloud_cfg.get("username") and cloud_cfg.get("username") != "13800000000":
             try:
                 from micloud import MiCloud
                 mc = MiCloud(cloud_cfg.get("username"), cloud_cfg.get("password"))
@@ -105,30 +110,13 @@ def run(device="台灯", action="打开", value=""):
                     devs = mc.get_devices(country=cloud_cfg.get("country", "cn"))
                     names = [d.get("name") for d in devs if d.get("name")]
                     if names:
-                        return f"米家真实设备扫描完毕！你账号下当前绑定的设备有：{', '.join(names)}。请问需要我帮你开或关哪一个？"
-                    else:
-                        return "米家账号登录成功，但当前账号下未发现绑定的智能设备。"
-                else:
-                    return "米家云端登录失败，请检查 data/xiaomi_config.json 中的账号和密码是否正确。"
-            except ImportError:
-                return "树莓派尚未安装 micloud 库，安装后即可自动扫描云端设备。"
+                        return f"米家设备扫描完毕！你账号下当前绑定的设备有：{', '.join(names)}。请问需要我帮你开或关哪一个？"
+                    return "米家账号登录成功，但当前账号下未发现绑定的智能设备。"
+                return "米家云端登录失败，请检查 data/xiaomi_config.json 中的账号和密码是否正确。"
             except Exception as e:
                 return f"米家云端扫描出现异常: {e}"
-
-        # B. 局域网模式设备扫描
-        valid_lan = [k for k, v in lan_devs.items() if v.get("token") and "填入" not in v.get("token")]
-        if valid_lan:
-            return f"局域网米家设备扫描完毕！当前已配置的本地设备有：{', '.join(valid_lan)}。需要我帮你控制哪一个？"
-
-        # C. 尚未配置真实凭据，真实如实告知（绝不瞎编幻觉）
-        return (
-            "【米家设备扫描结果】报告主人，当前尚未检测到绑定的真实小米设备！\n"
-            "因为 data/xiaomi_config.json 里的账号和局域网 Token 目前仍为默认初始模板。"
-            "只要在配置文件中填入你的小米账号密码，我就能真正扫出你家里的全部电器啦！"
-        )
-
-    act_lower = act.lower()
-    power_on = any(w in act_lower for w in ["开", "启动", "运行", "亮", "on", "open", "true", "1"])
+        else:
+            return "当前尚未检测到绑定的真实小米设备。请在 Web 工作台点击「📱 米家扫码绑定」完成授权同步！"
 
     # 1. 匹配目标设备
     matched_dev = None
@@ -139,110 +127,113 @@ def run(device="台灯", action="打开", value=""):
             matched_dev = (k, v)
             break
 
-    # 2. 优先尝试：使用扫码授权获取的官方云端凭证 (跨局域网/跨子网 100% 连通)
-    if cloud_cfg.get("enabled") and cloud_cfg.get("serviceToken") and cloud_cfg.get("ssecurity"):
-        if matched_dev:
-            k_name, v_info = matched_dev
-            did = v_info.get("did")
-            if did:
-                try:
-                    try:
-                        from xiaomi_qr_auth import XiaomiQRAuth
-                    except ImportError:
-                        from skills.xiaomi_iot.xiaomi_qr_auth import XiaomiQRAuth
-                    auth = XiaomiQRAuth()
-                    auth.userId = cloud_cfg.get("userId")
-                    auth._serviceToken = cloud_cfg.get("serviceToken")
-                    auth._ssecurity = cloud_cfg.get("ssecurity")
+    if not matched_dev:
+        all_devs = list(lan_devs.keys())
+        dev_list_str = "、".join(all_devs) if all_devs else "暂无"
+        return f"未找到名为【{dev_name}】的小米设备。当前已绑定的设备有：{dev_list_str}。请确认设备名称或先在米家 App 中查看。"
 
-                    # 智能解析 MIoT 物模型高级属性：色温、亮度、水温、开关
-                    import re
-                    payload_params = []
-                    detail_msg = act
-                    combined_str = f"{act} {val}"
+    k_name, v_info = matched_dev
+    did = v_info.get("did")
+    model = v_info.get("model", "")
+    combined_str = f"{act} {val}".strip()
 
-                    # 1. 色温调节 (siid 2, piid 3, 2600K ~ 5000K)
-                    if any(w in combined_str for w in ["色温", "暖光", "黄光", "冷光", "白光", "阅读", "温馨", "护眼", "暖"]):
-                        ct_val = 3000
-                        if any(w in combined_str for w in ["暖", "黄", "温馨", "夜间"]):
-                            ct_val = 2700
-                        elif any(w in combined_str for w in ["冷", "白", "亮白"]):
-                            ct_val = 4800
-                        elif any(w in combined_str for w in ["阅读", "办公", "看书", "护眼"]):
-                            ct_val = 4000
-                        m = re.search(r"(\d{4})", combined_str)
-                        if m:
-                            ct_val = max(2600, min(5000, int(m.group(1))))
-                        payload_params.append({"did": str(did), "siid": 2, "piid": 3, "value": ct_val})
-                        payload_params.append({"did": str(did), "siid": 2, "piid": 1, "value": True})
-                        detail_msg = f"色温调节至 {ct_val}K (暖光模式)" if ct_val < 3500 else f"色温调节至 {ct_val}K"
+    # 2. 动态接入通用 MIoT 物模型驱动引擎 (Universal MIoT Spec Engine)
+    # 不针对单个设备硬编码，全生态设备通过官方物模型自适应调度
+    try:
+        from miot_spec import MiotSpecManager
+    except ImportError:
+        from skills.xiaomi_iot.miot_spec import MiotSpecManager
 
-                    # 2. 亮度调节 (siid 2, piid 2, 1 ~ 100)
-                    elif any(w in combined_str for w in ["亮度", "调亮", "调暗", "亮一点", "暗一点", "暗", "亮"]):
-                        br_val = 70
-                        if "暗" in combined_str:
-                            br_val = 25
-                        elif "亮" in combined_str:
-                            br_val = 85
-                        m = re.search(r"(\d{1,3})", combined_str)
-                        if m:
-                            br_val = max(1, min(100, int(m.group(1))))
-                        payload_params.append({"did": str(did), "siid": 2, "piid": 2, "value": br_val})
-                        payload_params.append({"did": str(did), "siid": 2, "piid": 1, "value": True})
-                        detail_msg = f"亮度调节至 {br_val}%"
+    spec_type = v_info.get("spec_type", "")
+    spec_data = MiotSpecManager.get_spec(spec_type, model) if spec_type else None
 
-                    # 3. 水温/恒温调节 (电水壶 siid 3, piid 4)
-                    elif any(w in combined_str for w in ["水温", "恒温", "度", "保温"]):
-                        temp_val = 55
-                        m = re.search(r"(\d{1,2})", combined_str)
-                        if m:
-                            temp_val = max(40, min(90, int(m.group(1))))
-                        payload_params.append({"did": str(did), "siid": 3, "piid": 4, "value": temp_val})
-                        detail_msg = f"目标水温设定至 {temp_val}°C"
-
-                    # 4. 常规开关指令
-                    else:
-                        payload_params.append({"did": str(did), "siid": 2, "piid": 1, "value": power_on})
-                        detail_msg = "打开" if power_on else "关闭"
-
-                    url = auth.get_api_url(cloud_cfg.get("country", "cn")) + "/miotspec/prop/set"
-                    req_params = {"data": json.dumps({"params": payload_params})}
-                    resp = auth.execute_api_call_encrypted(url, req_params)
-
-                    if resp and resp.get("code") == 0:
-                        return f"已通过米家云端成功为你将【{k_name}】执行【{detail_msg}】！"
-                    elif resp and "result" in resp and resp["result"] and resp["result"][0].get("code") == 0:
-                        return f"已成功为你将【{k_name}】执行【{detail_msg}】！"
-                except Exception as e:
-                    logger.warning(f"米家云端控制异常，尝试局域网回退: {e}")
-
-    # 3. 局域网直连模式 (同一 WiFi / 子网毫秒级低延迟控制)
-    if matched_dev:
-        k_name, v_info = matched_dev
-        ip = v_info.get("ip")
-        token = v_info.get("token")
-        model = v_info.get("model", "")
-        if ip and token and len(token) == 32 and "填入" not in token:
-            try:
-                from miio import Device
-                dev = Device(ip, token)
-                if "yeelink" in model or "lamp" in model:
-                    if power_on:
-                        dev.send("set_power", ["on", "smooth", 500])
-                    else:
-                        dev.send("set_power", ["off", "smooth", 500])
-                else:
-                    cmd_val = ["on"] if power_on else ["off"]
-                    try:
-                        dev.send("set_power", cmd_val)
-                    except Exception:
-                        dev.send("set_properties", [{"did": v_info.get("name", "dev"), "siid": 2, "piid": 1, "value": power_on}])
-                return f"已通过局域网直连向【{k_name} ({ip})】发送指令成功执行【{act}】！"
-            except Exception as e:
-                return f"控制【{k_name}】失败: 局域网连接超时 ({e})，且云端控制未就绪。"
-
-    # 4. 尚未配置真实凭据，给出友好引导
-    return (
-        f"【小米米家技能就绪】指令已识别为【{dev_name}】->【{act}】！\n"
-        f"提示：若要真正控制实体电器，请在 Web 工作台点击「📱 米家扫码绑定」完成授权即可立即生效！"
+    payload_params, action_call, actions_done = MiotSpecManager.parse_universal_intent(
+        spec=spec_data,
+        combined_str=combined_str,
+        did=str(did),
+        model=model
     )
+
+    if not payload_params and not action_call:
+        return f"未能识别对【{k_name}】的操作意图【{combined_str}】。请指明具体的开关或控制指令。"
+
+    # 优先使用云端官方 API 执行 (跨子网 100% 连通)
+    if cloud_cfg.get("enabled") and cloud_cfg.get("serviceToken") and cloud_cfg.get("ssecurity") and did:
+        try:
+            try:
+                from xiaomi_qr_auth import XiaomiQRAuth
+            except ImportError:
+                from skills.xiaomi_iot.xiaomi_qr_auth import XiaomiQRAuth
+            auth = XiaomiQRAuth()
+            auth.userId = cloud_cfg.get("userId")
+            auth._serviceToken = cloud_cfg.get("serviceToken")
+            auth._ssecurity = cloud_cfg.get("ssecurity")
+
+            if action_call:
+                # 执行 MIoT 专用 Action (/miotspec/action，如扫地机回充、启停)
+                url = auth.get_api_url(cloud_cfg.get("country", "cn")) + "/miotspec/action"
+                req_params = {"data": json.dumps({"params": {"did": str(did), "siid": action_call["siid"], "aiid": action_call["aiid"], "in": []}})}
+                resp = auth.execute_api_call_encrypted(url, req_params)
+
+                if resp is None:
+                    return f"控制【{k_name}】失败：米家云端未返回响应，请检查网络连接。"
+                if resp.get("code") == 0:
+                    return f"已通过米家云端成功向【{k_name}】下达指令：【{action_call['desc']}】！"
+                elif resp.get("code") in [401, 10001, -9999]:
+                    return f"控制【{k_name}】失败：米家云端凭证已过期 (code: {resp.get('code')})。请在 Web 工作台重新扫码授权。"
+                else:
+                    err_msg = resp.get("message") or resp.get("error") or "未知错误"
+                    return f"控制【{k_name}】失败：米家云端返回错误 (code: {resp.get('code')}, 原因: {err_msg})。"
+
+            # 执行 MIoT 属性设置 (/miotspec/prop/set)
+            url = auth.get_api_url(cloud_cfg.get("country", "cn")) + "/miotspec/prop/set"
+            req_params = {"data": json.dumps({"params": payload_params})}
+            resp = auth.execute_api_call_encrypted(url, req_params)
+
+            if resp is None:
+                return f"控制【{k_name}】失败：米家云端未返回响应，请检查网络连接。"
+
+            code = resp.get("code")
+            if code == 0:
+                res_list = resp.get("result", [])
+                failed_items = [it for it in res_list if isinstance(it, dict) and it.get("code", 0) != 0]
+                if failed_items:
+                    codes = [f"siid:{it.get('siid')}/code:{it.get('code')}" for it in failed_items]
+                    return f"控制【{k_name}】部分指令执行失败 ({', '.join(codes)})，设备可能已离线或当前模式不支持该参数。"
+                actions_desc = "并将" + "、".join(actions_done[1:]) if len(actions_done) > 1 else actions_done[0]
+                return f"已通过米家云端成功为你将【{k_name}】{actions_done[0] if len(actions_done) == 1 else actions_done[0] + '并' + '、'.join(actions_done[1:])}！"
+            elif code in [401, 10001, -9999]:
+                return f"控制【{k_name}】失败：米家云端授权凭证已过期 (code: {code})。请在 Web 工作台点击「📱 米家扫码绑定」重新扫码刷新授权。"
+            else:
+                err_msg = resp.get("message") or resp.get("error") or "未知错误"
+                return f"控制【{k_name}】失败：米家云端返回错误 (code: {code}, 原因: {err_msg})。"
+
+        except Exception as e:
+            logger.warning(f"米家云端控制异常: {e}")
+            return f"控制【{k_name}】失败：云端指令下发异常 ({e})。"
+
+    # 回退到局域网直连模式 (需同一局域网并具备有效 Token)
+    ip = v_info.get("ip")
+    token = v_info.get("token")
+    if ip and token and len(token) == 32 and "填入" not in token:
+        try:
+            from miio import Device
+            dev = Device(ip, token)
+
+            if action_call:
+                lan_cmd = action_call.get("lan_cmd", "app_start")
+                dev.send(lan_cmd)
+                return f"已通过局域网直连向【{k_name} ({ip})】发送指令成功执行【{action_call['desc']}】！"
+
+            power_val = any(p.get("value") is True for p in payload_params if p.get("piid") == 1)
+            power_cmd = "on" if power_val else "off"
+
+            if "yeelink" in model or "lamp" in model:
+                dev.send("set_power", [power_cmd, "smooth", 500])
+            else:
+                dev.send("set_power", [power_cmd])
+            return f"已通过局域网直连向【{k_name} ({ip})】发送指令成功！"
+        except Exception as e:
+            return f"控制【{k_name}】失败：局域网连接超时或通信异常 ({e})。"
+
+    return f"控制【{k_name}】失败：未配置云端授权凭证或有效局域网 Token。请先扫码绑定米家。"
