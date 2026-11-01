@@ -17,6 +17,7 @@ from core.evolution_engine import EvolutionEngine
 from core.agent_reasoner import AgentReasoner
 from core.prompt_builder import PromptBuilder
 from core.hardware_agent import HardwareAgent
+from core.proactive_care import ProactiveCareManager
 
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -29,6 +30,22 @@ idle_fsm = IdleFSM()
 skill_mgr = SkillManager(storage_dir=DATA_DIR, memory_manager=mem)
 evolution_engine = EvolutionEngine(DATA_DIR, memory_manager=mem, skill_manager=skill_mgr)
 
+def load_config():
+    cfg_file = os.path.join(DIRECTORY, "config.json")
+    if os.path.exists(cfg_file):
+        with open(cfg_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+server_cfg = load_config()
+proactive_care = ProactiveCareManager(
+    storage_dir=DATA_DIR,
+    memory_manager=mem,
+    evolution_engine=evolution_engine,
+    skill_manager=skill_mgr,
+    config=server_cfg
+)
+
 # 待派发给前端 Web 仿真视窗的到点闹钟事件队列
 pending_web_alarms = []
 alarms_lock = threading.Lock()
@@ -40,20 +57,13 @@ def on_alarm_triggered(rem):
 
 skill_mgr.register_trigger_callback(on_alarm_triggered)
 
-def load_config():
-    cfg_file = os.path.join(DIRECTORY, "config.json")
-    if os.path.exists(cfg_file):
-        with open(cfg_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
-
 # 初始化真机硬件与数字孪生工作中枢
-server_cfg = load_config()
 hardware_agent = HardwareAgent(
     config=server_cfg,
     memory_manager=mem,
     skill_manager=skill_mgr,
-    evolution_engine=evolution_engine
+    evolution_engine=evolution_engine,
+    proactive_care=proactive_care
 )
 hardware_agent.start()
 
@@ -160,6 +170,14 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"enabled": face_tracker.enabled}).encode("utf-8"))
+            return
+
+        # 获取主动关怀状态与配置
+        if self.path == "/api/proactive_care":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(proactive_care.get_status(), ensure_ascii=False).encode("utf-8"))
             return
 
         # 小米米家扫码绑定状态查询
@@ -466,6 +484,45 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"status": "ok", "enabled": face_tracker.enabled}).encode("utf-8"))
             except Exception as e:
                 self.send_error(400, str(e))
+            return
+
+        # 主动关怀开关与配置切换
+        if self.path == "/api/proactive_care":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8"))
+                if "enabled" in body:
+                    proactive_care.set_enabled(body["enabled"])
+                elif body.get("action") == "toggle":
+                    proactive_care.toggle()
+                elif body.get("action") == "snooze":
+                    proactive_care.snooze(body.get("minutes", 120))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps(proactive_care.get_status(), ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(400, str(e))
+            return
+
+        # 手动立即触发主动关怀测试
+        if self.path == "/api/proactive_care/test":
+            content_length = int(self.headers.get("Content-Length", 0))
+            scene = "morning"
+            if content_length > 0:
+                try:
+                    post_data = self.rfile.read(content_length)
+                    body = json.loads(post_data.decode("utf-8"))
+                    scene = body.get("scene", "morning")
+                except Exception:
+                    pass
+            payload = proactive_care.trigger_test(scene=scene)
+            hardware_agent.trigger_proactive_care_payload(payload)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
             return
 
         # 取消提醒或闹钟

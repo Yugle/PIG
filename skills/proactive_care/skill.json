@@ -1,0 +1,29 @@
+{
+  "id": "proactive_care",
+  "name": "主动关怀守护",
+  "version": "1.0.0",
+  "author": "Antigravity Lab",
+  "category": "伴侣情感",
+  "description": "控制桌面的主动关怀守护功能。支持开启、关闭、一键静音防打扰、查询状态或立即测试晨间初见、久坐疲劳与深夜伴睡关怀。",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "操作类型：'enable' (开启主动关怀), 'disable' (关闭主动关怀), 'toggle' (切换开关), 'snooze' (静音防打扰), 'status' (查询状态), 'test' (立即测试关怀)",
+      "default": "status"
+    },
+    "scene": {
+      "type": "string",
+      "description": "测试场景：'morning' (晨间初见), 'sedentary' (工位久坐), 'night' (深夜伴睡)",
+      "default": "morning"
+    },
+    "snooze_minutes": {
+      "type": "number",
+      "description": "静音防打扰分钟数 (默认 120 分钟)",
+      "default": 120
+    }
+  },
+  "default_behavior": {
+    "emotion": "CARE",
+    "action": "LOOK_UP"
+  }
+}

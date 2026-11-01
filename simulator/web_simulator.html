@@ -512,6 +512,11 @@
         <span id="mem-name" style="color: var(--cyan); font-weight: 600;">主人</span>
         <span id="mem-intimacy" style="background: rgba(255, 176, 32, 0.15); color: #ffb020; border: 1px solid #ffb020; border-radius: 8px; padding: 1px 5px; font-size: 0.7rem;">Lv.1</span>
       </div>
+
+      <!-- 主动关怀守护开关 -->
+      <div id="care-badge" onclick="toggleProactiveCare()" style="cursor:pointer; font-size: 0.78rem; background: rgba(255, 64, 129, 0.1); border: 1px solid #ff4081; padding: 4px 10px; border-radius: 12px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;" title="点击切换：主动关怀守护功能 (晨间初见问候、工位久坐疲劳、深夜伴睡)">
+        <span id="care-badge-label" style="color: #ff4081; font-weight: 600;">❤️ 主动关怀: 开启</span>
+      </div>
       <div class="status-tag">
         <div class="status-dot"></div>
         物理动力学 & 表情引擎运行中
@@ -725,6 +730,7 @@
       <div class="chat-panel-body">
         <!-- 快捷场景提问气泡 -->
         <div class="quick-chips-container">
+          <div class="quick-chip" onclick="triggerTestProactiveCare('morning')" style="border-color: #ff4081; color: #ff4081; background: rgba(255, 64, 129, 0.1);">❤️ 体验主动关怀</div>
           <div class="quick-chip" onclick="openXiaomiQRModal()" style="border-color: #ff6700; color: #ff6700; background: rgba(255, 103, 0, 0.1);">📱 米家扫码绑定</div>
           <div class="quick-chip" onclick="sendQuickChip('帮我查一下有哪些米家设备')">🔍 查米家设备</div>
           <div class="quick-chip" onclick="sendQuickChip('帮我开一下台灯')">💡 打开台灯</div>
@@ -2322,6 +2328,28 @@
         }
         accumulatedTwinReply = "";
         streamingPlayer.reset();
+      } else if (ev.type === "proactive_care") {
+        stopThinkingCadence();
+        const chatLogs = document.getElementById("chatLogs");
+        if (chatLogs) {
+          const careDiv = document.createElement("div");
+          careDiv.className = "msg bot";
+          careDiv.style.borderLeft = "3px solid #ff4081";
+          careDiv.style.background = "rgba(255, 64, 129, 0.08)";
+          careDiv.innerHTML = `
+            <div style="font-size:0.75rem; color:#ff4081; font-weight:bold; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+              <span>${ev.title || '❤️ 主动关怀'}</span>
+              <span style="font-size:0.68rem; background:rgba(255,64,129,0.2); padding:1px 6px; border-radius:8px;">自主生命体温</span>
+            </div>
+            <div>${formatMarkdown(ev.text)}</div>
+          `;
+          chatLogs.appendChild(careDiv);
+          chatLogs.scrollTop = chatLogs.scrollHeight;
+        }
+        if (ev.emotion) setEmotion(ev.emotion);
+        if (ev.pan !== undefined && ev.tilt !== undefined) updateAngles(ev.pan, ev.tilt);
+        triggerBlink();
+        playChirp(ev.sound || "happy_chirp");
       } else if (ev.type === "pose_sync") {
         if (ev.pan !== undefined && ev.tilt !== undefined) {
           updateAngles(ev.pan, ev.tilt);
@@ -2543,9 +2571,73 @@
       }
     }
 
+    // ==========================================
+    // 2.10 ❤️ 主动关怀守护开关与实时测试
+    // ==========================================
+    let isProactiveCareEnabled = true;
+
+    async function fetchProactiveCareStatus() {
+      try {
+        const res = await fetch("/api/proactive_care");
+        if (res.ok) {
+          const data = await res.json();
+          isProactiveCareEnabled = !!data.enabled;
+          updateProactiveCareUI(data);
+        }
+      } catch (e) { }
+    }
+
+    function updateProactiveCareUI(data) {
+      const label = document.getElementById("care-badge-label");
+      const badge = document.getElementById("care-badge");
+      if (!label || !badge) return;
+      const enabled = data ? data.enabled : isProactiveCareEnabled;
+      if (enabled) {
+        label.innerText = "❤️ 主动关怀: 开启";
+        label.style.color = "#ff4081";
+        badge.style.borderColor = "#ff4081";
+        badge.style.background = "rgba(255, 64, 129, 0.1)";
+      } else {
+        label.innerText = "🔕 主动关怀: 关闭";
+        label.style.color = "#8b949e";
+        badge.style.borderColor = "#30363d";
+        badge.style.background = "rgba(255, 255, 255, 0.04)";
+      }
+    }
+
+    async function toggleProactiveCare() {
+      try {
+        const nextState = !isProactiveCareEnabled;
+        const res = await fetch("/api/proactive_care", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: nextState })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          isProactiveCareEnabled = !!data.enabled;
+          updateProactiveCareUI(data);
+        }
+      } catch (e) {
+        isProactiveCareEnabled = !isProactiveCareEnabled;
+        updateProactiveCareUI({ enabled: isProactiveCareEnabled });
+      }
+    }
+
+    async function triggerTestProactiveCare(scene = "morning") {
+      try {
+        await fetch("/api/proactive_care/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scene })
+        });
+      } catch (e) { }
+    }
+
     // 启动数字孪生 SSE 实时同步
     initDigitalTwinSync();
     fetchHardwareStatus();
+    fetchProactiveCareStatus();
 
     // ==========================================
     // 3. 麦克风录音与百度 ASR 语音识别

@@ -52,12 +52,14 @@ class HardwareAgent:
         memory_manager,
         skill_manager,
         evolution_engine=None,
+        proactive_care=None,
         hal=None
     ):
         self.cfg = config
         self.memory_manager = memory_manager
         self.skill_manager = skill_manager
         self.evolution_engine = evolution_engine
+        self.proactive_care = proactive_care
 
         # 运行模式: 'twin' (真机孪生) 或 'simulation' (纯网页仿真)
         self.mode = self.cfg.get("run_mode", "twin")
@@ -285,6 +287,53 @@ class HardwareAgent:
 
         threading.Thread(target=_wake_worker, daemon=True).start()
         return True
+
+    def trigger_proactive_care_payload(self, payload: Dict[str, Any]):
+        """执行主动关怀载荷 (广播事件、移动姿态、播放音效与异步语音)"""
+        if not payload:
+            return
+        print(f"❤️ [主动关怀触发]: [{payload.get('title')}] {payload.get('text')}", flush=True)
+
+        # 1. 广播主动关怀事件 (供 Web 孪生大屏展示专属卡片)
+        self.emit_event("proactive_care", payload)
+
+        # 2. 姿态与表情同步
+        pan = payload.get("pan", 90)
+        tilt = payload.get("tilt", 80)
+        emotion = payload.get("emotion", "HAPPY")
+        self.emit_event("pose_sync", {"pan": pan, "tilt": tilt, "emotion": emotion})
+        if self.hal:
+            self.hal.set_angles(pan, tilt)
+
+        # 3. 播放清脆萌趣音效
+        import core.sound_effects as sound_effects
+        sound_effects.play_sound(payload.get("sound", "happy_chirp"), async_play=True)
+
+        # 4. 异步语音播报 (绝不阻塞主控监听循环)
+        text = payload.get("text", "")
+        if text:
+            def _proactive_speech():
+                time.sleep(0.35)
+                if self.tts_engine:
+                    self.state = self.STATE_SPEAKING
+                    self.emit_event("status_change", {
+                        "status": self.STATE_SPEAKING,
+                        "message": payload.get("title", "❤️ 主动关怀")
+                    })
+                    audio_data = self.tts_engine.synthesize(text)
+                    if audio_data:
+                        self.emit_event("robot_chunk", {
+                            "text": text,
+                            "audio": base64.b64encode(audio_data).decode("utf-8"),
+                            "seq": 0
+                        })
+                    self.emit_event("done", {"reply": text})
+                    self.state = self.STATE_IDLE
+                    self.emit_event("status_change", {
+                        "status": self.STATE_IDLE,
+                        "message": "就绪 (Online)"
+                    })
+            threading.Thread(target=_proactive_speech, daemon=True).start()
 
     def start(self):
         """启动后台硬件智能体工作线程"""
@@ -570,6 +619,16 @@ class HardwareAgent:
                         "threshold": threshold,
                         "is_listening": False
                     })
+
+                # 定期巡检主动关怀触发机制 (每 ~1.6s 轻量判定一次)
+                if self.proactive_care and self.state == self.STATE_IDLE and max_score <= threshold:
+                    care_counter = getattr(self, "_care_tick_counter", 0) + 1
+                    self._care_tick_counter = care_counter
+                    if care_counter >= 20:
+                        self._care_tick_counter = 0
+                        care_payload = self.proactive_care.tick(energy=energy, is_talking=False)
+                        if care_payload:
+                            self.trigger_proactive_care_payload(care_payload)
 
                 if max_score > threshold:
                     print(f"\n🔔 [唤醒成功] 物理麦克风监听到唤醒词: {w_name} (置信度={max_score:.3f} > {threshold})！", flush=True)
