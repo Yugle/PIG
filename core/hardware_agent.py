@@ -232,9 +232,9 @@ class HardwareAgent:
 
     def trigger_wake_manually(self, custom_intent: str = "") -> bool:
         """通过 Web 或 API 手动触发硬件唤醒，跳过唤醒词识别"""
-        if self.state in [self.STATE_SPEAKING, self.STATE_THINKING]:
+        if self.state != self.STATE_IDLE:
             return False
-        logger.info("⚡ [手动唤醒] 用户通过 Web 控制台或 API 手动触发唤醒！")
+        print("⚡ [手动唤醒] 用户通过 Web 控制台或 API 手动触发唤醒！", flush=True)
         self.last_waking_time = time.time()
         if self.oww_model:
             self.oww_model.reset()
@@ -250,17 +250,16 @@ class HardwareAgent:
             self.hal.set_angles(90, 80)
 
         import core.sound_effects as sound_effects
-        sound_effects.play_sound("wake_chime")
+        sound_effects.play_sound("wake_chime", async_play=True)
 
         def _wake_worker():
-            time.sleep(0.3)
             if custom_intent:
                 self.process_voice_intent(custom_intent)
             else:
                 self.state = self.STATE_LISTENING
                 self.emit_event("status_change", {
                     "status": self.STATE_LISTENING,
-                    "message": "🎙️ 正在倾听主人说话 (说完停顿约1秒)..."
+                    "message": "🎙️ 正在倾听主人说话..."
                 })
                 clip_path = self.record_audio_clip()
                 user_text = ""
@@ -272,8 +271,8 @@ class HardwareAgent:
                     user_text = self.asr_engine.recognize(clip_path)
 
                 if user_text:
-                    logger.info(f"🎙️ [手动唤醒识别成功]: {user_text}")
-                    self.process_voice_intent(user_text)
+                    print(f"🎙️ [手动唤醒识别成功]: {user_text}", flush=True)
+                    threading.Thread(target=self.process_voice_intent, args=(user_text,), daemon=True).start()
                 else:
                     self.emit_event("status_change", {
                         "status": self.STATE_IDLE,
@@ -311,7 +310,7 @@ class HardwareAgent:
             except Exception:
                 pass
 
-    def record_audio_clip(self, max_seconds=15, silence_timeout=0.9, min_seconds=0.6) -> str:
+    def record_audio_clip(self, max_seconds=6, silence_timeout=0.75, min_seconds=0.5) -> str:
         """动态能量 VAD 静音自适应录音"""
         if not self.audio_stream or not self.p_audio:
             return ""
@@ -334,6 +333,7 @@ class HardwareAgent:
         has_spoken = False
         rec_meter_counter = 0
         mic_gain = float(self.cfg.get("mic_gain", 2.5))
+        speech_thresh = float(self.cfg.get("speech_vad_threshold", 220))
 
         for _ in range(max_chunks):
             if not self._running:
@@ -361,14 +361,14 @@ class HardwareAgent:
                         "is_listening": True
                     })
 
-                if energy > 650:
+                if energy > speech_thresh:
                     has_spoken = True
                     silence_counter = 0
                 else:
                     if has_spoken:
                         silence_counter += 1
                         if silence_counter >= silence_limit and len(frames) >= min_chunks:
-                            logger.info("🛑 [VAD] 检测到说话停顿，自动截止录音并提交识别...")
+                            print(f"🛑 [VAD] 检测到说话停顿 (持续静音约 {silence_timeout}s)，自动截止录音并提交识别...", flush=True)
                             break
             except Exception:
                 break
@@ -481,6 +481,7 @@ class HardwareAgent:
                     })
 
         except Exception as e:
+            print(f"⚠️ 语音指令处理异常: {e}", flush=True)
             logger.error(f"语音指令处理异常: {e}")
             final_reply = f"抱歉主人，执行过程遇到异常错误：{e}，未能完成操作。"
             self.emit_event("done", {"reply": final_reply, "behaviors": []})
@@ -529,11 +530,25 @@ class HardwareAgent:
                     audio_np = audio_raw
 
                 energy = float(np.abs(audio_np).mean())
-                preds = self.oww_model.predict(audio_np)
-                max_score = float(max(preds.values())) if preds else 0.0
-
                 w_name = self.cfg.get("wakeword_model", "hey_jarvis")
                 threshold = float(self.cfg.get("wakeword_threshold", 0.20))
+
+                # 若当前处于非空闲状态 (思考中/语音播报中/余韵中)，继续平滑读取排空声卡缓冲区，刷新实时音量条，但不重复触发唤醒词
+                if self.state != self.STATE_IDLE:
+                    meter_counter += 1
+                    if meter_counter >= 2:
+                        meter_counter = 0
+                        self.emit_event("audio_meter", {
+                            "energy": round(energy, 1),
+                            "score": 0.0,
+                            "model": w_name,
+                            "threshold": threshold,
+                            "is_listening": (self.state == self.STATE_LISTENING)
+                        })
+                    continue
+
+                preds = self.oww_model.predict(audio_np)
+                max_score = float(max(preds.values())) if preds else 0.0
 
                 # 每 ~160ms (2个 chunk) 广播一次实时音频电平与唤醒得分
                 meter_counter += 1
@@ -548,7 +563,7 @@ class HardwareAgent:
                     })
 
                 if max_score > threshold:
-                    logger.info(f"\n🔔 [唤醒成功] 物理麦克风监听到唤醒词: {w_name} (置信度={max_score:.3f} > {threshold})！")
+                    print(f"\n🔔 [唤醒成功] 物理麦克风监听到唤醒词: {w_name} (置信度={max_score:.3f} > {threshold})！", flush=True)
                     self.last_waking_time = time.time()
                     self.oww_model.reset()
 
@@ -564,16 +579,15 @@ class HardwareAgent:
                     if self.hal:
                         self.hal.set_angles(90, 80)
 
-                    # 播放唤醒铃声
+                    # 异步播放唤醒铃声 (零延迟不阻塞录音线程)
                     import core.sound_effects as sound_effects
-                    sound_effects.play_sound("wake_chime")
-                    time.sleep(0.2)
+                    sound_effects.play_sound("wake_chime", async_play=True)
 
                     # 2. 切换为 LISTENING，开始动态录音
                     self.state = self.STATE_LISTENING
                     self.emit_event("status_change", {
                         "status": self.STATE_LISTENING,
-                        "message": "🎙️ 正在倾听主人说话 (说完停顿约1秒)..."
+                        "message": "🎙️ 正在倾听主人说话..."
                     })
 
                     clip_path = self.record_audio_clip()
@@ -589,10 +603,10 @@ class HardwareAgent:
                             user_text = self.asr_engine.recognize(clip_path)
 
                     if user_text:
-                        logger.info(f"🎙️ [识别成功]: {user_text}")
-                        self.process_voice_intent(user_text)
+                        print(f"🎙️ [识别成功]: {user_text}", flush=True)
+                        threading.Thread(target=self.process_voice_intent, args=(user_text,), daemon=True).start()
                     else:
-                        logger.info("未检测到有效语音内容")
+                        print("未检测到有效语音内容，恢复待机", flush=True)
                         self.emit_event("status_change", {
                             "status": self.STATE_IDLE,
                             "message": "未能听清内容，已恢复待机监听"

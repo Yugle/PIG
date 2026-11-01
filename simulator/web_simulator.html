@@ -715,12 +715,12 @@
 
     <!-- 右侧：具身对话与语音交互 (AI Brain 对话框) -->
     <div class="panel">
-      <div class="panel-header">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span>💬 具身伴侣对话与交互</span>
-          <span id="chatStatusPill" style="font-size:0.72rem; background:rgba(46, 160, 67, 0.15); color:#7ee787; border:1px solid #238636; padding:1px 6px; border-radius:4px;">就绪 (Online)</span>
+      <div class="panel-header" style="display:flex; align-items:center; justify-content:space-between; gap:6px; flex-wrap:nowrap; overflow:hidden;">
+        <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1; overflow:hidden;">
+          <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:0.86rem;" title="💬 具身伴侣对话与交互">💬 对话交互</span>
+          <span id="chatStatusPill" style="font-size:0.72rem; white-space:nowrap; flex-shrink:0; background:rgba(46, 160, 67, 0.15); color:#7ee787; border:1px solid #238636; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center;">就绪 (Online)</span>
         </div>
-        <button class="btn" style="padding: 2px 8px; font-size: 0.75rem;" onclick="clearChatLogs()">清空消息</button>
+        <button class="btn" style="padding: 2px 8px; font-size: 0.74rem; white-space:nowrap; flex-shrink:0;" onclick="clearChatLogs()">清空消息</button>
       </div>
       <div class="chat-panel-body">
         <!-- 快捷场景提问气泡 -->
@@ -2243,7 +2243,7 @@
 
         if (ev.status === "WAKING") {
           if (pill) {
-            pill.innerText = `🔔 唤醒: ${ev.wake_word || 'Hey Jarvis'}`;
+            pill.innerText = `🔔 唤醒中`;
             pill.style.color = "#ffb020";
             pill.style.borderColor = "#ffb020";
           }
@@ -2252,25 +2252,34 @@
           triggerBlink();
         } else if (ev.status === "LISTENING") {
           if (pill) {
-            pill.innerText = "🎙️ 正在收音倾听...";
+            pill.innerText = "🎙️ 倾听中...";
             pill.style.color = "#00e5ff";
             pill.style.borderColor = "rgba(0, 229, 255, 0.4)";
           }
-          if (hwLabel) hwLabel.innerText = "🎙️ 正在收音 (说话中)...";
+          if (hwLabel) hwLabel.innerText = "🎙️ 倾听录音中...";
           if (hwDot) hwDot.style.background = "#00e5ff";
         } else if (ev.status === "THINKING") {
           if (pill) {
-            pill.innerText = "🤔 思考推演中...";
+            pill.innerText = "🤔 思考中...";
             pill.style.color = "#00e5ff";
             pill.style.borderColor = "rgba(0, 229, 255, 0.4)";
           }
           if (hwLabel) hwLabel.innerText = "🤔 思考推演中...";
           if (hwDot) hwDot.style.background = "#00e5ff";
           triggerThinkingCadence();
+        } else if (ev.status === "SPEAKING") {
+          if (pill) {
+            pill.innerText = "🔊 说话中...";
+            pill.style.color = "#10b981";
+            pill.style.borderColor = "#10b981";
+          }
+          if (hwLabel) hwLabel.innerText = "🔊 语音播报中...";
+          if (hwDot) hwDot.style.background = "#10b981";
         } else if (ev.status === "AFTERGLOW") {
           if (pill) {
-            pill.innerText = "👂 倾听注视余韵...";
+            pill.innerText = "👂 注视中";
             pill.style.color = "#7ee787";
+            pill.style.borderColor = "#238636";
           }
           if (hwLabel) hwLabel.innerText = "👂 倾听注视余韵...";
         } else if (ev.status === "IDLE") {
