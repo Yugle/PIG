@@ -2249,6 +2249,14 @@
           }
           if (hwLabel) hwLabel.innerText = `🔔 已唤醒: ${ev.wake_word || 'Hey Jarvis'}`;
           if (hwDot) hwDot.style.background = "#ffb020";
+          const mScore = document.getElementById("meter-score-val");
+          const mFill = document.getElementById("meter-fill");
+          if (mScore) {
+            mScore.innerText = "🔔 唤醒成功!";
+            mScore.style.color = "#ffb020";
+            mScore.style.fontWeight = "bold";
+          }
+          if (mFill) mFill.style.background = "#ffb020";
           triggerBlink();
         } else if (ev.status === "LISTENING") {
           if (pill) {
@@ -2258,6 +2266,13 @@
           }
           if (hwLabel) hwLabel.innerText = "🎙️ 倾听录音中...";
           if (hwDot) hwDot.style.background = "#00e5ff";
+          const mScore = document.getElementById("meter-score-val");
+          const mFill = document.getElementById("meter-fill");
+          if (mScore) {
+            mScore.innerText = "倾听录音中...";
+            mScore.style.color = "#00e5ff";
+          }
+          if (mFill) mFill.style.background = "#00e5ff";
         } else if (ev.status === "THINKING") {
           if (pill) {
             pill.innerText = "🤔 思考中...";
@@ -2365,9 +2380,17 @@
       fill.style.width = pct + "%";
 
       val.innerText = Math.round(energy);
+      if (data.woke) {
+        scoreVal.innerText = `🔔 唤醒成功 (${score.toFixed(2)})`;
+        scoreVal.style.color = "#ffb020";
+        scoreVal.style.fontWeight = "bold";
+        fill.style.background = "#ffb020";
+        return;
+      }
       if (data.is_listening) {
         scoreVal.innerText = "倾听录音中...";
         scoreVal.style.color = "#00e5ff";
+        fill.style.background = "#00e5ff";
       } else {
         scoreVal.innerText = `${score.toFixed(2)} / ${threshold}`;
       }

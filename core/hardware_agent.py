@@ -335,6 +335,15 @@ class HardwareAgent:
         mic_gain = float(self.cfg.get("mic_gain", 2.5))
         speech_thresh = float(self.cfg.get("speech_vad_threshold", 220))
 
+        # 录音开始时立即发送一次电平广播，让前端瞬间进入录音指示状态，杜绝任何停顿感
+        self.emit_event("audio_meter", {
+            "energy": 60.0,
+            "score": 0.0,
+            "model": self.cfg.get("wakeword_model", "hey_jarvis"),
+            "threshold": float(self.cfg.get("wakeword_threshold", 0.20)),
+            "is_listening": True
+        })
+
         for _ in range(max_chunks):
             if not self._running:
                 break
@@ -567,6 +576,16 @@ class HardwareAgent:
                     self.last_waking_time = time.time()
                     self.oww_model.reset()
 
+                    # 0. 立即向前端广播唤醒成功电平事件，消除视觉卡顿
+                    self.emit_event("audio_meter", {
+                        "energy": round(energy, 1),
+                        "score": round(max_score, 3),
+                        "model": w_name,
+                        "threshold": threshold,
+                        "is_listening": True,
+                        "woke": True
+                    })
+
                     # 1. 切换状态为 WAKING 并全网广播
                     self.state = self.STATE_WAKING
                     self.emit_event("status_change", {
@@ -579,7 +598,7 @@ class HardwareAgent:
                     if self.hal:
                         self.hal.set_angles(90, 80)
 
-                    # 异步播放唤醒铃声 (零延迟不阻塞录音线程)
+                    # 异步播放唤醒铃声 (超低延迟非阻塞直推蓝牙耳机)
                     import core.sound_effects as sound_effects
                     sound_effects.play_sound("wake_chime", async_play=True)
 

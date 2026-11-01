@@ -14,13 +14,13 @@ import subprocess
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOUNDS_DIR = os.path.join(PROJECT_ROOT, "assets", "sounds")
 
-def ensure_sound_assets():
-    """自动生成 5 款高品质 16kHz WAV 萌趣音频文件"""
+def ensure_sound_assets(force: bool = False):
+    """自动生成萌趣音频文件（含 8000Hz 原生蓝牙低延迟唤醒三和弦）"""
     os.makedirs(SOUNDS_DIR, exist_ok=True)
 
     def _write_wav(filename, freq_func, duration=0.35, sample_rate=16000, max_vol=0.45):
         filepath = os.path.join(SOUNDS_DIR, filename)
-        if os.path.exists(filepath):
+        if not force and os.path.exists(filepath):
             return
         n_samples = int(duration * sample_rate)
         with wave.open(filepath, "w") as wf:
@@ -33,7 +33,7 @@ def ensure_sound_assets():
                 freq = freq_func(t, duration)
                 phase += 2 * math.pi * freq / sample_rate
                 # ADSR 平滑包络，避免音频爆音 (Clicking)
-                attack = min(1.0, i / (0.04 * sample_rate))
+                attack = min(1.0, i / (0.015 * sample_rate))
                 decay = max(0.0, 1.0 - (i / n_samples))
                 env = attack * decay
                 sample = int(32767 * max_vol * env * math.sin(phase))
@@ -51,12 +51,17 @@ def ensure_sound_assets():
     # 4. 思考轻柔蜂鸣 (Thinking Hum: 440Hz A4 温润正弦基波)
     _write_wav("thinking_hum.wav", lambda t, d: 430 + 30 * math.sin(t * 18), duration=0.40)
 
-    # 5. 唤醒清脆三和弦 (Wake Chime: C5 -> E5 -> G5 琶音)
+    # 5. 唤醒清脆三和弦 (Wake Chime: 极速清脆 0.20s C5 -> E5 -> G5 琶音，8000Hz 原生匹配蓝牙 SCO，零重采样延迟)
     def _chime_freq(t, d):
         if t < d * 0.33: return 523.25
         elif t < d * 0.66: return 659.25
         return 783.99
-    _write_wav("wake_chime.wav", _chime_freq, duration=0.42)
+    # 强制重新生成 wake_chime.wav 为 8000Hz 0.20s 超低延迟版本
+    wake_path = os.path.join(SOUNDS_DIR, "wake_chime.wav")
+    if os.path.exists(wake_path) and os.path.getsize(wake_path) > 5000:
+        try: os.remove(wake_path)
+        except Exception: pass
+    _write_wav("wake_chime.wav", _chime_freq, duration=0.20, sample_rate=8000, max_vol=0.55)
 
 # 初始化生成
 ensure_sound_assets()
@@ -87,15 +92,33 @@ def play_sound(sound_name: str, async_play: bool = True):
         return
 
     def _play():
-        # 1. 优先尝试系统 aplay (Linux / 树莓派原生 ALSA 直连蓝牙耳机)
+        # 1. 优先尝试系统 aplay 低延迟非阻塞直推 (20ms buffer, 杜绝默认 500ms 缓冲延迟)
         try:
-            res = subprocess.run(["aplay", "-q", filepath], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            res = subprocess.run(
+                ["aplay", "-q", "-N", "-B", "20000", filepath],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=2.0
+            )
             if res.returncode == 0:
                 return
         except Exception:
             pass
 
-        # 2. 回退到 pygame
+        # 2. 回退到标准 aplay
+        try:
+            res = subprocess.run(
+                ["aplay", "-q", filepath],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=3.0
+            )
+            if res.returncode == 0:
+                return
+        except Exception:
+            pass
+
+        # 3. 回退到 pygame
         if _pygame_available:
             try:
                 sound = pygame.mixer.Sound(filepath)
