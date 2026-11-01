@@ -223,11 +223,69 @@ class HardwareAgent:
             "has_mic": self.has_mic,
             "is_raspberry_pi": IS_RASPBERRY_PI,
             "wakeword_model": self.cfg.get("wakeword_model", "hey_jarvis"),
-            "wakeword_threshold": self.cfg.get("wakeword_threshold", 0.5),
+            "wakeword_threshold": float(self.cfg.get("wakeword_threshold", 0.20)),
+            "mic_gain": float(self.cfg.get("mic_gain", 2.5)),
             "cur_pan": getattr(self.hal, "cur_pan", 90.0),
             "cur_tilt": getattr(self.hal, "cur_tilt", 90.0),
             "last_waking_time": self.last_waking_time
         }
+
+    def trigger_wake_manually(self, custom_intent: str = "") -> bool:
+        """通过 Web 或 API 手动触发硬件唤醒，跳过唤醒词识别"""
+        if self.state in [self.STATE_SPEAKING, self.STATE_THINKING]:
+            return False
+        logger.info("⚡ [手动唤醒] 用户通过 Web 控制台或 API 手动触发唤醒！")
+        self.last_waking_time = time.time()
+        if self.oww_model:
+            self.oww_model.reset()
+
+        self.state = self.STATE_WAKING
+        self.emit_event("status_change", {
+            "status": self.STATE_WAKING,
+            "wake_word": "MANUAL",
+            "message": "⚡ 手动触发唤醒就绪！"
+        })
+        self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "HAPPY"})
+        if self.hal:
+            self.hal.set_angles(90, 80)
+
+        import core.sound_effects as sound_effects
+        sound_effects.play_sound("wake_chime")
+
+        def _wake_worker():
+            time.sleep(0.3)
+            if custom_intent:
+                self.process_voice_intent(custom_intent)
+            else:
+                self.state = self.STATE_LISTENING
+                self.emit_event("status_change", {
+                    "status": self.STATE_LISTENING,
+                    "message": "🎙️ 正在倾听主人说话 (说完停顿约1秒)..."
+                })
+                clip_path = self.record_audio_clip()
+                user_text = ""
+                if clip_path and os.path.exists(clip_path) and self.asr_engine:
+                    self.emit_event("status_change", {
+                        "status": self.STATE_THINKING,
+                        "message": "🔍 百度智能云语音识别转写中..."
+                    })
+                    user_text = self.asr_engine.recognize(clip_path)
+
+                if user_text:
+                    logger.info(f"🎙️ [手动唤醒识别成功]: {user_text}")
+                    self.process_voice_intent(user_text)
+                else:
+                    self.emit_event("status_change", {
+                        "status": self.STATE_IDLE,
+                        "message": "未能听清内容，已恢复待机监听"
+                    })
+                    self.emit_event("pose_sync", {"pan": 90, "tilt": 90, "emotion": "NORMAL"})
+                    self.state = self.STATE_IDLE
+                    if self.hal:
+                        self.hal.set_angles(90, 90)
+
+        threading.Thread(target=_wake_worker, daemon=True).start()
+        return True
 
     def start(self):
         """启动后台硬件智能体工作线程"""
@@ -275,14 +333,21 @@ class HardwareAgent:
         silence_counter = 0
         has_spoken = False
         rec_meter_counter = 0
+        mic_gain = float(self.cfg.get("mic_gain", 2.5))
 
         for _ in range(max_chunks):
             if not self._running:
                 break
             try:
                 data = self.audio_stream.read(CHUNK, exception_on_overflow=False)
-                frames.append(data)
-                audio_np = np.frombuffer(data, dtype=np.int16)
+                audio_raw = np.frombuffer(data, dtype=np.int16)
+                if mic_gain != 1.0:
+                    audio_np = np.clip(audio_raw.astype(np.float32) * mic_gain, -32768, 32767).astype(np.int16)
+                    frames.append(audio_np.tobytes())
+                else:
+                    audio_np = audio_raw
+                    frames.append(data)
+
                 energy = float(np.abs(audio_np).mean())
 
                 rec_meter_counter += 1
@@ -292,7 +357,7 @@ class HardwareAgent:
                         "energy": round(energy, 1),
                         "score": 0.0,
                         "model": self.cfg.get("wakeword_model", "hey_jarvis"),
-                        "threshold": float(self.cfg.get("wakeword_threshold", 0.38)),
+                        "threshold": float(self.cfg.get("wakeword_threshold", 0.20)),
                         "is_listening": True
                     })
 
@@ -389,7 +454,7 @@ class HardwareAgent:
                             "seq": len(stream_sentences)
                         })
 
-                        # 如果有物理硬件，驱动真实扬声器播放
+                        # 如果有物理硬件/TTS引擎，驱动耳机/音响播放
                         if self.tts_engine and audio_b:
                             try:
                                 tmp_chunk_path = f"/tmp/chunk_{len(stream_sentences)}.mp3"
@@ -399,9 +464,12 @@ class HardwareAgent:
                                 self.tts_engine.play_async(tmp_chunk_path, dur)
                                 if self.hal:
                                     self.hal.set_angles(90, 85)
-                                time.sleep(min(1.2, dur))
-                            except Exception:
-                                pass
+                                # 等待本句音频完整播报完毕，避免流式断句重叠
+                                play_start = time.time()
+                                while self.tts_engine.is_playing() and (time.time() - play_start) < (dur + 0.5):
+                                    time.sleep(0.05)
+                            except Exception as e:
+                                logger.warning(f"音频播放异常: {e}")
 
                 elif ev_type == "done":
                     final_reply = ev.get("reply") or "".join(stream_sentences) or "收到啦！"
@@ -453,13 +521,19 @@ class HardwareAgent:
                     time.sleep(0.01)
                     continue
 
-                audio_np = np.frombuffer(data, dtype=np.int16)
+                audio_raw = np.frombuffer(data, dtype=np.int16)
+                mic_gain = float(self.cfg.get("mic_gain", 2.5))
+                if mic_gain != 1.0:
+                    audio_np = np.clip(audio_raw.astype(np.float32) * mic_gain, -32768, 32767).astype(np.int16)
+                else:
+                    audio_np = audio_raw
+
                 energy = float(np.abs(audio_np).mean())
                 preds = self.oww_model.predict(audio_np)
                 max_score = float(max(preds.values())) if preds else 0.0
 
                 w_name = self.cfg.get("wakeword_model", "hey_jarvis")
-                threshold = float(self.cfg.get("wakeword_threshold", 0.38))
+                threshold = float(self.cfg.get("wakeword_threshold", 0.20))
 
                 # 每 ~160ms (2个 chunk) 广播一次实时音频电平与唤醒得分
                 meter_counter += 1

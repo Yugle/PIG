@@ -47,6 +47,7 @@ class TTSEngine:
 
         self._start_time = 0
         self._current_duration = 0.0
+        self._player_proc = None
 
         if pygame is not None:
             try:
@@ -117,7 +118,27 @@ class TTSEngine:
         self._start_time = time.time()
         self._current_duration = duration if duration > 0 else self.get_audio_duration(audio_path)
 
-        if self.audio_available and os.path.exists(audio_path):
+        if not os.path.exists(audio_path):
+            return
+
+        # 优先使用原生命令行播放器 (Linux / 树莓派 ALSA 直连蓝牙/声卡)
+        ext = os.path.splitext(audio_path)[1].lower()
+        player_cmd = None
+        if ext == ".mp3":
+            player_cmd = ["mpg123", "-q", audio_path]
+        elif ext in [".wav", ".pcm"]:
+            player_cmd = ["aplay", "-q", audio_path]
+
+        if player_cmd:
+            try:
+                self.stop()
+                self._player_proc = subprocess.Popen(player_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
+            except Exception:
+                pass
+
+        # 回退到 pygame
+        if self.audio_available:
             try:
                 pygame.mixer.music.load(audio_path)
                 pygame.mixer.music.play()
@@ -126,6 +147,10 @@ class TTSEngine:
 
     def is_playing(self) -> bool:
         """检查当前语音是否仍在播放中"""
+        proc = getattr(self, "_player_proc", None)
+        if proc is not None:
+            if proc.poll() is None:
+                return True
         if self.audio_available:
             try:
                 if pygame.mixer.music.get_busy():
@@ -138,6 +163,14 @@ class TTSEngine:
 
     def stop(self):
         """停止播放"""
+        proc = getattr(self, "_player_proc", None)
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=0.2)
+            except Exception:
+                pass
+            self._player_proc = None
         if self.audio_available:
             try:
                 pygame.mixer.music.stop()

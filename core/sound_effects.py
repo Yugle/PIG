@@ -9,6 +9,7 @@ import math
 import wave
 import struct
 import threading
+import subprocess
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOUNDS_DIR = os.path.join(PROJECT_ROOT, "assets", "sounds")
@@ -82,15 +83,25 @@ def play_sound(sound_name: str, async_play: bool = True):
     if not os.path.exists(filepath):
         ensure_sound_assets()
 
-    if not _pygame_available or not os.path.exists(filepath):
+    if not os.path.exists(filepath):
         return
 
     def _play():
+        # 1. 优先尝试系统 aplay (Linux / 树莓派原生 ALSA 直连蓝牙耳机)
         try:
-            sound = pygame.mixer.Sound(filepath)
-            sound.play()
-        except Exception as e:
+            res = subprocess.run(["aplay", "-q", filepath], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if res.returncode == 0:
+                return
+        except Exception:
             pass
+
+        # 2. 回退到 pygame
+        if _pygame_available:
+            try:
+                sound = pygame.mixer.Sound(filepath)
+                sound.play()
+            except Exception:
+                pass
 
     if async_play:
         threading.Thread(target=_play, daemon=True).start()

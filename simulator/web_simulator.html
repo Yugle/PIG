@@ -492,13 +492,19 @@
         <span style="color: var(--text-sub); display: flex; align-items: center; gap: 4px;">
           <span id="meter-icon">🎙️</span> 音量:
         </span>
-        <div style="width: 75px; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; position: relative;">
+        <div style="width: 70px; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; position: relative;">
           <div id="meter-fill" style="width: 0%; height: 100%; background: #10b981; border-radius: 4px; transition: width 0.08s ease-out, background-color 0.1s;"></div>
         </div>
-        <span id="meter-val" style="font-family: monospace; min-width: 32px; color: #10b981; font-weight: 600;">0</span>
-        <span id="meter-score" style="color: #f59e0b; font-family: monospace; margin-left: 4px;">
-          置信度: <span id="meter-score-val">0.00 / 0.38</span>
+        <span id="meter-val" style="font-family: monospace; min-width: 30px; color: #10b981; font-weight: 600;">0</span>
+        <span id="meter-score" style="color: #f59e0b; font-family: monospace; margin-left: 2px;">
+          置信度: <span id="meter-score-val">0.00 / 0.20</span>
         </span>
+      </div>
+
+      <!-- 快速灵敏度调优与一键手动唤醒 -->
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <button id="manual-wake-btn" onclick="triggerManualWake()" style="background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; border: none; border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35); transition: all 0.2s;" title="跳过唤醒词检测，直接手动唤醒机器人倾听并对话">⚡ 一键唤醒</button>
+        <button id="audio-settings-toggle-btn" onclick="toggleAudioSettingsModal()" style="background: rgba(255, 255, 255, 0.08); color: var(--text-sub); border: 1px solid var(--border-color); border-radius: 12px; padding: 4px 8px; font-size: 0.76rem; cursor: pointer;" title="调整唤醒灵敏度与麦克风增益">⚙️</button>
       </div>
 
       <div id="memory-badge" style="font-size: 0.78rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 12px; color: var(--text-sub); display: flex; align-items: center; gap: 6px;">
@@ -512,6 +518,31 @@
       </div>
     </div>
   </header>
+
+  <!-- 唤醒灵敏度与麦克风增益浮窗 -->
+  <div id="audio-settings-modal" style="display:none; position:fixed; top:54px; right:140px; z-index:9999; background:rgba(18, 22, 34, 0.95); border:1px solid rgba(0, 229, 255, 0.35); border-radius:12px; padding:12px 16px; box-shadow:0 8px 24px rgba(0,0,0,0.6); backdrop-filter:blur(10px); min-width:250px; color:#e0e7ff; font-size:0.8rem;">
+    <div style="font-weight:600; margin-bottom:10px; color:#00e5ff; display:flex; justify-content:space-between; align-items:center;">
+      <span>🎙️ 蓝牙麦克风与唤醒调优</span>
+      <span onclick="toggleAudioSettingsModal()" style="cursor:pointer; color:#888; font-size:1rem; padding:0 4px;">✕</span>
+    </div>
+    <div style="margin-bottom:10px;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <span>唤醒阈值 (越低越灵敏):</span>
+        <span id="setting-thresh-val" style="color:#f59e0b; font-weight:600;">0.20</span>
+      </div>
+      <input type="range" id="setting-thresh-slider" min="0.10" max="0.50" step="0.02" value="0.20" style="width:100%; accent-color:#f59e0b;" oninput="onAudioSettingsChange()" />
+    </div>
+    <div style="margin-bottom:8px;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <span>软件增益 (弥补耳机音量小):</span>
+        <span id="setting-gain-val" style="color:#10b981; font-weight:600;">2.5x</span>
+      </div>
+      <input type="range" id="setting-gain-slider" min="1.0" max="5.0" step="0.5" value="2.5" style="width:100%; accent-color:#10b981;" oninput="onAudioSettingsChange()" />
+    </div>
+    <div style="font-size:0.7rem; color:#888; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px; margin-top:6px;">
+      💡 提示: 蓝牙单声道麦克风建议阈值 0.18~0.22，增益 2.5x
+    </div>
+  </div>
 
   <main>
     <!-- 左侧：具身控制台 (姿态、动作、表情、技能生态、元认知) -->
@@ -2356,6 +2387,65 @@
       }
     }
 
+    function toggleAudioSettingsModal() {
+      const modal = document.getElementById("audio-settings-modal");
+      if (modal) modal.style.display = modal.style.display === "none" ? "block" : "none";
+    }
+
+    let _settingsDebounceTimer = null;
+    function onAudioSettingsChange() {
+      const tSlider = document.getElementById("setting-thresh-slider");
+      const gSlider = document.getElementById("setting-gain-slider");
+      const tVal = document.getElementById("setting-thresh-val");
+      const gVal = document.getElementById("setting-gain-val");
+      if (!tSlider || !gSlider) return;
+
+      const thresh = parseFloat(tSlider.value);
+      const gain = parseFloat(gSlider.value);
+      if (tVal) tVal.innerText = thresh.toFixed(2);
+      if (gVal) gVal.innerText = gain.toFixed(1) + "x";
+
+      clearTimeout(_settingsDebounceTimer);
+      _settingsDebounceTimer = setTimeout(async () => {
+        try {
+          await fetch("/api/wakeword/config", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ threshold: thresh, mic_gain: gain })
+          });
+          console.log(`[Config] 唤醒阈值已更新为 ${thresh}, 麦克风增益为 ${gain}x`);
+        } catch (e) {
+          console.warn("更新唤醒配置失败:", e);
+        }
+      }, 300);
+    }
+
+    async function triggerManualWake() {
+      const btn = document.getElementById("manual-wake-btn");
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = "⏳ 唤醒中...";
+      }
+      try {
+        const res = await fetch("/api/wake", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: "{}"
+        });
+        const data = await res.json();
+        console.log("手动唤醒响应:", data);
+      } catch (e) {
+        console.error("手动唤醒失败:", e);
+      } finally {
+        setTimeout(() => {
+          if (btn) {
+            btn.disabled = false;
+            btn.innerText = "⚡ 一键唤醒";
+          }
+        }, 2000);
+      }
+    }
+
     async function fetchHardwareStatus() {
       try {
         const resp = await fetch("/api/system/mode");
@@ -2387,6 +2477,19 @@
           hwLabel.innerText = "🎙️ 物理麦克风未接入 (可插蓝牙/USB麦)";
           hwDot.style.background = "#8b949e";
         }
+      }
+
+      if (status.wakeword_threshold !== undefined) {
+        const tSlider = document.getElementById("setting-thresh-slider");
+        const tVal = document.getElementById("setting-thresh-val");
+        if (tSlider) tSlider.value = status.wakeword_threshold;
+        if (tVal) tVal.innerText = Number(status.wakeword_threshold).toFixed(2);
+      }
+      if (status.mic_gain !== undefined) {
+        const gSlider = document.getElementById("setting-gain-slider");
+        const gVal = document.getElementById("setting-gain-val");
+        if (gSlider) gSlider.value = status.mic_gain;
+        if (gVal) gVal.innerText = Number(status.mic_gain).toFixed(1) + "x";
       }
     }
 

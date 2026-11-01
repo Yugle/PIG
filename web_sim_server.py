@@ -349,6 +349,65 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        # 调整唤醒词灵敏度阈值与麦克风软件增益
+        if self.path == "/api/wakeword/config":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                if "threshold" in body:
+                    val = float(body["threshold"])
+                    hardware_agent.cfg["wakeword_threshold"] = val
+                if "mic_gain" in body:
+                    gain = float(body["mic_gain"])
+                    hardware_agent.cfg["mic_gain"] = gain
+                if "model" in body:
+                    hardware_agent.cfg["wakeword_model"] = str(body["model"])
+
+                # 持久化到 config.json
+                cfg_file = os.path.join(DIRECTORY, "config.json")
+                if os.path.exists(cfg_file):
+                    try:
+                        with open(cfg_file, "r", encoding="utf-8") as f:
+                            cur_cfg = json.load(f)
+                        if "threshold" in body:
+                            cur_cfg["wakeword_threshold"] = hardware_agent.cfg["wakeword_threshold"]
+                        if "mic_gain" in body:
+                            cur_cfg["mic_gain"] = hardware_agent.cfg["mic_gain"]
+                        with open(cfg_file, "w", encoding="utf-8") as f:
+                            json.dump(cur_cfg, f, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "status": "ok",
+                    "wakeword_threshold": hardware_agent.cfg.get("wakeword_threshold"),
+                    "mic_gain": hardware_agent.cfg.get("mic_gain"),
+                    "hardware_status": hardware_agent.get_status()
+                }, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(400, str(e))
+            return
+
+        # 手动触发硬件唤醒 (跳过唤醒词检测，直接倾听并与主人对话)
+        if self.path == "/api/wake":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length) if content_length > 0 else b"{}"
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                intent = body.get("intent", "")
+                success = hardware_agent.trigger_wake_manually(custom_intent=intent)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok" if success else "busy"}, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
         # 切换运行模式: 'twin' (真机孪生) 或 'simulation' (纯网页仿真)
         if self.path == "/api/system/mode":
             content_length = int(self.headers.get("Content-Length", 0))
