@@ -8,7 +8,7 @@ import json
 import logging
 import re
 import requests
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Generator
 
 logger = logging.getLogger("AgentReasoner")
 
