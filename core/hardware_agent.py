@@ -274,6 +274,7 @@ class HardwareAgent:
 
         silence_counter = 0
         has_spoken = False
+        rec_meter_counter = 0
 
         for _ in range(max_chunks):
             if not self._running:
@@ -283,6 +284,17 @@ class HardwareAgent:
                 frames.append(data)
                 audio_np = np.frombuffer(data, dtype=np.int16)
                 energy = float(np.abs(audio_np).mean())
+
+                rec_meter_counter += 1
+                if rec_meter_counter >= 2:
+                    rec_meter_counter = 0
+                    self.emit_event("audio_meter", {
+                        "energy": round(energy, 1),
+                        "score": 0.0,
+                        "model": self.cfg.get("wakeword_model", "hey_jarvis"),
+                        "threshold": float(self.cfg.get("wakeword_threshold", 0.38)),
+                        "is_listening": True
+                    })
 
                 if energy > 650:
                     has_spoken = True
@@ -427,6 +439,7 @@ class HardwareAgent:
         """物理麦克风监听工作循环"""
         import numpy as np
 
+        meter_counter = 0
         while self._running:
             # 若处于纯网页仿真模式或无麦克风，线程低频休眠保活
             if self.mode != "twin" or not self.has_mic or not self.audio_stream:
@@ -436,13 +449,32 @@ class HardwareAgent:
             try:
                 CHUNK = 1280
                 data = self.audio_stream.read(CHUNK, exception_on_overflow=False)
-                audio_np = np.frombuffer(data, dtype=np.int16)
-                preds = self.oww_model.predict(audio_np)
+                if not data:
+                    time.sleep(0.01)
+                    continue
 
-                threshold = float(self.cfg.get("wakeword_threshold", 0.5))
-                if any(v > threshold for v in preds.values()):
-                    w_name = self.cfg.get("wakeword_model", "hey_jarvis")
-                    logger.info(f"\n🔔 [唤醒成功] 物理麦克风监听到唤醒词: {w_name}！")
+                audio_np = np.frombuffer(data, dtype=np.int16)
+                energy = float(np.abs(audio_np).mean())
+                preds = self.oww_model.predict(audio_np)
+                max_score = float(max(preds.values())) if preds else 0.0
+
+                w_name = self.cfg.get("wakeword_model", "hey_jarvis")
+                threshold = float(self.cfg.get("wakeword_threshold", 0.38))
+
+                # 每 ~160ms (2个 chunk) 广播一次实时音频电平与唤醒得分
+                meter_counter += 1
+                if meter_counter >= 2:
+                    meter_counter = 0
+                    self.emit_event("audio_meter", {
+                        "energy": round(energy, 1),
+                        "score": round(max_score, 3),
+                        "model": w_name,
+                        "threshold": threshold,
+                        "is_listening": False
+                    })
+
+                if max_score > threshold:
+                    logger.info(f"\n🔔 [唤醒成功] 物理麦克风监听到唤醒词: {w_name} (置信度={max_score:.3f} > {threshold})！")
                     self.last_waking_time = time.time()
                     self.oww_model.reset()
 

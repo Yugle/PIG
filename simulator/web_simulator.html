@@ -487,6 +487,20 @@
         <span id="hw-status-label">🎙️ 硬件检测中...</span>
       </div>
 
+      <!-- 实时麦克风音量与唤醒得分指示器 -->
+      <div id="mic-meter-box" style="font-size: 0.75rem; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(0, 229, 255, 0.25); padding: 3px 10px; border-radius: 12px; display: flex; align-items: center; gap: 8px;" title="物理蓝牙/USB麦克风实时音频电平与唤醒词置信度">
+        <span style="color: var(--text-sub); display: flex; align-items: center; gap: 4px;">
+          <span id="meter-icon">🎙️</span> 音量:
+        </span>
+        <div style="width: 75px; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; position: relative;">
+          <div id="meter-fill" style="width: 0%; height: 100%; background: #10b981; border-radius: 4px; transition: width 0.08s ease-out, background-color 0.1s;"></div>
+        </div>
+        <span id="meter-val" style="font-family: monospace; min-width: 32px; color: #10b981; font-weight: 600;">0</span>
+        <span id="meter-score" style="color: #f59e0b; font-family: monospace; margin-left: 4px;">
+          置信度: <span id="meter-score-val">0.00 / 0.38</span>
+        </span>
+      </div>
+
       <div id="memory-badge" style="font-size: 0.78rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 12px; color: var(--text-sub); display: flex; align-items: center; gap: 6px;">
         <span>🧠 伴侣记忆:</span>
         <span id="mem-name" style="color: var(--cyan); font-weight: 600;">主人</span>
@@ -2176,6 +2190,11 @@
     function handleDigitalTwinEvent(ev) {
       if (!ev || !ev.type) return;
 
+      if (ev.type === "audio_meter") {
+        updateAudioMeterUI(ev);
+        return;
+      }
+
       if (ev.type === "connected" || ev.type === "init") {
         if (ev.status) updateHardwareStatusUI(ev.status);
         return;
@@ -2286,6 +2305,54 @@
         updateMemoryBadge();
         fetchReminders();
         fetchEvolvedActions();
+      }
+    }
+
+    function updateAudioMeterUI(data) {
+      const fill = document.getElementById("meter-fill");
+      const val = document.getElementById("meter-val");
+      const scoreVal = document.getElementById("meter-score-val");
+      const icon = document.getElementById("meter-icon");
+
+      if (!fill || !val || !scoreVal) return;
+
+      const energy = Number(data.energy) || 0;
+      const score = Number(data.score) || 0;
+      const threshold = Number(data.threshold) || 0.38;
+
+      // 能量进度条映射 (0 ~ 1800 能量 -> 0% ~ 100%)
+      const pct = Math.min(100, Math.max(0, Math.round((energy / 1800) * 100)));
+      fill.style.width = pct + "%";
+
+      val.innerText = Math.round(energy);
+      if (data.is_listening) {
+        scoreVal.innerText = "倾听录音中...";
+        scoreVal.style.color = "#00e5ff";
+      } else {
+        scoreVal.innerText = `${score.toFixed(2)} / ${threshold}`;
+      }
+
+      // 颜色根据音量和唤醒置信度动态切换
+      if (score >= threshold) {
+        fill.style.background = "#ffb020";
+        scoreVal.style.color = "#ffb020";
+        scoreVal.style.fontWeight = "bold";
+      } else if (energy > 500) {
+        fill.style.background = "#10b981";
+        val.style.color = "#10b981";
+        if (!data.is_listening) scoreVal.style.color = "#f59e0b";
+      } else if (energy > 80) {
+        fill.style.background = "#06b6d4";
+        val.style.color = "#a1a1aa";
+      } else {
+        fill.style.background = "#4b5563";
+        val.style.color = "#6b7280";
+      }
+
+      if (energy <= 10) {
+        if (icon) icon.title = "⚠️ 当前麦克风输入几乎为0，可能蓝牙音频休眠或静音中";
+      } else {
+        if (icon) icon.title = "麦克风正在实时采集中";
       }
     }
 
