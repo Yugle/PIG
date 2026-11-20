@@ -490,7 +490,8 @@ class SkillManager:
 
         lines.append(
             "\n💡 【内置伴侣进化指令】:"
-            "\n- set_user_name(name): 当主人要求更名（如“把我的名字改成阿珍”、“以后叫我阿珍”）时调用，更新长期档案。"
+            "\n- set_bot_name(name): 当主人给你（机器人自身）起名或改名（如“你叫小猪”、“以后你的名字叫PIG”、“给你起名叫小猪”）时调用，更新机器人自身名字。"
+            "\n- set_user_name(name): 当主人要求更名对主人的称呼（如“我叫张三”、“以后叫我阿珍”、“把我的名字改成胖虎”）时调用，更新长期档案。"
             "\n- create_skill(skill_id, name, description, code, parameters): 当主人要求你“新整一个技能/自创新功能/写新插件”时调用，你可自主生成 Python 代码 (必须包含 def run(**kwargs): 函数) 编写全新热加载技能！"
             "\n- install_skill(skill_id) / uninstall_skill(skill_id): 安装或卸载技能商店插件。"
             "\n- evolve_action(name, description, keyframes): 用户教你动作或口令时自创动作序列。keyframes 包含动作帧列表，每帧含 pan(水平角0~180), tilt(俯仰角0~180), emotion(表情如HAPPY/WINK/LOVE), delay(毫秒如300)。示例: evolve_action(name=\"点头打招呼\", description=\"上下点头两次\", keyframes=[{\"pan\": 90, \"tilt\": 70, \"emotion\": \"HAPPY\", \"delay\": 300}, {\"pan\": 90, \"tilt\": 90, \"emotion\": \"HAPPY\", \"delay\": 300}])"
@@ -764,6 +765,11 @@ class SkillManager:
             sid = args.get("skill_id", "")
             ok = self.uninstall_skill(sid)
             return f"技能【{sid}】{'卸载成功' if ok else '未找到该技能'}"
+        elif name in ["set_bot_name", "rename_bot", "change_bot_name"]:
+            new_name = args.get("name") or args.get("bot_name") or ""
+            if self.memory_manager:
+                return self.memory_manager.set_bot_name(new_name)
+            return f"机器人名字已更新为：{new_name}"
         elif name in ["set_user_name", "change_name", "update_name"]:
             new_name = args.get("name") or args.get("user_name") or ""
             if self.memory_manager:

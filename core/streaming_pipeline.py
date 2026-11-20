@@ -30,7 +30,9 @@ except ImportError:
 class StreamingJsonReplyExtractor:
     """
     针对大模型 ReAct JSON 输出的增量字符流提取器：
-    只提取 "reply" 字段内的面向主人的口语文案，过滤掉 thought、skill 等内部规划字段。
+    1. 实时增量提取 "thought" 字段，供前端即时呈现大脑思考，消除等待焦虑。
+    2. 提取 "reply" 字段内的面向主人的口语文案，断句后供流式 TTS 与文本渲染。
+    3. 过滤 skill 等内部规划字段，若检测到工具调用则静默语音，避免虚假播报。
     """
     STATE_BEFORE_REPLY = 0
     STATE_IN_REPLY = 1
@@ -44,6 +46,36 @@ class StreamingJsonReplyExtractor:
         self.full_reply_text = ""
         self.escape_next = False
         self.is_tool_step = False
+
+        # 思考内容增量提取器
+        self.in_thought = False
+        self.thought_buffer = ""
+        self.thought_delta = ""
+        self.thought_done = False
+        self.escape_thought = False
+
+    def _proc_thought_char(self, ch: str):
+        if self.escape_thought:
+            real_ch = "\n" if ch == "n" else ("\t" if ch == "t" else ('"' if ch == '"' else ch))
+            self.thought_delta += real_ch
+            self.thought_buffer += real_ch
+            self.escape_thought = False
+            return
+        if ch == "\\":
+            self.escape_thought = True
+            return
+        if ch == '"':
+            self.in_thought = False
+            self.thought_done = True
+            return
+        self.thought_delta += ch
+        self.thought_buffer += ch
+
+    def pop_thought_delta(self) -> str:
+        """弹出新累积的思考增量切片，供 SSE 实时推送到前端"""
+        d = self.thought_delta
+        self.thought_delta = ""
+        return d
 
     def _has_active_skill_before(self, reply_idx: int) -> bool:
         before_reply = self.full_raw_text[:reply_idx]
@@ -65,6 +97,20 @@ class StreamingJsonReplyExtractor:
         emitted_sentences = []
         for ch in delta:
             self.full_raw_text += ch
+
+            # 思考内容增量检测与捕获
+            if not self.thought_done:
+                if self.in_thought:
+                    self._proc_thought_char(ch)
+                else:
+                    idx = self.full_raw_text.find('"thought"')
+                    if idx != -1:
+                        after = self.full_raw_text[idx + 9:]
+                        colon = after.find(":")
+                        if colon != -1:
+                            val_part = after[colon + 1:].lstrip()
+                            if val_part.startswith('"'):
+                                self.in_thought = True
 
             if self.state == self.STATE_BEFORE_REPLY:
                 # 兜底：如果模型未按要求输出 JSON (不以 { 开头)，自动平滑切换为纯文本流式输出

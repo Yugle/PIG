@@ -340,6 +340,9 @@ class AgentReasoner:
                                         sentences = extractor.feed(delta_content)
                                         for s in sentences:
                                             yield {"type": "sentence", "text": s}
+                                        th = extractor.pop_thought_delta()
+                                        if th:
+                                            yield {"type": "thought", "text": th}
                             except Exception:
                                 pass
 
