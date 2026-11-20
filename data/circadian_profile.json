@@ -16,8 +16,8 @@
     0,
     14,
     22,
-    24,
-    24,
+    42,
+    36,
     24,
     1,
     2,
@@ -25,9 +25,9 @@
     0,
     0
   ],
-  "total_turns": 121,
-  "last_interaction_date": "2026-11-01",
-  "morning_greeted_today": true,
+  "total_turns": 151,
+  "last_interaction_date": "2026-11-20",
+  "morning_greeted_today": false,
   "learned_habits": {
     "wake_hour": 11,
     "slump_hour": 16,

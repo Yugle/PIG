@@ -127,11 +127,12 @@ class HardwareAgent:
         """初始化 TTS 引擎"""
         try:
             from drivers.tts_engine import TTSEngine
+            clone_audio = self.cfg.get("mimo_clone_audio", "") if self.cfg.get("mimo_clone_enabled", False) else ""
             return TTSEngine(
                 mode=self.cfg.get("tts_mode", "edge"),
                 mimo_api_key=self.cfg.get("mimo_api_key", ""),
                 mimo_voice=self.cfg.get("mimo_voice", "冰糖"),
-                mimo_clone_audio=self.cfg.get("mimo_clone_audio", ""),
+                mimo_clone_audio=clone_audio,
                 mimo_design_prompt=self.cfg.get("mimo_design_prompt", "")
             )
         except Exception as e:

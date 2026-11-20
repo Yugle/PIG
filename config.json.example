@@ -9,6 +9,7 @@
   "mimo_api_key": "YOUR_MIMO_API_KEY",
   "mimo_voice": "冰糖",
   "mimo_clone_audio": "",
+  "mimo_clone_enabled": false,
   "mimo_design_prompt": "",
   "custom_voice_id": "",
   "custom_tts_api_key": "",

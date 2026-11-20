@@ -13,9 +13,13 @@ import time
 import asyncio
 import base64
 import logging
+import hashlib
 from typing import Dict, Any, List, Optional, Generator, AsyncGenerator
 
 logger = logging.getLogger("StreamingPipeline")
+
+TTS_CACHE_DIR = "/tmp/pig_tts_cache"
+os.makedirs(TTS_CACHE_DIR, exist_ok=True)
 
 try:
     import edge_tts
@@ -198,6 +202,20 @@ class AsyncMiMoTTSStreamer:
         if not clean_text or not self.api_key:
             return b""
 
+        # 0. 快速检查本地零延时 LRU/MD5 磁盘缓存
+        cache_key = hashlib.md5(
+            f"{self.voice}_{self.clone_audio}_{self.design_prompt}_{clean_text}".encode("utf-8")
+        ).hexdigest()
+        cache_file = os.path.join(TTS_CACHE_DIR, f"{cache_key}.mp3")
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "rb") as cf:
+                    cached_bytes = cf.read()
+                    if cached_bytes:
+                        return cached_bytes
+            except Exception:
+                pass
+
         import requests
         try:
             url = "https://api.xiaomimimo.com/v1/chat/completions"
@@ -233,19 +251,43 @@ class AsyncMiMoTTSStreamer:
                 ],
                 "audio": {
                     "format": "mp3"
-                }
+                },
+                "stream": True
             }
             if audio_voice is not None:
                 payload["audio"]["voice"] = audio_voice
 
-            res = requests.post(url, json=payload, headers=headers, timeout=12)
+            # 采用流式切片摄取，提升首包到达速度
+            res = requests.post(url, json=payload, headers=headers, stream=True, timeout=12)
             if res.status_code == 200:
-                data = res.json()
-                msg = data.get("choices", [{}])[0].get("message", {})
-                audio_info = msg.get("audio", {})
-                b64_data = audio_info.get("data", "")
-                if b64_data:
-                    return base64.b64decode(b64_data)
+                audio_parts = []
+                for line in res.iter_lines():
+                    if line:
+                        line_str = line.decode("utf-8", errors="ignore")
+                        if line_str.startswith("data: "):
+                            data_str = line_str[6:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                obj = json.loads(data_str)
+                                choices = obj.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    audio_chunk = delta.get("audio")
+                                    if isinstance(audio_chunk, dict):
+                                        b64 = audio_chunk.get("data", "")
+                                        if b64:
+                                            audio_parts.append(base64.b64decode(b64))
+                            except Exception:
+                                pass
+                if audio_parts:
+                    full_audio = b"".join(audio_parts)
+                    try:
+                        with open(cache_file, "wb") as cf:
+                            cf.write(full_audio)
+                    except Exception:
+                        pass
+                    return full_audio
 
             logger.warning(f"小米 MiMo 流式单句调用异常 [{res.status_code}]: {res.text[:120]}")
             return b""
@@ -269,10 +311,11 @@ def get_tts_streamer(cfg: Optional[Dict[str, Any]] = None):
     mode = cfg.get("tts_mode", "edge")
     mimo_key = cfg.get("mimo_api_key", "")
     if mode == "mimo" and mimo_key:
+        clone_audio = cfg.get("mimo_clone_audio", "") if cfg.get("mimo_clone_enabled", False) else ""
         return AsyncMiMoTTSStreamer(
             api_key=mimo_key,
             voice=cfg.get("mimo_voice", "冰糖"),
-            clone_audio=cfg.get("mimo_clone_audio", ""),
+            clone_audio=clone_audio,
             design_prompt=cfg.get("mimo_design_prompt", "")
         )
     return AsyncEdgeTTSStreamer(voice=cfg.get("edge_voice", "zh-CN-XiaoxiaoNeural"))

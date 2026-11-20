@@ -62,13 +62,14 @@ else:
 eyes = EyeRenderer(240, 320)
 if is_raspberry_pi and not cfg.get("simulation", False):
     eyes.start_live_animation(hal, fps=25)
+clone_audio = cfg.get("mimo_clone_audio", "") if cfg.get("mimo_clone_enabled", False) else ""
 tts = TTSEngine(
     mode=cfg.get("tts_mode", "edge"),
     custom_voice_id=cfg.get("custom_voice_id", ""),
     api_key=cfg.get("custom_tts_api_key", ""),
     mimo_api_key=cfg.get("mimo_api_key", ""),
     mimo_voice=cfg.get("mimo_voice", "冰糖"),
-    mimo_clone_audio=cfg.get("mimo_clone_audio", ""),
+    mimo_clone_audio=clone_audio,
     mimo_design_prompt=cfg.get("mimo_design_prompt", "")
 )
 

@@ -320,11 +320,12 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 # 若启用小米 MiMo 语音模型 (支持预置、克隆、设计)
                 if mode == "mimo" and mimo_key:
                     from drivers.tts_engine import TTSEngine
+                    clone_audio = cfg.get("mimo_clone_audio", "") if cfg.get("mimo_clone_enabled", False) else ""
                     sim_tts = TTSEngine(
                         mode="mimo",
                         mimo_api_key=mimo_key,
                         mimo_voice=mimo_voice,
-                        mimo_clone_audio=cfg.get("mimo_clone_audio", ""),
+                        mimo_clone_audio=clone_audio,
                         mimo_design_prompt=cfg.get("mimo_design_prompt", "")
                     )
                     out_path, _ = sim_tts.synthesize(text, out_file="/tmp/web_mimo_tts.mp3")
@@ -760,6 +761,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
                         self.wfile.write(msg.encode("utf-8"))
                         self.wfile.flush()
+                        self.close_connection = True
 
             except Exception as e:
                 err_ev = {"type": "error", "message": str(e)}
@@ -771,6 +773,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             finally:
                 _drain_ready_audio(force_all=True)
                 tts_executor.shutdown(wait=False)
+                self.close_connection = True
             return
 
         if self.path == "/api/chat":

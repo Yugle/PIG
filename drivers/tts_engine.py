@@ -4,6 +4,12 @@ import asyncio
 import subprocess
 import requests
 import base64
+import json
+import hashlib
+import shutil
+
+TTS_CACHE_DIR = "/tmp/pig_tts_cache"
+os.makedirs(TTS_CACHE_DIR, exist_ok=True)
 
 try:
     import pygame
@@ -91,26 +97,40 @@ class TTSEngine:
         仅合成音频并计算精准时长，不立即阻塞播放。
         :return: (音频文件绝对路径, 精准时长秒数)
         """
-        if not text:
+        clean_text = (text or "").strip()
+        if not clean_text:
             return ("", 0.0)
+
+        # 0. 快速匹配本地磁盘 LRU/MD5 缓存 (0ms 命中即出声)
+        cache_key = hashlib.md5(
+            f"{self.mode}_{voice or self.mimo_voice}_{self.mimo_clone_audio}_{self.mimo_design_prompt}_{clean_text}".encode("utf-8")
+        ).hexdigest()
+        cache_file = os.path.join(TTS_CACHE_DIR, f"{cache_key}.mp3")
+        if os.path.exists(cache_file):
+            try:
+                shutil.copyfile(cache_file, out_file)
+                dur = self.get_audio_duration(out_file, clean_text)
+                return (out_file, dur)
+            except Exception:
+                pass
 
         # 分支 1: 小米 MiMo-V2.5-TTS
         if self.mode == "mimo" and self.mimo_api_key:
-            success = self._mimo_tts(text, out_file, voice)
+            success = self._mimo_tts(clean_text, out_file, voice, cache_file=cache_file)
             if not success:
-                self._edge_fallback(text, out_file, self.default_voice)
+                self._edge_fallback(clean_text, out_file, self.default_voice)
         # 分支 2: 自定义克隆音色 (如 Fish Audio)
         elif self.mode == "custom" and self.api_key and self.custom_voice_id:
             voice = voice or self.default_voice
-            success = self._custom_tts(text, out_file)
+            success = self._custom_tts(clean_text, out_file)
             if not success:
-                self._edge_fallback(text, out_file, voice)
+                self._edge_fallback(clean_text, out_file, voice)
         else:
             # 分支 3: Edge-TTS
             voice = voice or self.default_voice
-            self._edge_fallback(text, out_file, voice)
+            self._edge_fallback(clean_text, out_file, voice)
 
-        duration = self.get_audio_duration(out_file, text)
+        duration = self.get_audio_duration(out_file, clean_text)
         return (out_file, duration)
 
     def play_async(self, audio_path: str, duration: float = 0.0):
@@ -186,7 +206,7 @@ class TTSEngine:
         while self.is_playing():
             time.sleep(0.05)
 
-    def _mimo_tts(self, text: str, path: str, voice: str = None) -> bool:
+    def _mimo_tts(self, text: str, path: str, voice: str = None, cache_file: str = None) -> bool:
         """
         调用小米 MiMo-V2.5-TTS 语音大模型套件:
         1. 声音克隆 (mimo-v2.5-tts-voiceclone): 当配置了 mimo_clone_audio 参考音频文件时
@@ -238,21 +258,44 @@ class TTSEngine:
                 ],
                 "audio": {
                     "format": "mp3"
-                }
+                },
+                "stream": True
             }
             if audio_voice is not None:
                 payload["audio"]["voice"] = audio_voice
 
-            res = requests.post(url, json=payload, headers=headers, timeout=20)
+            res = requests.post(url, json=payload, headers=headers, stream=True, timeout=20)
             if res.status_code == 200:
-                data = res.json()
-                msg = data.get("choices", [{}])[0].get("message", {})
-                audio_info = msg.get("audio", {})
-                b64_data = audio_info.get("data", "")
-                if b64_data:
-                    audio_bytes = base64.b64decode(b64_data)
+                audio_parts = []
+                for line in res.iter_lines():
+                    if line:
+                        line_str = line.decode("utf-8", errors="ignore")
+                        if line_str.startswith("data: "):
+                            data_str = line_str[6:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                obj = json.loads(data_str)
+                                choices = obj.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    audio_chunk = delta.get("audio")
+                                    if isinstance(audio_chunk, dict):
+                                        b64 = audio_chunk.get("data", "")
+                                        if b64:
+                                            audio_parts.append(base64.b64decode(b64))
+                            except Exception:
+                                pass
+                if audio_parts:
+                    full_bytes = b"".join(audio_parts)
                     with open(path, "wb") as f:
-                        f.write(audio_bytes)
+                        f.write(full_bytes)
+                    if cache_file:
+                        try:
+                            with open(cache_file, "wb") as cf:
+                                cf.write(full_bytes)
+                        except Exception:
+                            pass
                     return True
             print(f"⚠️ [TTS] 小米 MiMo 调用异常 ({res.status_code}): {res.text[:200]}")
             return False

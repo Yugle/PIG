@@ -196,5 +196,16 @@
     "repeat": "none",
     "completed": true,
     "created_at": 1793441466.11751
+  },
+  {
+    "id": "timer_b84e7e",
+    "type": "timer",
+    "content": "测试泡茶提醒",
+    "target_time": 1795164199.4751804,
+    "target_time_str": "2026-11-20 16:43:19",
+    "display_str": "5分0秒倒计时: 测试泡茶提醒",
+    "repeat": "none",
+    "completed": true,
+    "created_at": 1795163899.475228
   }
 ]

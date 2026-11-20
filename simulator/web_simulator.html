@@ -354,6 +354,81 @@
       min-height: 0;
     }
 
+    /* 全屏对话专注模式 (防窥/沉浸式大屏视野) */
+    #chatPanelContainer.chat-fullscreen {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 99999 !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      border: none !important;
+      box-shadow: 0 0 60px rgba(0, 0, 0, 0.95) !important;
+      background: #0d1117 !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .panel-header {
+      padding: 16px 32px !important;
+      background: rgba(22, 27, 34, 0.98) !important;
+      border-bottom: 1px solid var(--border-color) !important;
+      backdrop-filter: blur(12px) !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .chat-panel-body {
+      max-width: 980px !important;
+      width: 100% !important;
+      margin: 0 auto !important;
+      padding: 24px 32px !important;
+      flex: 1 !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .chat-box {
+      border-radius: 12px !important;
+      border-color: rgba(0, 229, 255, 0.35) !important;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .chat-messages {
+      font-size: 0.95rem !important;
+      padding: 20px 24px !important;
+      gap: 16px !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .msg {
+      padding: 12px 18px !important;
+      border-radius: 12px !important;
+      max-width: 78% !important;
+      font-size: 0.94rem !important;
+      line-height: 1.6 !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .quick-chips-container {
+      margin-bottom: 6px !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .quick-chip {
+      font-size: 0.78rem !important;
+      padding: 4px 12px !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .chat-input-bar {
+      height: 52px !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .chat-input-bar input {
+      font-size: 0.95rem !important;
+      padding: 0 18px !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .chat-input-bar button {
+      font-size: 0.92rem !important;
+      padding: 0 20px !important;
+    }
+
     .quick-chips-container {
       display: flex;
       flex-wrap: wrap;
@@ -719,13 +794,16 @@
     </div>
 
     <!-- 右侧：具身对话与语音交互 (AI Brain 对话框) -->
-    <div class="panel">
+    <div class="panel" id="chatPanelContainer">
       <div class="panel-header" style="display:flex; align-items:center; justify-content:space-between; gap:6px; flex-wrap:nowrap; overflow:hidden;">
         <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1; overflow:hidden;">
           <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:0.86rem;" title="💬 具身伴侣对话与交互">💬 对话交互</span>
           <span id="chatStatusPill" style="font-size:0.72rem; white-space:nowrap; flex-shrink:0; background:rgba(46, 160, 67, 0.15); color:#7ee787; border:1px solid #238636; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center;">就绪 (Online)</span>
         </div>
-        <button class="btn" style="padding: 2px 8px; font-size: 0.74rem; white-space:nowrap; flex-shrink:0;" onclick="clearChatLogs()">清空消息</button>
+        <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+          <button class="btn" id="chatFullscreenBtn" style="padding: 2px 8px; font-size: 0.74rem; white-space:nowrap;" onclick="toggleChatFullscreen()" title="全屏独立专注对话 (快捷键: Esc 退出)">⛶ 全屏</button>
+          <button class="btn" style="padding: 2px 8px; font-size: 0.74rem; white-space:nowrap;" onclick="clearChatLogs()" title="清空对话记录">清空消息</button>
+        </div>
       </div>
       <div class="chat-panel-body">
         <!-- 快捷场景提问气泡 -->
@@ -1695,6 +1773,42 @@
       chatLogs.appendChild(div);
       chatLogs.scrollTop = chatLogs.scrollHeight;
     }
+
+    // ==========================================
+    // 对话面板全屏专注模式 (防窥/舒适视野切换)
+    // ==========================================
+    function toggleChatFullscreen() {
+      const panel = document.getElementById("chatPanelContainer");
+      const btn = document.getElementById("chatFullscreenBtn");
+      if (!panel || !btn) return;
+
+      const isFull = panel.classList.toggle("chat-fullscreen");
+      if (isFull) {
+        btn.innerHTML = "🗗 还原";
+        btn.classList.add("active");
+        btn.title = "退出全屏模式 (按 Esc 键亦可快速退出)";
+        setTimeout(() => {
+          const input = document.getElementById("chatInput");
+          if (input) input.focus();
+          const logs = document.getElementById("chatLogs");
+          if (logs) logs.scrollTop = logs.scrollHeight;
+        }, 100);
+      } else {
+        btn.innerHTML = "⛶ 全屏";
+        btn.classList.remove("active");
+        btn.title = "全屏独立专注对话 (快捷键: Esc 退出)";
+      }
+    }
+
+    // 全局快捷键监听：按 Esc 快速退出全屏防窥
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") {
+        const panel = document.getElementById("chatPanelContainer");
+        if (panel && panel.classList.contains("chat-fullscreen")) {
+          toggleChatFullscreen();
+        }
+      }
+    });
 
     // 快捷气泡与清空对话记录
     function clearChatLogs() {
