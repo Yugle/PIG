@@ -489,7 +489,8 @@ class HardwareAgent:
             api_key=api_key,
             base_url=base_url,
             model=model,
-            max_steps=4
+            max_steps=4,
+            enable_thinking=self.cfg.get("llm_thinking", False)
         )
 
         stream_sentences = []

@@ -55,12 +55,14 @@ class AgentReasoner:
         api_key: str,
         base_url: str = "https://api.xiaomimimo.com/v1",
         model: str = "mimo-v2.6-flash",
-        max_steps: int = 4
+        max_steps: int = 4,
+        enable_thinking: bool = False
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.max_steps = max_steps
+        self.enable_thinking = enable_thinking
 
     def run_react_loop(
         self,
@@ -113,6 +115,9 @@ class AgentReasoner:
                 "messages": messages,
                 "response_format": {"type": "json_object"}
             }
+            if "mimo" in self.model.lower() or "xiaomimimo" in self.base_url:
+                if not self.enable_thinking:
+                    payload["thinking"] = {"type": "disabled"}
 
             try:
                 resp = requests.post(url, headers=headers, json=payload, timeout=60)
@@ -300,6 +305,9 @@ class AgentReasoner:
                 "messages": messages,
                 "stream": True
             }
+            if "mimo" in self.model.lower() or "xiaomimimo" in self.base_url:
+                if not self.enable_thinking:
+                    payload["thinking"] = {"type": "disabled"}
 
             try:
                 resp = requests.post(url, headers=headers, json=payload, stream=True, timeout=60)
@@ -321,10 +329,14 @@ class AgentReasoner:
                                 chunk_json = json.loads(line_str[6:])
                                 choices = chunk_json.get("choices", [])
                                 if choices:
-                                    delta = choices[0].get("delta", {}).get("content", "")
-                                    if delta:
-                                        raw_tokens.append(delta)
-                                        sentences = extractor.feed(delta)
+                                    delta = choices[0].get("delta", {})
+                                    rc = delta.get("reasoning_content", "")
+                                    if rc:
+                                        yield {"type": "thought", "text": rc}
+                                    delta_content = delta.get("content", "")
+                                    if delta_content:
+                                        raw_tokens.append(delta_content)
+                                        sentences = extractor.feed(delta_content)
                                         for s in sentences:
                                             yield {"type": "sentence", "text": s}
                             except Exception:

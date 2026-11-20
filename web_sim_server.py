@@ -684,8 +684,34 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 api_key=api_key,
                 base_url=base_url,
                 model=model,
-                max_steps=4
+                max_steps=4,
+                enable_thinking=cfg.get("llm_thinking", False)
             )
+
+            from concurrent.futures import ThreadPoolExecutor
+            tts_executor = ThreadPoolExecutor(max_workers=3)
+            audio_futures = []
+
+            def _drain_ready_audio(force_all=False):
+                nonlocal audio_futures
+                while audio_futures:
+                    if not force_all and not audio_futures[0][2].done():
+                        break
+                    a_seq, a_txt, a_fut = audio_futures.pop(0)
+                    try:
+                        audio_b = a_fut.result(timeout=6.0 if force_all else 0.02)
+                        if audio_b:
+                            b64 = base64.b64encode(audio_b).decode("utf-8")
+                            a_payload = {
+                                "type": "audio_chunk",
+                                "seq": a_seq,
+                                "text": a_txt,
+                                "audio": b64
+                            }
+                            self.wfile.write(f"data: {json.dumps(a_payload, ensure_ascii=False)}\n\n".encode("utf-8"))
+                            self.wfile.flush()
+                    except Exception as ex:
+                        logger.warning(f"音频切片合成异常: {ex}")
 
             seq = 0
             try:
@@ -701,19 +727,34 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         sentence_text = event.get("text", "").strip()
                         if sentence_text:
                             seq += 1
-                            audio_b = asyncio.run(tts_streamer.synthesize_chunk(sentence_text))
-                            b64 = base64.b64encode(audio_b).decode("utf-8") if audio_b else ""
+                            # 1. 立即将文本切片推至前端渲染（零延时上屏）
                             payload = {
                                 "type": "chunk",
                                 "seq": seq,
                                 "text": sentence_text,
-                                "audio": b64
+                                "audio": ""
                             }
                             msg = f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
                             self.wfile.write(msg.encode("utf-8"))
                             self.wfile.flush()
 
-                    elif ev_type in ["tool_start", "observation", "done"]:
+                            # 2. 提交后台线程池并发合成音频
+                            fut = tts_executor.submit(
+                                lambda txt: asyncio.run(tts_streamer.synthesize_chunk(txt)),
+                                sentence_text
+                            )
+                            audio_futures.append((seq, sentence_text, fut))
+                            _drain_ready_audio(force_all=False)
+
+                    elif ev_type in ["tool_start", "observation", "thought"]:
+                        msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                        self.wfile.write(msg.encode("utf-8"))
+                        self.wfile.flush()
+                        _drain_ready_audio(force_all=False)
+
+                    elif ev_type == "done":
+                        # 在发送 done 前排空并送达所有已合成的音频切片
+                        _drain_ready_audio(force_all=True)
                         msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
                         self.wfile.write(msg.encode("utf-8"))
                         self.wfile.flush()
@@ -725,6 +766,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.flush()
                 except Exception:
                     pass
+            finally:
+                _drain_ready_audio(force_all=True)
+                tts_executor.shutdown(wait=False)
             return
 
         if self.path == "/api/chat":
@@ -781,7 +825,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         api_key=api_key,
                         base_url=base_url,
                         model=model,
-                        max_steps=4
+                        max_steps=4,
+                        enable_thinking=cfg.get("llm_thinking", False)
                     )
                     react_out = reasoner.run_react_loop(
                         user_text=user_text,

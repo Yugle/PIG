@@ -1906,7 +1906,13 @@
               continue;
             }
 
-            if (ev.type === "tool_start") {
+            if (ev.type === "thought") {
+              stopThinkingCadence();
+              if (!window._accumulatedThought) window._accumulatedThought = "";
+              window._accumulatedThought += ev.text;
+              botDiv.innerHTML = `<div style="font-size:0.7rem; color:var(--text-sub); margin-bottom:4px; font-style:italic; background:rgba(255,255,255,0.03); padding:3px 8px; border-radius:4px; border-left:2px solid var(--cyan);">💭 深度思考: ${window._accumulatedThought.slice(-80)}...</div>`;
+              chatLogs.scrollTop = chatLogs.scrollHeight;
+            } else if (ev.type === "tool_start") {
               stopThinkingCadence();
               toolStepsHtml += `<div style="font-size:0.72rem; color:var(--cyan); margin-bottom:4px; background:rgba(0, 229, 255, 0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(0, 229, 255, 0.2);">⚡ 正在调用技能: <b>${ev.name || "工具"}</b>...</div>`;
               botDiv.innerHTML = `${toolStepsHtml}<div style="color:var(--text-sub); font-size:0.75rem;">正在与物理环境/智能硬件交互...</div>`;
@@ -1921,6 +1927,11 @@
               botDiv.innerHTML = `${toolStepsHtml}<div>${formatMarkdown(accumulatedReply)}<span class="cursor-blink" style="display:inline-block; width:6px; height:12px; background:var(--cyan); margin-left:3px; vertical-align:middle;"></span></div>`;
               chatLogs.scrollTop = chatLogs.scrollHeight;
 
+              if (ev.audio) {
+                hasReceivedAudio = true;
+                streamingPlayer.enqueue(ev.audio, ev.text, ev.seq);
+              }
+            } else if (ev.type === "audio_chunk") {
               if (ev.audio) {
                 hasReceivedAudio = true;
                 streamingPlayer.enqueue(ev.audio, ev.text, ev.seq);
