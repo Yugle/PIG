@@ -711,7 +711,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                             self.wfile.write(f"data: {json.dumps(a_payload, ensure_ascii=False)}\n\n".encode("utf-8"))
                             self.wfile.flush()
                     except Exception as ex:
-                        logger.warning(f"音频切片合成异常: {ex}")
+                        print(f"⚠️ [WebSim] 音频切片合成异常: {ex}")
 
             seq = 0
             try:
