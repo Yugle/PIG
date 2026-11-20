@@ -44,6 +44,23 @@ def parse_llm_json(raw_text: str, reasoning_text: str = "") -> Optional[Dict[str
     return None
 
 
+# 常见的执行类动作技能集合 (高确定性、状态变更类，支持单轮极速闭环直出)
+ACTION_SKILLS = {
+    "set_bot_name", "rename_bot", "change_bot_name",
+    "set_user_name", "change_name", "update_name",
+    "reminder", "set_alarm", "set_timer", "set_reminder", "add_reminder", "delete_reminder",
+    "evolve_action", "create_action", "learn_action",
+    "play_action", "execute_action", "do_action", "run_action", "perform_action",
+    "pomodoro", "xiaomi_iot", "med_tracker", "dice_roll",
+    "install_skill", "uninstall_skill", "create_skill"
+}
+
+def is_skill_failure(obs: Any) -> bool:
+    """判断技能执行结果是否包含明确失败语义"""
+    obs_str = str(obs).lower()
+    return any(k in obs_str for k in ["失败", "错误", "未能", "异常", "未找到", "无效", "error", "fail", "invalid", "超时", "离线"])
+
+
 class AgentReasoner:
     """
     ReAct 认知循环引擎：
@@ -100,6 +117,7 @@ class AgentReasoner:
         final_reply = None
         final_behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
         last_observation = None
+        first_turn_ack = ""
 
         url = f"{self.base_url}/chat/completions"
         headers = {
@@ -182,6 +200,12 @@ class AgentReasoner:
                         act_obj = skill_manager.get_evolved_action(act_name)
                         if act_obj and act_obj.get("keyframes"):
                             final_behaviors = act_obj["keyframes"]
+
+                    # ⚡ 优化 1：执行类动作技能单轮极速闭环 (Speculative Execution)
+                    if tool_name in ACTION_SKILLS and not is_skill_failure(observation):
+                        final_reply = reply_candidate or str(observation)
+                        logger.info(f"⚡ [ReAct FastPath] 执行类技能【{tool_name}】单轮极速闭环完成，跳过第2轮LLM。")
+                        break
 
                     # 若已达到最大步数，无法继续循环推理，直接输出当前真实执行反馈，绝不掩饰
                     if step >= self.max_steps:
@@ -290,6 +314,7 @@ class AgentReasoner:
         final_reply = None
         final_behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
         last_observation = None
+        first_turn_ack = ""
 
         url = f"{self.base_url}/chat/completions"
         headers = {
@@ -396,22 +421,36 @@ class AgentReasoner:
                         "observation": str(observation)
                     })
 
-                    if step >= self.max_steps:
-                        final_reply = str(observation)
-                        yield {"type": "sentence", "text": final_reply}
+                    # ⚡ 优化 1：执行类动作技能单轮极速闭环直出 (Speculative Execution)
+                    if tool_name in ACTION_SKILLS and not is_skill_failure(observation):
+                        if not reply_candidate:
+                            reply_candidate = str(observation)
+                            yield {"type": "sentence", "text": reply_candidate}
+                        final_reply = reply_candidate
+                        logger.info(f"⚡ [ReAct FastPath] 执行类技能【{tool_name}】单轮极速闭环，跳过第2轮LLM。")
                         break
+
+                    if step >= self.max_steps:
+                        final_reply = reply_candidate or str(observation)
+                        break
+
+                    # ⚡ 优化 2：查询类技能首轮口头垫话无缝衔接第二轮
+                    if step == 1 and reply_candidate:
+                        first_turn_ack = reply_candidate
 
                     assistant_turn_content = json.dumps({
                         "thought": thought,
-                        "skill": skill_call,
-                        "reply": reply_candidate
+                        "reply": reply_candidate,
+                        "skill": skill_call
                     }, ensure_ascii=False)
                     messages.append({"role": "assistant", "content": assistant_turn_content})
+                    ack_hint = f"你刚才已经向主人给出了先行口头垫话：“{reply_candidate}”。\n" if reply_candidate else ""
                     observation_prompt = (
                         f"【系统工具执行反馈 (Observation)】:\n{observation}\n\n"
-                        f"请根据上述真实工具反馈继续思考：\n"
-                        f"- 若工具执行失败或报错，必须在 reply 中直接向主人坦白失败原因，严禁敷衍！\n"
-                        f"- 若任务已完成，请立即将 skill 设为 null，并在 reply 中向主人给出最终清晰口语答复。"
+                        f"{ack_hint}"
+                        f"真实数据现已就绪，请给出面向主人的最终口语答复：\n"
+                        f"- 必须将 skill 设为 null。\n"
+                        f"- 在 reply 中直接向主人清晰汇报查询结果，自然衔接前文，无需重复刚才的垫话。"
                     )
                     messages.append({"role": "user", "content": observation_prompt})
 
@@ -431,15 +470,18 @@ class AgentReasoner:
                 yield {"type": "sentence", "text": err_msg}
                 break
 
+        if first_turn_ack and first_turn_ack not in str(final_reply):
+            final_reply = f"{first_turn_ack} {final_reply}".strip()
+
         if last_observation and isinstance(last_observation, str):
-            is_tool_failure = any(k in last_observation for k in ["失败", "错误", "未找到", "超时", "异常", "未能", "离线", "失效"])
+            is_tool_failure = is_skill_failure(last_observation)
             if is_tool_failure:
                 if not final_reply or not any(k in str(final_reply) for k in ["失败", "错误", "未能", "未找到", "离线", "异常", "失效"]):
                     final_reply = f"操作未能成功：{last_observation}"
 
-        if not final_reply or any(k in str(final_reply) for k in ["稍等", "正在帮您", "让我先", "正在查询", "正在扫描", "马上为您", "这就去", "我来查", "我在听呢", "有什么问题尽管跟我说"]):
+        if not final_reply or (first_turn_ack and final_reply == first_turn_ack):
             if last_observation:
-                final_reply = str(last_observation)
+                final_reply = f"{final_reply} {last_observation}".strip()
             else:
                 final_reply = "抱歉主人，未能成功执行该操作，请重试。"
 

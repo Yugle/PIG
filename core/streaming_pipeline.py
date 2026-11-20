@@ -126,11 +126,6 @@ class StreamingJsonReplyExtractor:
 
                 if '"reply"' in self.full_raw_text:
                     idx = self.full_raw_text.rfind('"reply"')
-                    if self._has_active_skill_before(idx):
-                        self.is_tool_step = True
-                        self.state = self.STATE_DONE
-                        return []
-
                     after = self.full_raw_text[idx + 7:]
                     colon_idx = after.find(":")
                     if colon_idx != -1:
@@ -188,9 +183,6 @@ class StreamingJsonReplyExtractor:
 
     def flush(self) -> List[str]:
         """流结束时将缓冲区剩余的尾句全部冲刷出来"""
-        if self.is_tool_step:
-            self.reply_buffer = ""
-            return []
         rem = self.reply_buffer.strip()
         self.reply_buffer = ""
         if rem:
