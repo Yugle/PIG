@@ -17,7 +17,7 @@
   "tilt_pin": 13,
   "wakeword_model": "hey_jarvis",
   "wakeword_threshold": 0.5,
-  "max_reply_length": 150,
+  "max_reply_length": 50,
   "face_tracking": false,
   "non_verbal_audio": true,
   "idle_fsm": true,

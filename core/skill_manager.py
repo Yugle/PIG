@@ -529,18 +529,38 @@ class SkillManager:
         return reminder
 
     def set_alarm(self, time_str: str, content: str, repeat: str = "none") -> Dict[str, Any]:
-        """设置绝对时间闹钟 (如: 08:00 叫我起床 或 2026-10-31 09:30)"""
+        """设置绝对时间闹钟 (如: 08:00 叫我起床 或 明天08:00 或 2026-10-31 09:30)"""
         now_dt = datetime.now()
         target_dt = None
+        raw_str = (time_str or "").strip()
+
+        # 智能解析自然语言日期偏移
+        day_offset = 0
+        if "后天" in raw_str:
+            day_offset = 2
+        elif "明天" in raw_str:
+            day_offset = 1
+
+        is_pm = any(k in raw_str for k in ["下午", "晚上", "傍晚", "pm", "PM"])
+
+        # 清洗干扰词并标准化时间
+        clean_time = raw_str.replace("今天", "").replace("明天", "").replace("后天", "")
+        clean_time = clean_time.replace("早上", "").replace("上午", "").replace("清晨", "")
+        clean_time = clean_time.replace("下午", "").replace("晚上", "").replace("傍晚", "")
+        clean_time = clean_time.replace("点", ":").replace("分", "").strip()
 
         for fmt in ["%H:%M", "%H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"]:
             try:
-                parsed = datetime.strptime(time_str.strip(), fmt)
+                parsed = datetime.strptime(clean_time, fmt)
                 if fmt in ["%H:%M", "%H:%M:%S"]:
+                    hour = parsed.hour
+                    if is_pm and hour < 12:
+                        hour += 12
                     target_dt = now_dt.replace(
-                        hour=parsed.hour, minute=parsed.minute, second=parsed.second if fmt == "%H:%M:%S" else 0, microsecond=0
+                        hour=hour, minute=parsed.minute, second=parsed.second if fmt == "%H:%M:%S" else 0, microsecond=0
                     )
-                    if target_dt <= now_dt:
+                    target_dt += timedelta(days=day_offset)
+                    if day_offset == 0 and target_dt <= now_dt:
                         target_dt += timedelta(days=1)
                 else:
                     target_dt = parsed
@@ -549,7 +569,7 @@ class SkillManager:
                 continue
 
         if not target_dt:
-            target_dt = now_dt + timedelta(minutes=10)
+            target_dt = now_dt + timedelta(days=day_offset if day_offset > 0 else 0, minutes=10 if day_offset == 0 else 0)
 
         target_time = target_dt.timestamp()
         reminder = {

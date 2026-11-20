@@ -207,5 +207,27 @@
     "repeat": "none",
     "completed": true,
     "created_at": 1795163899.475228
+  },
+  {
+    "id": "alarm_eb21d0",
+    "type": "alarm",
+    "content": "起床啦胖虎！",
+    "target_time": 1795167741.507232,
+    "target_time_str": "2026-11-20 17:42:21",
+    "display_str": "闹钟 [17:42]: 起床啦胖虎！",
+    "repeat": "单次",
+    "completed": false,
+    "created_at": 1795167141.5215936
+  },
+  {
+    "id": "alarm_d85f8f",
+    "type": "alarm",
+    "content": "胖虎起床啦！",
+    "target_time": 1795219200.0,
+    "target_time_str": "2026-11-21 08:00:00",
+    "display_str": "闹钟 [08:00]: 胖虎起床啦！",
+    "repeat": "none",
+    "completed": false,
+    "created_at": 1795167222.3911517
   }
 ]

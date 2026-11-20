@@ -140,54 +140,54 @@
     ]
   },
   "上上下下左左右右": {
-    "description": "主人教学动作：头往上动两下、往下动两下、往左动两下、往右动两下",
-    "created_at": "2026-11-20 17:27:22",
+    "description": "主人新教学动作：头往上动两下、往下动两下、往左动两下、往右动两下",
+    "created_at": "2026-11-20 17:30:04",
     "keyframes": [
       {
         "pan": 90,
-        "tilt": 55,
+        "tilt": 70,
         "emotion": "HAPPY",
         "delay": 300
       },
       {
         "pan": 90,
-        "tilt": 55,
+        "tilt": 75,
         "emotion": "HAPPY",
         "delay": 300
       },
       {
         "pan": 90,
-        "tilt": 105,
+        "tilt": 95,
         "emotion": "HAPPY",
         "delay": 300
       },
       {
         "pan": 90,
-        "tilt": 105,
+        "tilt": 100,
         "emotion": "HAPPY",
         "delay": 300
       },
       {
-        "pan": 55,
-        "tilt": 90,
+        "pan": 75,
+        "tilt": 85,
         "emotion": "HAPPY",
         "delay": 300
       },
       {
-        "pan": 55,
-        "tilt": 90,
+        "pan": 80,
+        "tilt": 85,
         "emotion": "HAPPY",
         "delay": 300
       },
       {
-        "pan": 125,
-        "tilt": 90,
+        "pan": 105,
+        "tilt": 85,
         "emotion": "HAPPY",
         "delay": 300
       },
       {
-        "pan": 125,
-        "tilt": 90,
+        "pan": 100,
+        "tilt": 85,
         "emotion": "HAPPY",
         "delay": 300
       }
