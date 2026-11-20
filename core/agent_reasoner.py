@@ -303,7 +303,8 @@ class AgentReasoner:
             payload = {
                 "model": self.model,
                 "messages": messages,
-                "stream": True
+                "stream": True,
+                "response_format": {"type": "json_object"}
             }
             if "mimo" in self.model.lower() or "xiaomimimo" in self.base_url:
                 if not self.enable_thinking:

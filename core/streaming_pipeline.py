@@ -63,6 +63,17 @@ class StreamingJsonReplyExtractor:
             self.full_raw_text += ch
 
             if self.state == self.STATE_BEFORE_REPLY:
+                # 兜底：如果模型未按要求输出 JSON (不以 { 开头)，自动平滑切换为纯文本流式输出
+                trimmed = self.full_raw_text.lstrip()
+                if trimmed and not trimmed.startswith("{") and len(trimmed) >= 8:
+                    self.state = self.STATE_IN_REPLY
+                    self.reply_buffer = ""
+                    self.full_reply_text = ""
+                    for sub_ch in trimmed:
+                        sents = self._process_reply_char(sub_ch)
+                        emitted_sentences.extend(sents)
+                    continue
+
                 if '"reply"' in self.full_raw_text:
                     idx = self.full_raw_text.rfind('"reply"')
                     if self._has_active_skill_before(idx):

@@ -714,6 +714,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         print(f"⚠️ [WebSim] 音频切片合成异常: {ex}")
 
             seq = 0
+            print(f"👉 [Stream Start] User text: {user_text}", flush=True)
             try:
                 for event in reasoner.run_react_loop_stream(
                     user_text=user_text,
@@ -723,6 +724,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     evolution_engine=evolution_engine
                 ):
                     ev_type = event.get("type")
+                    print(f"👉 [Stream Ev] {ev_type}", flush=True)
                     if ev_type == "sentence":
                         sentence_text = event.get("text", "").strip()
                         if sentence_text:
