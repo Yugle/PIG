@@ -174,8 +174,20 @@ class StreamingJsonReplyExtractor:
         self.reply_buffer += ch
         self.full_reply_text += ch
 
-        # 遇到逗号/句号且字数足够（>=4字），立即切片发射
-        if ch in self.delims and len(self.reply_buffer.strip()) >= 4:
+        # 智能平滑断句 (杜绝碎片化切片导致 TTS 语调下沉与断音卡顿)
+        # 1. 强句末标点 (。！？!?\n) 且字数 >= 5 字：立即切片发射
+        # 2. 弱停顿标点 (，；,;)：必须积累到完整意群 (>= 16 字) 才切片，保持语音自然起伏连贯
+        is_major_delim = ch in "。！？!?\n"
+        is_minor_delim = ch in "，；,;"
+        buf_len = len(self.reply_buffer.strip())
+
+        should_split = False
+        if is_major_delim and buf_len >= 5:
+            should_split = True
+        elif is_minor_delim and buf_len >= 16:
+            should_split = True
+
+        if should_split:
             sents.append(self.reply_buffer.strip())
             self.reply_buffer = ""
 
