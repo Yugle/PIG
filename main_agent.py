@@ -208,7 +208,7 @@ def process_interaction(user_text: str):
     """
     print(f"\n👤 [用户表达]: {user_text}")
 
-    max_len = cfg.get("max_reply_length", 150)
+    max_len = cfg.get("max_reply_length", 200)
     sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=skill_mgr)
 
     reply_text = "没有听清你的声音呢，请再说一次吧~"

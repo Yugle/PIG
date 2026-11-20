@@ -667,7 +667,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             api_key = cfg.get("api_key", "")
             base_url = cfg.get("base_url", "https://api.xiaomimimo.com/v1").rstrip("/")
             model = cfg.get("llm_model", "mimo-v2.6-flash")
-            max_len = cfg.get("max_reply_length", 150)
+            max_len = cfg.get("max_reply_length", 200)
 
             sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=skill_mgr)
 
@@ -789,7 +789,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             api_key = cfg.get("api_key", "")
             base_url = cfg.get("base_url", "https://api.xiaomimimo.com/v1").rstrip("/")
             model = cfg.get("llm_model", "mimo-v2.6-flash")
-            max_len = cfg.get("max_reply_length", 150)
+            max_len = cfg.get("max_reply_length", 200)
 
             sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=skill_mgr)
 

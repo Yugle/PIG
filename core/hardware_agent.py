@@ -477,7 +477,7 @@ class HardwareAgent:
         from core.agent_reasoner import AgentReasoner
         from core.streaming_pipeline import get_tts_streamer
 
-        max_len = self.cfg.get("max_reply_length", 150)
+        max_len = self.cfg.get("max_reply_length", 200)
         sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=self.skill_manager)
 
         api_key = self.cfg.get("api_key", "")
