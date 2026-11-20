@@ -480,8 +480,8 @@ class HardwareAgent:
         sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=self.skill_manager)
 
         api_key = self.cfg.get("api_key", "")
-        base_url = self.cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
-        model = self.cfg.get("llm_model", "sensenova-6.8-flash-lite")
+        base_url = self.cfg.get("base_url", "https://api.xiaomimimo.com/v1").rstrip("/")
+        model = self.cfg.get("llm_model", "mimo-v2.6-flash")
 
         tts_streamer = get_tts_streamer(self.cfg)
 

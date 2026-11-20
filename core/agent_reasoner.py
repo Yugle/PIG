@@ -53,8 +53,8 @@ class AgentReasoner:
     def __init__(
         self,
         api_key: str,
-        base_url: str = "https://token.sensenova.cn/v1",
-        model: str = "sensenova-6.8-flash-lite",
+        base_url: str = "https://api.xiaomimimo.com/v1",
+        model: str = "mimo-v2.6-flash",
         max_steps: int = 4
     ):
         self.api_key = api_key

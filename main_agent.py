@@ -119,8 +119,8 @@ skill_mgr.register_trigger_callback(on_hardware_alarm)
 # 初始化元认知自进化中枢 (生物钟作息学习 + 海马体夜间反思)
 evolution_engine = EvolutionEngine(DATA_DIR, memory_manager=mem, skill_manager=skill_mgr)
 api_key = cfg.get("api_key", "")
-base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
-llm_model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
+base_url = cfg.get("base_url", "https://api.xiaomimimo.com/v1").rstrip("/")
+llm_model = cfg.get("llm_model", "mimo-v2.6-flash")
 client = None
 
 if api_key and "YOUR_LLM_API_KEY" not in api_key:

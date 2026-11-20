@@ -1077,10 +1077,14 @@
     scene.add(grid);
 
     // 材质与纹理定义
-    const matWhite = new THREE.MeshStandardMaterial({ color: 0xf4f5f7, roughness: 0.3, metalness: 0.1 });
-    const matDark = new THREE.MeshStandardMaterial({ color: 0x1a1e24, roughness: 0.45, metalness: 0.7 });
+    const matWhite = new THREE.MeshStandardMaterial({ color: 0xf4f5f7, roughness: 0.35, metalness: 0.1 });
+    const matDark = new THREE.MeshStandardMaterial({ color: 0x1a1e24, roughness: 0.5, metalness: 0.6 });
     const matBezel = new THREE.MeshStandardMaterial({ color: 0x101317, roughness: 0.6, metalness: 0.3 });
     const matLens = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.95 });
+    const matSilver = new THREE.MeshStandardMaterial({ color: 0xc8cdd4, roughness: 0.25, metalness: 0.85 });
+    const matServoBlue = new THREE.MeshStandardMaterial({ color: 0x194b99, roughness: 0.4, metalness: 0.2 });
+    const matLedRed = new THREE.MeshBasicMaterial({ color: 0xff2233 });
+    const matLedGreen = new THREE.MeshBasicMaterial({ color: 0x00ff66 });
 
     // 2.4 寸屏幕 Canvas 实时纹理贴图
     const screenTexture = new THREE.CanvasTexture(eyeCanvas);
@@ -1093,80 +1097,165 @@
       toneMapped: false
     });
 
-    // 1. 底座 Base
+    // 1. 树莓派 3B 机箱底座 (Pi 3B Base Case)
+    // 真实尺寸: 宽 76mm (X), 高 28mm (Y), 深 102mm (Z)
     const baseGroup = new THREE.Group();
-    const baseGeom = new THREE.CylinderGeometry(0.065, 0.072, 0.035, 32);
+    
+    // 底座外壳主体 (白色哑光 ABS)
+    const baseGeom = new THREE.BoxGeometry(0.076, 0.026, 0.102);
     const baseMesh = new THREE.Mesh(baseGeom, matWhite);
-    baseMesh.position.y = 0.035 / 2;
+    baseMesh.position.y = 0.026 / 2 + 0.002; // 离地 2mm 留出脚垫
     baseMesh.castShadow = true;
+    baseMesh.receiveShadow = true;
     baseGroup.add(baseMesh);
+
+    // 四角防滑橡胶脚垫
+    const footGeom = new THREE.CylinderGeometry(0.004, 0.004, 0.002, 16);
+    const footPositions = [
+      [-0.031, 0.001, -0.043],
+      [ 0.031, 0.001, -0.043],
+      [-0.031, 0.001,  0.043],
+      [ 0.031, 0.001,  0.043]
+    ];
+    footPositions.forEach(pos => {
+      const foot = new THREE.Mesh(footGeom, matDark);
+      foot.position.set(pos[0], pos[1], pos[2]);
+      baseGroup.add(foot);
+    });
+
+    // 树莓派真实接口特征 (后部 USB 叠口与 RJ45 网口)
+    const rj45Geom = new THREE.BoxGeometry(0.016, 0.013, 0.005);
+    const rj45Mesh = new THREE.Mesh(rj45Geom, matSilver);
+    rj45Mesh.position.set(-0.022, 0.017, 0.051);
+    baseGroup.add(rj45Mesh);
+
+    const usbGeom = new THREE.BoxGeometry(0.014, 0.015, 0.005);
+    const usb1 = new THREE.Mesh(usbGeom, matSilver);
+    usb1.position.set(0.002, 0.018, 0.051);
+    baseGroup.add(usb1);
+
+    const usb2 = new THREE.Mesh(usbGeom, matSilver);
+    usb2.position.set(0.022, 0.018, 0.051);
+    baseGroup.add(usb2);
+
+    // 树莓派侧面 Micro-USB 供电口与 HDMI、音频口槽位
+    const pwrPortGeom = new THREE.BoxGeometry(0.004, 0.004, 0.009);
+    const pwrPort = new THREE.Mesh(pwrPortGeom, matDark);
+    pwrPort.position.set(-0.0385, 0.010, -0.032);
+    baseGroup.add(pwrPort);
+
+    const hdmiPortGeom = new THREE.BoxGeometry(0.004, 0.006, 0.015);
+    const hdmiPort = new THREE.Mesh(hdmiPortGeom, matSilver);
+    hdmiPort.position.set(-0.0385, 0.010, -0.005);
+    baseGroup.add(hdmiPort);
+
+    const audioJackGeom = new THREE.CylinderGeometry(0.0035, 0.0035, 0.004, 16);
+    const audioJack = new THREE.Mesh(audioJackGeom, matDark);
+    audioJack.rotation.z = Math.PI / 2;
+    audioJack.position.set(-0.0385, 0.011, 0.024);
+    baseGroup.add(audioJack);
+
+    // 状态指示灯 (PWR 红灯常亮 + ACT 绿灯待机)
+    const ledPwr = new THREE.Mesh(new THREE.BoxGeometry(0.0015, 0.0015, 0.002), matLedRed);
+    ledPwr.position.set(-0.033, 0.0285, -0.046);
+    baseGroup.add(ledPwr);
+
+    const ledAct = new THREE.Mesh(new THREE.BoxGeometry(0.0015, 0.0015, 0.002), matLedGreen);
+    ledAct.position.set(-0.028, 0.0285, -0.046);
+    baseGroup.add(ledAct);
+
+    // 底座顶部水平舵机固定座 (Pan Turret Mount)
+    const turretGeom = new THREE.CylinderGeometry(0.025, 0.029, 0.008, 32);
+    const turretMesh = new THREE.Mesh(turretGeom, matWhite);
+    turretMesh.position.set(0, 0.028 + 0.004, 0);
+    baseGroup.add(turretMesh);
+
+    // 水平 SG90 舵机壳体 (嵌入式蓝色微型舵机)
+    const servoPanGeom = new THREE.BoxGeometry(0.023, 0.014, 0.012);
+    const servoPanMesh = new THREE.Mesh(servoPanGeom, matServoBlue);
+    servoPanMesh.position.set(0, 0.028 + 0.008, 0);
+    baseGroup.add(servoPanMesh);
+
     scene.add(baseGroup);
 
-    // 2. 脖子水平旋转轴 (Yaw / Pan 关节)
+    // 2. 脖子水平旋转轴 (Yaw / Pan 关节，由水平舵机驱动)
     const neckYawGroup = new THREE.Group();
-    neckYawGroup.position.set(0, 0.035, 0);
+    neckYawGroup.position.set(0, 0.036, 0);
     baseGroup.add(neckYawGroup);
 
-    const neckJointGeom = new THREE.CylinderGeometry(0.024, 0.024, 0.025, 24);
-    const neckJointMesh = new THREE.Mesh(neckJointGeom, matDark);
-    neckJointMesh.position.y = 0.025 / 2;
-    neckYawGroup.add(neckJointMesh);
+    // 水平舵机白色舵盘
+    const hornPanGeom = new THREE.CylinderGeometry(0.011, 0.011, 0.003, 24);
+    const hornPanMesh = new THREE.Mesh(hornPanGeom, matWhite);
+    hornPanMesh.position.y = 0.0015;
+    neckYawGroup.add(hornPanMesh);
 
-    // 3. 头部俯仰旋转轴 (Pitch / Tilt 关节)
+    // 二维云台 U 型/铰链支架 (硬质碳素黑/深灰)
+    const neckBracketGeom = new THREE.CylinderGeometry(0.020, 0.022, 0.018, 24);
+    const neckBracketMesh = new THREE.Mesh(neckBracketGeom, matDark);
+    neckBracketMesh.position.y = 0.009;
+    neckYawGroup.add(neckBracketMesh);
+
+    // 俯仰 SG90 舵机 (横向固定在机械颈铰链侧面)
+    const servoTiltGeom = new THREE.BoxGeometry(0.012, 0.014, 0.023);
+    const servoTiltMesh = new THREE.Mesh(servoTiltGeom, matServoBlue);
+    servoTiltMesh.position.set(0.011, 0.018, 0);
+    neckYawGroup.add(servoTiltMesh);
+
+    // 3. 头部俯仰旋转轴 (Pitch / Tilt 关节，由俯仰舵机驱动)
     const headPitchGroup = new THREE.Group();
-    headPitchGroup.position.set(0, 0.035, 0);
+    headPitchGroup.position.set(0, 0.022, 0);
     neckYawGroup.add(headPitchGroup);
 
-    // 头部主体外壳 (宽 0.088, 高 0.108, 深 0.075)
-    const headGeom = new THREE.BoxGeometry(0.088, 0.108, 0.075);
+    // 头部主体外壳 (宽 78mm, 高 96mm, 深 66mm，更加紧凑萌系)
+    const headGeom = new THREE.BoxGeometry(0.078, 0.096, 0.066);
     const headMesh = new THREE.Mesh(headGeom, matWhite);
-    headMesh.position.set(0, 0.054, 0);
+    headMesh.position.set(0, 0.048, 0);
     headMesh.castShadow = true;
     headPitchGroup.add(headMesh);
 
     // 头部黑色屏幕边框 (Bezel)
-    const bezelGeom = new THREE.BoxGeometry(0.072, 0.092, 0.005);
+    const bezelGeom = new THREE.BoxGeometry(0.066, 0.084, 0.005);
     const bezelMesh = new THREE.Mesh(bezelGeom, matBezel);
-    bezelMesh.position.set(0, 0.050, 0.0375);
+    bezelMesh.position.set(0, 0.044, 0.0335);
     headPitchGroup.add(bezelMesh);
 
-    // 彩色发光面部屏幕 (2.4寸 ST7789 240x320 竖屏，宽 0.058, 高 0.078，精确 3:4 比例)
-    const screenGeom = new THREE.PlaneGeometry(0.058, 0.078);
+    // 彩色发光面部屏幕 (2.4寸 ST7789 240x320 竖屏，高精 3:4 比例)
+    const screenGeom = new THREE.PlaneGeometry(0.054, 0.072);
     const screenMesh = new THREE.Mesh(screenGeom, matScreen);
-    screenMesh.position.set(0, 0.050, 0.0402);
+    screenMesh.position.set(0, 0.044, 0.0362);
     headPitchGroup.add(screenMesh);
 
-    // 摄像头模组
-    const lensRingGeom = new THREE.CylinderGeometry(0.006, 0.006, 0.003, 16);
+    // 额头 USB 微型高清摄像头模组
+    const lensRingGeom = new THREE.CylinderGeometry(0.0055, 0.0055, 0.003, 16);
     const lensRing = new THREE.Mesh(lensRingGeom, matDark);
     lensRing.rotation.x = Math.PI / 2;
-    lensRing.position.set(0, 0.094, 0.0385);
+    lensRing.position.set(0, 0.083, 0.0345);
     headPitchGroup.add(lensRing);
 
-    const lensGeom = new THREE.SphereGeometry(0.0035, 16, 16);
+    const lensGeom = new THREE.SphereGeometry(0.0032, 16, 16);
     const lensMesh = new THREE.Mesh(lensGeom, matLens);
-    lensMesh.position.set(0, 0.094, 0.040);
+    lensMesh.position.set(0, 0.083, 0.0358);
     headPitchGroup.add(lensMesh);
 
-    // 伴侣侧耳机械细节
-    const earGeom = new THREE.CylinderGeometry(0.012, 0.012, 0.008, 16);
+    // 左右耳萌趣拾音/微型音箱开孔装饰
+    const earGeom = new THREE.CylinderGeometry(0.011, 0.011, 0.007, 16);
     const leftEar = new THREE.Mesh(earGeom, matDark);
     leftEar.rotation.z = Math.PI / 2;
-    leftEar.position.set(-0.046, 0.054, 0);
+    leftEar.position.set(-0.041, 0.048, 0);
     headPitchGroup.add(leftEar);
 
     const rightEar = leftEar.clone();
-    rightEar.position.x = 0.046;
+    rightEar.position.x = 0.041;
     headPitchGroup.add(rightEar);
 
     // 视角切换与画中画切换控制
     function setCameraView(view) {
       if (view === "close") {
-        camera.position.set(0, 0.14, 0.28);
-        controls.target.set(0, 0.085, 0);
+        camera.position.set(0, 0.13, 0.26);
+        controls.target.set(0, 0.088, 0);
       } else {
-        camera.position.set(0, 0.20, 0.44);
-        controls.target.set(0, 0.085, 0);
+        camera.position.set(0, 0.18, 0.40);
+        controls.target.set(0, 0.088, 0);
       }
       controls.update();
     }

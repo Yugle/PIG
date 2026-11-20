@@ -590,8 +590,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/api/reflection/trigger":
             cfg = load_config()
             api_key = cfg.get("api_key", "")
-            base_url = cfg.get("base_url", "https://token.sensenova.cn/v1")
-            model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
+            base_url = cfg.get("base_url", "https://api.xiaomimimo.com/v1")
+            model = cfg.get("llm_model", "mimo-v2.6-flash")
             res = evolution_engine.trigger_reflection(api_key, base_url, model)
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -664,8 +664,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
             cfg = load_config()
             api_key = cfg.get("api_key", "")
-            base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
-            model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
+            base_url = cfg.get("base_url", "https://api.xiaomimimo.com/v1").rstrip("/")
+            model = cfg.get("llm_model", "mimo-v2.6-flash")
             max_len = cfg.get("max_reply_length", 150)
 
             sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=skill_mgr)
@@ -738,8 +738,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
             cfg = load_config()
             api_key = cfg.get("api_key", "")
-            base_url = cfg.get("base_url", "https://token.sensenova.cn/v1").rstrip("/")
-            model = cfg.get("llm_model", "sensenova-6.8-flash-lite")
+            base_url = cfg.get("base_url", "https://api.xiaomimimo.com/v1").rstrip("/")
+            model = cfg.get("llm_model", "mimo-v2.6-flash")
             max_len = cfg.get("max_reply_length", 150)
 
             sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=skill_mgr)

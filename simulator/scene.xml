@@ -23,30 +23,31 @@
     <light pos="0 0.5 1.0" dir="0 -0.5 -1" diffuse="0.5 0.5 0.5"/>
     <geom name="floor" type="plane" size="0.5 0.5 0.01" material="grid_mat"/>
 
-    <!-- 桌面底座 (Base Stand) -->
-    <body name="base" pos="0 0 0.025">
-      <geom name="base_geom" type="cylinder" size="0.045 0.025" material="white_plastic"/>
+    <!-- 桌面树莓派 3B 机箱底座 (Base Stand - Raspberry Pi 3B Case) -->
+    <!-- 真实机箱尺寸: 长 102mm, 宽 76mm, 高 28mm (半长宽分别为 0.051, 0.038, 0.014) -->
+    <body name="base" pos="0 0 0.014">
+      <geom name="base_geom" type="box" size="0.038 0.051 0.014" material="white_plastic"/>
 
       <!-- 水平旋转关节 Yaw (Pan): 对应 SG90 水平舵机，范围约 -70° ~ +70° -->
-      <body name="neck" pos="0 0 0.025">
+      <body name="neck" pos="0 0 0.022">
         <joint name="neck_yaw_joint" type="hinge" axis="0 0 1" range="-1.22 1.22"/>
-        <geom name="neck_hinge" type="cylinder" size="0.016 0.015" material="dark_metal"/>
+        <geom name="neck_hinge" type="cylinder" size="0.016 0.012" material="dark_metal"/>
 
         <!-- 俯仰旋转关节 Pitch (Tilt): 对应 SG90 俯仰舵机，范围约 -30° ~ +30° -->
-        <body name="head" pos="0 0 0.03">
+        <body name="head" pos="0 0 0.022">
           <joint name="head_pitch_joint" type="hinge" axis="1 0 0" range="-0.52 0.52"/>
           
-          <!-- 头部主体外壳 -->
-          <geom name="head_body" type="box" size="0.038 0.028 0.035" pos="0 0 0.02" material="white_plastic"/>
+          <!-- 头部主体外壳 (宽 78mm, 深 66mm, 高 96mm) -->
+          <geom name="head_body" type="box" size="0.039 0.033 0.048" pos="0 0 0.024" material="white_plastic"/>
           
           <!-- 面部黑色边框 -->
-          <geom name="screen_bezel" type="box" size="0.032 0.002 0.028" pos="0 -0.029 0.02" material="black_bezel"/>
+          <geom name="screen_bezel" type="box" size="0.033 0.002 0.042" pos="0 -0.034 0.022" material="black_bezel"/>
           
-          <!-- 面部彩色液晶屏 (发光青色仿真) -->
-          <geom name="screen_face" type="box" size="0.026 0.001 0.022" pos="0 -0.031 0.02" material="cyan_screen"/>
+          <!-- 面部彩色液晶屏 (2.4寸 ST7789 240x320 竖屏仿真) -->
+          <geom name="screen_face" type="box" size="0.027 0.001 0.036" pos="0 -0.036 0.022" material="cyan_screen"/>
           
-          <!-- 额头 USB 摄像头镜头 -->
-          <geom name="camera_lens" type="sphere" size="0.004" pos="0 -0.030 0.045" material="dark_metal"/>
+          <!-- 额头 USB 微型摄像头镜头 -->
+          <geom name="camera_lens" type="sphere" size="0.0035" pos="0 -0.035 0.055" material="dark_metal"/>
         </body>
       </body>
     </body>
