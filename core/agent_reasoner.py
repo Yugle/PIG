@@ -176,9 +176,9 @@ class AgentReasoner:
                         "observation": str(observation)
                     })
 
-                    # 若为动作自进化，动态演出新舞步
-                    if tool_name == "evolve_action":
-                        act_name = tool_args.get("name", "")
+                    # 若为动作自进化或动作表演，动态演出新舞步
+                    if tool_name in ["evolve_action", "create_action", "learn_action", "execute_action", "play_action", "do_action", "run_action", "perform_action"]:
+                        act_name = tool_args.get("name") or tool_args.get("action_name") or tool_args.get("action") or ""
                         act_obj = skill_manager.get_evolved_action(act_name)
                         if act_obj and act_obj.get("keyframes"):
                             final_behaviors = act_obj["keyframes"]
@@ -377,6 +377,13 @@ class AgentReasoner:
                     observation = skill_manager.dispatch(skill_call)
                     last_observation = observation
                     yield {"type": "observation", "name": tool_name, "result": str(observation)}
+
+                    # 若为动作自进化或动作表演，动态实时演出新学到的动作序列
+                    if tool_name in ["evolve_action", "create_action", "learn_action", "execute_action", "play_action", "do_action", "run_action", "perform_action"]:
+                        act_name = tool_args.get("name") or tool_args.get("action_name") or tool_args.get("action") or ""
+                        act_obj = skill_manager.get_evolved_action(act_name)
+                        if act_obj and act_obj.get("keyframes"):
+                            final_behaviors = act_obj["keyframes"]
 
                     steps_log.append({
                         "step": step,

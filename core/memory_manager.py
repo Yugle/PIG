@@ -77,11 +77,11 @@ class MemoryManager:
 
     def _extract_facts(self, text: str):
         """自动轻量提取主人的核心画像事实 (无需额外消耗 LLM Token)"""
-        # 1. 匹配名字/昵称更名与识别
-        name_match = re.search(r"(?:我叫|我是|叫我|名字是|名字改成|改成|改名叫|换成|称呼我为|以后叫我)\s*([a-zA-Z\u4e00-\u9fa5]{2,10})", text)
+        # 1. 匹配名字/昵称更名与识别 (排除“我是不是”、“我是想”、“我是说”等日常疑问/副词情境)
+        name_match = re.search(r"(?:我叫|我是(?!不是|想|觉得|说|在|要|看)|叫我|名字是|名字改成|改成|改名叫|换成|称呼我为|以后叫我)\s*([a-zA-Z\u4e00-\u9fa5]{2,10})", text)
         if name_match:
             cand = name_match.group(1).strip()
-            if cand not in ["小猪", "机器人", "搭子", "什么", "主人"]:
+            if cand not in ["小猪", "机器人", "搭子", "什么", "主人", "可以", "怎么"]:
                 self.long_term_data["user_name"] = cand
                 self.save()
 

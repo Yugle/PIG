@@ -493,7 +493,8 @@ class SkillManager:
             "\n- set_user_name(name): 当主人要求更名（如“把我的名字改成阿珍”、“以后叫我阿珍”）时调用，更新长期档案。"
             "\n- create_skill(skill_id, name, description, code, parameters): 当主人要求你“新整一个技能/自创新功能/写新插件”时调用，你可自主生成 Python 代码 (必须包含 def run(**kwargs): 函数) 编写全新热加载技能！"
             "\n- install_skill(skill_id) / uninstall_skill(skill_id): 安装或卸载技能商店插件。"
-            "\n- evolve_action(name, description, keyframes): 用户教你或夸你时，自创复合肢体与表情动作序列。"
+            "\n- evolve_action(name, description, keyframes): 用户教你动作或口令时自创动作序列。keyframes 包含动作帧列表，每帧含 pan(水平角0~180), tilt(俯仰角0~180), emotion(表情如HAPPY/WINK/LOVE), delay(毫秒如300)。示例: evolve_action(name=\"点头打招呼\", description=\"上下点头两次\", keyframes=[{\"pan\": 90, \"tilt\": 70, \"emotion\": \"HAPPY\", \"delay\": 300}, {\"pan\": 90, \"tilt\": 90, \"emotion\": \"HAPPY\", \"delay\": 300}])"
+            "\n- play_action(action): 指挥机器人展示执行动作库中的自创动作 (如“表演一下上上下下左左右右”)，例如 play_action(action=\"上上下下左左右右\")。"
         )
         return "\n".join(lines)
 
@@ -593,23 +594,75 @@ class SkillManager:
             self._save_reminders()
 
     # ---------------- 动作自进化 (Evolved Actions) ----------------
-    def evolve_action(self, name: str, keyframes: List[Dict[str, Any]], description: str = "") -> bool:
-        if not name or not keyframes or not isinstance(keyframes, list):
-            return False
+    def evolve_action(self, name: str, keyframes: Any, description: str = "") -> str:
+        if not name:
+            return "❌ 学习动作失败：未指定动作名称 (name)"
+
+        # 兼容大模型输出的字符串序列化数据 (如 JSON 字符串或 Python repr 字符串)
+        if isinstance(keyframes, str):
+            keyframes_str = keyframes.strip()
+            if keyframes_str.startswith("```"):
+                lines = keyframes_str.split("\n")
+                keyframes_str = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+            try:
+                keyframes = json.loads(keyframes_str)
+            except Exception:
+                try:
+                    import ast
+                    keyframes = ast.literal_eval(keyframes_str)
+                except Exception as e:
+                    return f"❌ 动作关键帧解析失败: {e}"
+
+        if isinstance(keyframes, dict):
+            keyframes = [keyframes]
+
+        if not isinstance(keyframes, list) or len(keyframes) == 0:
+            return "❌ 学习动作失败：keyframes 必须为包含动作帧对象的列表"
+
+        # 标准化动作关键帧，容错并补齐 pan, tilt, emotion, delay
+        clean_keyframes = []
+        for frame in keyframes:
+            if not isinstance(frame, dict):
+                continue
+            p = frame.get("pan", 90)
+            t = frame.get("tilt", 90)
+
+            # 兼容 pose 或 action 快捷语义
+            pose = str(frame.get("pose") or frame.get("action") or "").upper()
+            if "UP" in pose:
+                t = 60
+            elif "DOWN" in pose:
+                t = 120
+            elif "LEFT" in pose:
+                p = 60
+            elif "RIGHT" in pose:
+                p = 120
+
+            delay = frame.get("delay") or frame.get("duration") or 300
+            emo = frame.get("emotion") or "HAPPY"
+            clean_keyframes.append({
+                "pan": int(p),
+                "tilt": int(t),
+                "emotion": emo,
+                "delay": int(delay)
+            })
+
+        if not clean_keyframes:
+            return "❌ 学习动作失败：未提取到有效肢体动作关键帧"
 
         clean_name = name.strip().upper().replace(" ", "_")
         action_data = {
-            "description": description or f"大模型自创动作: {clean_name}",
+            "description": description or f"自创动作: {clean_name}",
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "keyframes": keyframes
+            "keyframes": clean_keyframes
         }
 
         with self.lock:
             self.evolved_actions[clean_name] = action_data
             self._save_evolved_actions()
 
-        print(f"🌟 [SkillManager] 自进化动作学习成功: 【{clean_name}】共 {len(keyframes)} 关键帧 -> 已持久化到 evolved_actions.json")
-        return True
+        print(f"🌟 [SkillManager] 自进化动作学习成功: 【{clean_name}】共 {len(clean_keyframes)} 关键帧 -> 已持久化到 evolved_actions.json")
+        return f"🎉 动作【{clean_name}】已成功学会并永久存入动作库（包含 {len(clean_keyframes)} 动作关键帧）！随时可以表演给主人看。"
 
     def get_evolved_action(self, name: str) -> Optional[Dict[str, Any]]:
         clean_name = name.strip().upper().replace(" ", "_")
@@ -667,8 +720,17 @@ class SkillManager:
             return self.cancel_reminder(args.get("keyword", "") or args.get("id", ""))
         elif name == "list_reminders":
             return self.list_active_reminders()
-        elif name == "evolve_action":
-            return self.evolve_action(args.get("name", ""), args.get("keyframes", []), args.get("description", ""))
+        elif name in ["evolve_action", "create_action", "learn_action"]:
+            act_name = args.get("name") or args.get("action_name") or args.get("action") or ""
+            act_desc = args.get("description") or args.get("desc") or ""
+            act_kf = args.get("keyframes") or args.get("frames") or args.get("steps") or args.get("actions") or args.get("behaviors") or []
+            return self.evolve_action(act_name, act_kf, act_desc)
+        elif name in ["execute_action", "play_action", "do_action", "run_action", "perform_action"]:
+            act = args.get("action") or args.get("name") or args.get("action_name") or ""
+            act_obj = self.get_evolved_action(act)
+            if act_obj:
+                return f"已成功触发表演自创动作【{act}】（共 {len(act_obj.get('keyframes', []))} 帧）"
+            return f"未在动作库中找到【{act}】。当前掌握的自创动作包括：{list(self.evolved_actions.keys())}"
         elif name in ["install_skill", "download_skill"]:
             sid = args.get("skill_id") or args.get("id") or ""
             if not sid:
