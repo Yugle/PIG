@@ -2105,7 +2105,8 @@
               stopThinkingCadence();
               finalBehaviors = ev.behaviors || [];
 
-              if (finalBehaviors.length > 0) {
+              // 仅在没有语音播报时播放情绪提示音，避免音效与 TTS 人声混音撕裂
+              if (!hasReceivedAudio && !streamingPlayer.isPlaying && finalBehaviors.length > 0) {
                 const emo = finalBehaviors[0].emotion;
                 if (["HAPPY", "LOVE", "WINK"].includes(emo)) playChirp("happy_chirp");
                 else if (["CONFUSED", "THINKING"].includes(emo)) playChirp("confused_boop");

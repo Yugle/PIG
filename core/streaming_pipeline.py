@@ -174,17 +174,18 @@ class StreamingJsonReplyExtractor:
         self.reply_buffer += ch
         self.full_reply_text += ch
 
-        # 智能平滑断句 (杜绝碎片化切片导致 TTS 语调下沉与断音卡顿)
-        # 1. 强句末标点 (。！？!?\n) 且字数 >= 5 字：立即切片发射
-        # 2. 弱停顿标点 (，；,;)：必须积累到完整意群 (>= 16 字) 才切片，保持语音自然起伏连贯
+        # 智能平滑断句 (确保发音时长大于网络合成耗时，彻底根治下溢断流卡顿)
+        # 1. 强句末标点 (。！？!?\n) 且字数 >= 16 字：切片发射 (保证足够播放时长覆盖后续切片合成)
+        # 2. 弱停顿标点 (，；,;)：必须积累到长意群 (>= 22 字) 才切片
+        # 3. 常见 20~30 字以内的日常简短答复将作为单段完整音频输出，语调圆润丝滑绝不卡壳
         is_major_delim = ch in "。！？!?\n"
         is_minor_delim = ch in "，；,;"
         buf_len = len(self.reply_buffer.strip())
 
         should_split = False
-        if is_major_delim and buf_len >= 5:
+        if is_major_delim and buf_len >= 16:
             should_split = True
-        elif is_minor_delim and buf_len >= 16:
+        elif is_minor_delim and buf_len >= 22:
             should_split = True
 
         if should_split:
