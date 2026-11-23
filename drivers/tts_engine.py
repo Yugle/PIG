@@ -259,44 +259,30 @@ class TTSEngine:
                 "audio": {
                     "format": "mp3"
                 },
-                "stream": True
+                "stream": False
             }
             if audio_voice is not None:
                 payload["audio"]["voice"] = audio_voice
 
-            res = requests.post(url, json=payload, headers=headers, stream=True, timeout=20)
+            res = requests.post(url, json=payload, headers=headers, timeout=20)
             if res.status_code == 200:
-                audio_parts = []
-                for line in res.iter_lines():
-                    if line:
-                        line_str = line.decode("utf-8", errors="ignore")
-                        if line_str.startswith("data: "):
-                            data_str = line_str[6:].strip()
-                            if data_str == "[DONE]":
-                                break
+                data = res.json()
+                choices = data.get("choices", [])
+                if choices:
+                    msg = choices[0].get("message", {})
+                    audio_obj = msg.get("audio", {})
+                    b64 = audio_obj.get("data", "")
+                    if b64:
+                        full_bytes = base64.b64decode(b64)
+                        with open(path, "wb") as f:
+                            f.write(full_bytes)
+                        if cache_file:
                             try:
-                                obj = json.loads(data_str)
-                                choices = obj.get("choices", [])
-                                if choices:
-                                    delta = choices[0].get("delta", {})
-                                    audio_chunk = delta.get("audio")
-                                    if isinstance(audio_chunk, dict):
-                                        b64 = audio_chunk.get("data", "")
-                                        if b64:
-                                            audio_parts.append(base64.b64decode(b64))
+                                with open(cache_file, "wb") as cf:
+                                    cf.write(full_bytes)
                             except Exception:
                                 pass
-                if audio_parts:
-                    full_bytes = b"".join(audio_parts)
-                    with open(path, "wb") as f:
-                        f.write(full_bytes)
-                    if cache_file:
-                        try:
-                            with open(cache_file, "wb") as cf:
-                                cf.write(full_bytes)
-                        except Exception:
-                            pass
-                    return True
+                        return True
             print(f"⚠️ [TTS] 小米 MiMo 调用异常 ({res.status_code}): {res.text[:200]}")
             return False
         except Exception as e:

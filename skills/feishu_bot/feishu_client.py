@@ -1,9 +1,9 @@
 """
-Feishu (Lark) Bot Client & Card Builder for PIG Robot
+Feishu (Lark) Bot Client & Real-time WebSocket Gateway for PIG Robot
 Supports:
-1. Feishu Custom Bot Webhook (Zero-setup Push: Alert cards, Nightly reflection, Status)
-2. Feishu OpenAPI (App ID + App Secret for bidirectional DM / Group chat)
-3. Rich Interactive Card Generation (Alert, Evolution Diary, Health Doctor)
+1. Feishu Official WebSocket Long-Connection (Zero-Public-IP, Bidirectional Event Listener via lark-oapi)
+2. Feishu OpenAPI (App ID + App Secret for bidirectional DM / Group chat & Interactive Cards)
+3. Feishu Custom Bot Webhook (Push: Alert cards, Nightly reflection, Status)
 """
 
 import os
@@ -11,20 +11,34 @@ import sys
 import time
 import json
 import logging
+import threading
 import urllib.request
 import urllib.error
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 
 logger = logging.getLogger("FeishuBot")
+
 
 class FeishuClient:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
         self._tenant_access_token = ""
         self._token_expires_at = 0.0
+        self._lock = threading.RLock()
+        
+        # WebSocket 长连接运行状态
+        self._ws_client = None
+        self._ws_thread = None
+        self._ws_connected = False
+        self._ws_handler_cb: Optional[Callable[[str, str, str, str], None]] = None
+        self._processed_msg_ids = set()
+        self._last_user_open_id = self.config.get("last_open_id", "")
 
     def update_config(self, config: Dict[str, Any]):
-        self.config = config or {}
+        with self._lock:
+            self.config = config or {}
+            if "last_open_id" in self.config and self.config["last_open_id"]:
+                self._last_user_open_id = self.config["last_open_id"]
 
     @property
     def webhook_url(self) -> str:
@@ -42,8 +56,120 @@ class FeishuClient:
     def is_configured(self) -> bool:
         return bool(self.webhook_url or (self.app_id and self.app_secret))
 
+    @property
+    def ws_connected(self) -> bool:
+        return self._ws_connected
+
+    @property
+    def last_user_open_id(self) -> str:
+        return self._last_user_open_id
+
     # ========================================================
-    # 1. 飞书自定义群机器人 Webhook 推送 (极速简单模式)
+    # 1. 飞书官方 WebSocket 长连接守护线程 (零公网 IP / 零域名直连)
+    # ========================================================
+    def start_ws_service(self, message_callback: Optional[Callable[[str, str, str, str], None]] = None) -> bool:
+        """
+        启动飞书官方 WebSocket 长连接服务 (在后台守护线程持续监听)。
+        回调函数入参: (clean_text, open_id, chat_id, msg_id)
+        """
+        if not self.app_id or not self.app_secret:
+            logger.info("ℹ️ [Feishu WS] App ID 或 App Secret 未配置，跳过 WebSocket 长连接启动")
+            return False
+
+        if message_callback:
+            self._ws_handler_cb = message_callback
+
+        with self._lock:
+            if self._ws_thread and self._ws_thread.is_alive() and self._ws_connected:
+                logger.info("ℹ️ [Feishu WS] WebSocket 长连接已在运行中")
+                return True
+
+        def _ws_worker():
+            try:
+                import lark_oapi as lark
+                from lark_oapi.api.im.v1 import P2ImMessageReceiveV1
+
+                def _on_im_message_receive(data: P2ImMessageReceiveV1):
+                    try:
+                        event = data.event
+                        if not event or not event.message:
+                            return
+                        msg = event.message
+                        msg_id = getattr(msg, "message_id", "")
+                        with self._lock:
+                            if msg_id and msg_id in self._processed_msg_ids:
+                                return
+                            if msg_id:
+                                self._processed_msg_ids.add(msg_id)
+                                if len(self._processed_msg_ids) > 1000:
+                                    self._processed_msg_ids.pop()
+
+                        msg_type = getattr(msg, "message_type", "")
+                        content_str = getattr(msg, "content", "{}")
+                        sender_id_obj = getattr(event.sender, "sender_id", None) if event.sender else None
+                        open_id = getattr(sender_id_obj, "open_id", "") if sender_id_obj else ""
+                        chat_id = getattr(msg, "chat_id", "")
+
+                        if open_id:
+                            with self._lock:
+                                self._last_user_open_id = open_id
+                                self.config["last_open_id"] = open_id
+                            try:
+                                cfg_path = "config.json"
+                                if os.path.exists(cfg_path):
+                                    with open(cfg_path, "r", encoding="utf-8") as f:
+                                        c_data = json.load(f)
+                                    c_data.setdefault("feishu", {})["last_open_id"] = open_id
+                                    with open(cfg_path, "w", encoding="utf-8") as f:
+                                        json.dump(c_data, f, ensure_ascii=False, indent=2)
+                            except Exception:
+                                pass
+
+                        text = ""
+                        if msg_type == "text":
+                            try:
+                                c_json = json.loads(content_str)
+                                text = c_json.get("text", "")
+                            except Exception:
+                                text = content_str
+
+                        import re
+                        clean_text = re.sub(r"@_user_\d+\s*", "", text).strip()
+                        print(f"📩 [Feishu WS] 收到飞书消息: '{clean_text}' (来自: {open_id or chat_id})")
+
+                        if clean_text and self._ws_handler_cb:
+                            self._ws_handler_cb(clean_text, open_id, chat_id, msg_id)
+                    except Exception as ex:
+                        logger.error(f"❌ [Feishu WS] 处理收到的消息异常: {ex}", exc_info=True)
+
+                handler = lark.EventDispatcherHandler.builder("", "") \
+                    .register_p2_im_message_receive_v1(_on_im_message_receive) \
+                    .build()
+
+                self._ws_client = lark.ws.Client(
+                    app_id=self.app_id,
+                    app_secret=self.app_secret,
+                    event_handler=handler,
+                    log_level=lark.LogLevel.DEBUG,
+                    auto_reconnect=True
+                )
+                with self._lock:
+                    self._ws_connected = True
+                print("🚀 [Feishu WS] 飞书官方长连接通道已成功建立！已进入无公网 IP 极速双向交互监听状态。")
+                self._ws_client.start()
+            except Exception as e:
+                with self._lock:
+                    self._ws_connected = False
+                logger.error(f"❌ [Feishu WS] 长连接守护线程异常退出: {e}")
+
+        ws_thread = threading.Thread(target=_ws_worker, daemon=True, name="FeishuWSWorker")
+        with self._lock:
+            self._ws_thread = ws_thread
+        ws_thread.start()
+        return True
+
+    # ========================================================
+    # 2. 飞书自定义群机器人 Webhook 推送
     # ========================================================
     def send_webhook_text(self, text: str) -> Dict[str, Any]:
         """通过 Webhook 发送纯文本消息"""
@@ -76,7 +202,7 @@ class FeishuClient:
         return self._http_post_json(self.webhook_url, payload)
 
     # ========================================================
-    # 2. 飞书开放平台应用 OpenAPI (双向交互模式)
+    # 3. 飞书开放平台应用 OpenAPI (双向交互模式)
     # ========================================================
     def get_tenant_access_token(self, force_refresh: bool = False) -> str:
         """获取并缓存飞书自建应用的 tenant_access_token"""
@@ -124,8 +250,31 @@ class FeishuClient:
         return self._http_post_json(url, payload, headers=headers)
 
     # ========================================================
-    # 3. 极速开箱富文本卡片生成器 (Card Builders)
+    # 4. 极速开箱富文本卡片生成器 (支持 Webhook 与 私聊 OpenAPI 双通道投递)
     # ========================================================
+    def _deliver_card(self, title: str, elements: List[Dict[str, Any]], template: str) -> Dict[str, Any]:
+        """智能投递卡片：优先群 Webhook；无有效 Webhook 则投递到最近私聊用户"""
+        has_real_webhook = bool(self.webhook_url and "demo" not in self.webhook_url)
+        if has_real_webhook:
+            return self.send_webhook_card(title, elements, template=template)
+
+        # 尝试通过 OpenAPI 发送给最近私聊的 open_id
+        if self.app_id and self.app_secret and self._last_user_open_id:
+            card = {
+                "config": {"wide_screen_mode": True},
+                "header": {"title": {"tag": "plain_text", "content": title}, "template": template},
+                "elements": elements
+            }
+            return self.send_im_message(self._last_user_open_id, "interactive", card, receive_id_type="open_id")
+
+        if self.webhook_url:
+            return self.send_webhook_card(title, elements, template=template)
+
+        return {
+            "status": "error",
+            "message": "未配置有效的飞书群 Webhook URL，且暂无飞书私聊记录。请先在飞书中向机器人发一句消息，或配置真实群机器人 Webhook"
+        }
+
     def send_alert_card(self, title: str, error_msg: str, detail: str = "", cpu_temp: Optional[float] = None) -> Dict[str, Any]:
         """发送系统异常 / 故障报警红色卡片"""
         now_str = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -143,7 +292,7 @@ class FeishuClient:
                 "tag": "div",
                 "text": {
                     "tag": "lark_md",
-                    "content": f"**🔍 详细诊断信息:**\n```\n{detail[:500]}\n```"
+                    "content": f"**🔍 详细诊断信息:**\n```\n{detail}\n```"
                 }
             })
         if cpu_temp is not None:
@@ -154,9 +303,7 @@ class FeishuClient:
                 ]
             })
 
-        if self.webhook_url:
-            return self.send_webhook_card(f"⚠️ [PIG 机器人异常] {title}", elements, template="red")
-        return {"status": "error", "message": "未配置推送目标"}
+        return self._deliver_card(f"⚠️ [PIG 机器人异常] {title}", elements, template="red")
 
     def send_evolution_card(self, diary_text: str, radar_dict: Dict[str, int], intimacy_level: int, persona_tag: str = "") -> Dict[str, Any]:
         """发送自进化深夜反思沉淀卡片 (紫色温暖风格)"""
@@ -193,9 +340,7 @@ class FeishuClient:
                 ]
             }
         ]
-        if self.webhook_url:
-            return self.send_webhook_card("🌙 PIG 今日伴侣进化日记", elements, template="purple")
-        return {"status": "error", "message": "未配置推送目标"}
+        return self._deliver_card("🌙 PIG 今日伴侣进化日记", elements, template="purple")
 
     def send_status_card(self, status_dict: Dict[str, Any]) -> Dict[str, Any]:
         """发送系统状态 / 体检体温报告 (蓝色科技风)"""
@@ -230,9 +375,7 @@ class FeishuClient:
                 ]
             }
         ]
-        if self.webhook_url:
-            return self.send_webhook_card("📊 PIG 系统健康与运行状态", elements, template="blue")
-        return {"status": "error", "message": "未配置推送目标"}
+        return self._deliver_card("📊 PIG 系统健康与运行状态", elements, template="blue")
 
     # 内部基础 HTTP 辅助
     def _http_post_json(self, url: str, data: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -252,6 +395,7 @@ class FeishuClient:
         except Exception as e:
             logger.warning(f"⚠️ [Feishu] 请求失败: {e}")
             return {"status": "error", "message": str(e)}
+
 
 # 全局单例句柄
 feishu_client = FeishuClient()

@@ -53,16 +53,19 @@ class MenuFSM:
         self.main_menu_items = [
             {"id": "qr", "num": "01", "title": "无线与配网", "desc": "AP热点配网 / 查IP / 手机设置"},
             {"id": "doctor", "num": "02", "title": "系统体检", "desc": "网络延迟与外设实时排障"},
-            {"id": "toggles", "num": "03", "title": "硬件开关", "desc": "麦克风静音 / 追踪 / 休眠"},
-            {"id": "system", "num": "04", "title": "系统设置", "desc": "固件版本 / 系统更新 / 电源管理"},
+            {"id": "toggles", "num": "03", "title": "硬件控制", "desc": "舵机归位 / 自检 / 麦克风 / 追踪"},
+            {"id": "system", "num": "04", "title": "系统设置", "desc": "面容 / 音量 / 音色 / 息屏 / 关机"},
         ]
         
-        # 开关菜单项
-        self.toggle_items = [
-            {"id": "mic", "name": "麦克风收音", "state_key": "is_mic_muted", "inverted": True},
-            {"id": "track", "name": "人脸视线跟随", "state_key": "face_tracking_enabled", "inverted": False},
-            {"id": "servo", "name": "舵机工作状态", "state_key": "is_servo_sleeping", "inverted": True},
-        ]
+        # 舵机状态提示
+        self.servo_center_status = "ACTION (90°, 90°)"
+        self.servo_test_status = "ACTION 摇头点头测试"
+        self.face_clear_status = "RESET 清除已录面容"
+        
+        # 开关菜单项 (兼容旧引用)
+        self.toggle_items = []
+        self.hardware_items = []
+        self._sync_hardware_items()
         
         # 系统设置子菜单项 (基于 Git Tag 动态探测真实版本，绝无任何假 mock)
         from core.version import version_manager
@@ -106,15 +109,182 @@ class MenuFSM:
         self._guard_thread = threading.Thread(target=self._timeout_loop, daemon=True, name="MenuTimeoutGuard")
         self._guard_thread.start()
 
-    def _sync_system_items(self):
-        self.system_items = [
-            {"id": "face_id", "name": "录入主人面容", "val": "SCAN 拍照绑定", "actionable": True},
-            {"id": "mijia", "name": "米家扫码绑定", "val": "屏幕弹窗", "actionable": True},
-            {"id": "version", "name": "系统固件版本", "val": self.version_str, "actionable": False},
-            {"id": "update", "name": "检查系统更新", "val": self.update_status, "actionable": True},
-            {"id": "restart", "name": "重启机器人服务", "val": "RESTART", "actionable": True},
-            {"id": "shutdown", "name": "树莓派安全关机", "val": "POWER OFF", "actionable": True},
+    def _load_cfg(self) -> Dict[str, Any]:
+        cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+        try:
+            if os.path.exists(cfg_path):
+                import json
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {}
+
+    def _save_cfg_key(self, key: str, val: Any):
+        cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+        try:
+            import json
+            c = self._load_cfg()
+            c[key] = val
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(c, f, ensure_ascii=False, indent=2)
+            if self.agent and hasattr(self.agent, "cfg"):
+                self.agent.cfg[key] = val
+        except Exception as e:
+            print(f"⚠️ [MenuFSM] 保存配置失败: {e}")
+
+    def _sync_hardware_items(self):
+        c_cfg = self._load_cfg()
+        gaze_mode = c_cfg.get("gaze_tracking_mode", "9grid")
+        gaze_txt = "九宫格灵动" if gaze_mode == "9grid" else "连续跟随"
+        proactive_on = c_cfg.get("proactive_care", True)
+        sfx_on = c_cfg.get("non_verbal_audio", True)
+        
+        self.hardware_items = [
+            {"id": "servo_center", "name": "舵机居中归位", "val": getattr(self, "servo_center_status", "ACTION (90°, 90°)"), "type": "action"},
+            {"id": "servo_test", "name": "舵机动作自检", "val": getattr(self, "servo_test_status", "TEST 摇头点头自检"), "type": "action"},
+            {"id": "servo_sleep", "name": "舵机休眠防抖", "val": "OFF (休眠卸力)" if self.is_servo_sleeping else "ON (通电保持)", "type": "toggle", "state": not self.is_servo_sleeping},
+            {"id": "mic", "name": "麦克风收音", "val": "OFF (已静音)" if self.is_mic_muted else "ON (收音中)", "type": "toggle", "state": not self.is_mic_muted},
+            {"id": "track", "name": "人脸视线跟随", "val": "ON (已开启)" if self.face_tracking_enabled else "OFF (已关闭)", "type": "toggle", "state": self.face_tracking_enabled},
+            {"id": "gaze_mode", "name": "视线算法模式", "val": gaze_txt, "type": "cycle"},
+            {"id": "proactive", "name": "主动关怀搭话", "val": "ON (已开启)" if proactive_on else "OFF (已关闭)", "type": "toggle", "state": proactive_on},
+            {"id": "sfx", "name": "萌宠情绪拟声", "val": "ON (已开启)" if sfx_on else "OFF (已关闭)", "type": "toggle", "state": sfx_on},
         ]
+        # 兼容旧代码引用
+        self.toggle_items = self.hardware_items
+
+    def _sync_system_items(self):
+        c_cfg = self._load_cfg()
+        voice = c_cfg.get("mimo_voice", "冰糖")
+        vol = c_cfg.get("volume", 80)
+        timeout = int(self.auto_timeout)
+        timeout_txt = f"{timeout}秒" if timeout < 999 else "常亮不熄屏"
+
+        self.system_items = [
+            {"id": "face_id", "name": "录入主人面容", "val": "SCAN 拍照绑定", "type": "action"},
+            {"id": "face_clear", "name": "重置主人面容", "val": getattr(self, "face_clear_status", "RESET 清除面容"), "type": "action"},
+            {"id": "mijia", "name": "米家扫码绑定", "val": "屏幕弹窗", "type": "action"},
+            {"id": "voice", "name": "发音音色切换", "val": voice, "type": "cycle"},
+            {"id": "volume", "name": "系统播报音量", "val": f"{vol}%", "type": "cycle"},
+            {"id": "timeout", "name": "屏幕息屏时间", "val": timeout_txt, "type": "cycle"},
+            {"id": "version", "name": "系统固件版本", "val": self.version_str, "type": "info"},
+            {"id": "update", "name": "检查系统更新", "val": self.update_status, "type": "action"},
+            {"id": "restart", "name": "重启机器人服务", "val": "RESTART", "type": "action"},
+            {"id": "shutdown", "name": "树莓派安全关机", "val": "POWER OFF", "type": "action"},
+        ]
+
+    def run_servo_center(self):
+        """舵机一键居中归位 (90°, 90°)"""
+        if self.hal and hasattr(self.hal, "set_angles"):
+            self.hal.set_angles(90, 90, smooth=True)
+        self.servo_center_status = "已归位居中 (90°, 90°)"
+        self._sync_hardware_items()
+        self._notify_listeners()
+
+    def run_servo_self_test(self):
+        """执行舵机动作健康自检 (左右摇头 + 上下点头 + 回中)"""
+        def _test_worker():
+            try:
+                self.servo_test_status = "TESTING 摇头中..."
+                self._sync_hardware_items()
+                self._notify_listeners()
+                if self.hal and hasattr(self.hal, "set_angles"):
+                    self.hal.set_angles(60, 90, smooth=True)
+                    time.sleep(0.5)
+                    self.hal.set_angles(120, 90, smooth=True)
+                    time.sleep(0.5)
+                    self.servo_test_status = "TESTING 点头中..."
+                    self._sync_hardware_items()
+                    self._notify_listeners()
+                    self.hal.set_angles(90, 75, smooth=True)
+                    time.sleep(0.4)
+                    self.hal.set_angles(90, 105, smooth=True)
+                    time.sleep(0.4)
+                    self.hal.set_angles(90, 90, smooth=True)
+                    time.sleep(0.3)
+                self.servo_test_status = "PASS 自检通过 (正常)"
+            except Exception as e:
+                self.servo_test_status = f"FAIL {e}"
+            self._sync_hardware_items()
+            self._notify_listeners()
+
+        threading.Thread(target=_test_worker, daemon=True, name="ServoSelfTest").start()
+
+    def clear_master_face(self):
+        """清除已录入的主人面容"""
+        master_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "master_face.json")
+        try:
+            if os.path.exists(master_file):
+                os.remove(master_file)
+            if self.agent and hasattr(self.agent, "face_tracker") and self.agent.face_tracker:
+                self.agent.face_tracker.master_embedding = None
+                self.agent.face_tracker.last_identity = "UNREGISTERED"
+            self.face_clear_status = "已清除面容数据"
+        except Exception as e:
+            self.face_clear_status = f"清除失败: {e}"
+        self._sync_system_items()
+        self._notify_listeners()
+
+    def cycle_voice(self):
+        """循环切换发音音色"""
+        voices = ["冰糖", "小爱", "温柔男声"]
+        c = self._load_cfg()
+        cur_v = c.get("mimo_voice", "冰糖")
+        idx = voices.index(cur_v) if cur_v in voices else 0
+        new_v = voices[(idx + 1) % len(voices)]
+        self._save_cfg_key("mimo_voice", new_v)
+        self._sync_system_items()
+        self._notify_listeners()
+
+    def cycle_volume(self):
+        """循环切换系统音量"""
+        vols = [40, 60, 80, 100]
+        c = self._load_cfg()
+        cur_vol = c.get("volume", 80)
+        idx = vols.index(cur_vol) if cur_vol in vols else 2
+        new_vol = vols[(idx + 1) % len(vols)]
+        self._save_cfg_key("volume", new_vol)
+        try:
+            os.system(f"amixer set Master {new_vol}% >/dev/null 2>&1 || true")
+        except Exception:
+            pass
+        self._sync_system_items()
+        self._notify_listeners()
+
+    def cycle_timeout(self):
+        """循环切换屏幕休眠超时时间"""
+        timeouts = [15, 30, 60, 999999]
+        cur = int(self.auto_timeout)
+        idx = timeouts.index(cur) if cur in timeouts else 0
+        new_t = timeouts[(idx + 1) % len(timeouts)]
+        self.auto_timeout = float(new_t)
+        self._save_cfg_key("screen_timeout", new_t)
+        self._sync_system_items()
+        self._notify_listeners()
+
+    def cycle_gaze_mode(self):
+        """循环切换注视追踪模式"""
+        modes = ["9grid", "continuous"]
+        c = self._load_cfg()
+        cur_m = c.get("gaze_tracking_mode", "9grid")
+        new_m = "continuous" if cur_m == "9grid" else "9grid"
+        self._save_cfg_key("gaze_tracking_mode", new_m)
+        self._sync_hardware_items()
+        self._notify_listeners()
+
+    def toggle_proactive(self):
+        c = self._load_cfg()
+        cur = c.get("proactive_care", True)
+        self._save_cfg_key("proactive_care", not cur)
+        self._sync_hardware_items()
+        self._notify_listeners()
+
+    def toggle_sfx(self):
+        c = self._load_cfg()
+        cur = c.get("non_verbal_audio", True)
+        self._save_cfg_key("non_verbal_audio", not cur)
+        self._sync_hardware_items()
+        self._notify_listeners()
 
     def show_xiaomi_qr_on_screen(self):
         """在机器人 2.4 寸屏幕上直接弹窗显示米家登录/授权二维码 (无浏览器弹窗)"""
@@ -452,9 +622,10 @@ class MenuFSM:
                     self._notify_listeners()
                 return
 
-            # 5. 处于硬件开关页 (TOGGLES)
+            # 5. 处于硬件控制页 (TOGGLES: 舵机归位/自检/休眠/麦克风/追踪/视线/拟声)
             if self.current_mode == "TOGGLES":
-                tog_len = len(self.toggle_items)
+                self._sync_hardware_items()
+                tog_len = len(self.hardware_items)
                 if button == "K1":
                     self.cursor = (self.cursor - 1) % tog_len
                     self._notify_listeners()
@@ -462,24 +633,39 @@ class MenuFSM:
                     self.cursor = (self.cursor + 1) % tog_len
                     self._notify_listeners()
                 elif button == "K3":
-                    # 切换当前项开关
-                    cur_item = self.toggle_items[self.cursor]
-                    k = cur_item["state_key"]
-                    new_val = not getattr(self, k)
-                    setattr(self, k, new_val)
-                    if k == "is_servo_sleeping":
-                        self._apply_servo_sleep(new_val)
-                    elif k == "face_tracking_enabled":
-                        self._apply_face_tracking(new_val)
+                    item = self.hardware_items[self.cursor]
+                    item_id = item["id"]
+                    if item_id == "servo_center":
+                        self.run_servo_center()
+                    elif item_id == "servo_test":
+                        self.run_servo_self_test()
+                    elif item_id == "servo_sleep":
+                        self.is_servo_sleeping = not self.is_servo_sleeping
+                        self._apply_servo_sleep(self.is_servo_sleeping)
+                        self._sync_hardware_items()
+                    elif item_id == "mic":
+                        self.is_mic_muted = not self.is_mic_muted
+                        self._sync_hardware_items()
+                    elif item_id == "track":
+                        self.face_tracking_enabled = not self.face_tracking_enabled
+                        self._apply_face_tracking(self.face_tracking_enabled)
+                        self._sync_hardware_items()
+                    elif item_id == "gaze_mode":
+                        self.cycle_gaze_mode()
+                    elif item_id == "proactive":
+                        self.toggle_proactive()
+                    elif item_id == "sfx":
+                        self.toggle_sfx()
                     self._notify_listeners()
                 elif button == "K4":
                     self.current_mode = "MENU_MAIN"
-                    self.cursor = 2  # 恢复到硬件开关项
+                    self.cursor = 2  # 恢复到硬件控制项
                     self._notify_listeners()
                 return
 
-            # 6. 处于系统设置页 (SYSTEM: 认主/版本号/更新/关机/重启)
+            # 6. 处于系统设置页 (SYSTEM: 面容录入/清除/米家/音色/音量/息屏/更新/关机/重启)
             if self.current_mode == "SYSTEM":
+                self._sync_system_items()
                 sys_len = len(self.system_items)
                 if button == "K1":
                     self.cursor = (self.cursor - 1) % sys_len
@@ -491,8 +677,16 @@ class MenuFSM:
                     action_id = self.system_items[self.cursor]["id"]
                     if action_id == "face_id":
                         self.trigger_face_id_enrollment()
+                    elif action_id == "face_clear":
+                        self.clear_master_face()
                     elif action_id == "mijia":
                         self.show_xiaomi_qr_on_screen()
+                    elif action_id == "voice":
+                        self.cycle_voice()
+                    elif action_id == "volume":
+                        self.cycle_volume()
+                    elif action_id == "timeout":
+                        self.cycle_timeout()
                     elif action_id == "update":
                         self.check_system_update_async()
                     elif action_id == "restart":
@@ -604,12 +798,13 @@ class MenuFSM:
             "mode": self.current_mode,
             "cursor": self.cursor,
             "main_menu_items": self.main_menu_items,
+            "hardware_items": self.hardware_items,
             "toggle_items": [
                 {
                     "name": it["name"],
-                    "value": not getattr(self, it["state_key"]) if it["inverted"] else getattr(self, it["state_key"])
+                    "value": it.get("state", True)
                 }
-                for it in self.toggle_items
+                for it in self.hardware_items if it.get("type") == "toggle"
             ],
             "system_items": self.system_items,
             "version": self.version_str,
@@ -748,37 +943,62 @@ class MenuFSM:
             draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
             draw.text((28, 298), "[OK] 重新检测       [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
-        # D. 硬件与防扰开关
+        # D. 硬件控制界面 (TOGGLES: 舵机归位/自检/休眠/麦克风/追踪/视线/拟声 - 视口平滑滚动与循环回绕)
         elif self.current_mode == "TOGGLES":
+            total = len(self.hardware_items)
+            cur_idx = max(0, min(total - 1, self.cursor))
+
             draw.text((16, 16), "03 / HARDWARE", fill=(150, 150, 155), font=self.font_small)
-            draw.text((192, 16), "SWITCH", fill=(110, 110, 115), font=self.font_small)
+            count_txt = f"{cur_idx+1:02d}/{total:02d}"
+            draw.text((186, 16), count_txt, fill=(255, 103, 0), font=self.font_small)
 
-            y = 52
-            for idx, item in enumerate(self.toggle_items):
-                is_selected = (idx == self.cursor)
-                k = item["state_key"]
-                is_on = not getattr(self, k) if item["inverted"] else getattr(self, k)
-                status_txt = "ON" if is_on else "OFF"
-
-                if is_selected:
-                    draw.rounded_rectangle([14, y, 226, y + 54], radius=8, fill=(255, 255, 255))
-                    draw.text((24, y + 10), f"0{idx+1}  {item['name']}", fill=(0, 0, 0), font=self.font_bold)
-                    draw.text((24, y + 32), f"当前状态: {status_txt}", fill=(80, 80, 85), font=self.font_small)
-                    # 开关标识框
-                    draw.rounded_rectangle([170, y + 14, 214, y + 38], radius=4, fill=(0, 0, 0))
-                    draw.text((182, y + 18), status_txt, fill=(255, 255, 255), font=self.font_bold)
+            max_visible = 4
+            start_idx = 0
+            if total > max_visible:
+                if cur_idx < 2:
+                    start_idx = 0
+                elif cur_idx >= total - 2:
+                    start_idx = total - max_visible
                 else:
-                    draw.rounded_rectangle([14, y, 226, y + 54], radius=8, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
-                    draw.text((24, y + 10), f"0{idx+1}  {item['name']}", fill=(210, 210, 215), font=self.font_bold)
-                    draw.text((24, y + 32), f"当前状态: {status_txt}", fill=(120, 120, 125), font=self.font_small)
-                    # 开关标识框
-                    box_fill = (35, 35, 40)
-                    draw.rounded_rectangle([170, y + 14, 214, y + 38], radius=4, fill=box_fill)
-                    draw.text((182, y + 18), status_txt, fill=(16, 185, 129) if is_on else (140, 140, 145), font=self.font_bold)
-                y += 66
+                    start_idx = cur_idx - 1
+                start_idx = max(0, min(start_idx, total - max_visible))
 
-            draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
-            draw.text((24, 298), "[▲▼] 移动    [OK] 切换    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
+            visible_items = self.hardware_items[start_idx : start_idx + max_visible]
+            card_w = 206 if total > max_visible else 216
+            card_h = 48
+            card_gap = 6
+            y = 44
+
+            for v_idx, item in enumerate(visible_items):
+                real_idx = start_idx + v_idx
+                is_selected = (real_idx == cur_idx)
+                if is_selected:
+                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=6, fill=(255, 255, 255))
+                    draw.text((22, y + 6), f"{real_idx+1:02d}  {item['name']}", fill=(0, 0, 0), font=self.font_bold)
+                    draw.text((22, y + 26), str(item["val"]), fill=(70, 70, 75), font=self.font_small)
+                    draw.text((12 + card_w - 14, y + 14), "›", fill=(0, 0, 0), font=self.font_bold)
+                else:
+                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=6, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
+                    draw.text((22, y + 6), f"{real_idx+1:02d}  {item['name']}", fill=(210, 210, 215), font=self.font_bold)
+                    draw.text((22, y + 26), str(item["val"]), fill=(120, 120, 125), font=self.font_small)
+                    draw.text((12 + card_w - 14, y + 14), "›", fill=(80, 80, 85), font=self.font_bold)
+                y += (card_h + card_gap)
+
+            # 极简工业滚动条
+            if total > max_visible:
+                track_x = 224
+                track_y = 44
+                track_h = max_visible * (card_h + card_gap) - card_gap
+                draw.rounded_rectangle([track_x, track_y, track_x + 3, track_y + track_h], radius=2, fill=(28, 28, 32))
+                thumb_h = max(24, int(track_h * (max_visible / total)))
+                max_scroll = track_h - thumb_h
+                thumb_y = track_y + int((start_idx / (total - max_visible)) * max_scroll)
+                draw.rounded_rectangle([track_x, thumb_y, track_x + 3, thumb_y + thumb_h], radius=2, fill=(255, 103, 0))
+
+            # 底部防遮挡实色保护底栏
+            draw.rectangle([0, 280, 240, 320], fill=(10, 10, 12))
+            draw.line([(16, 284), (224, 284)], fill=(32, 32, 36), width=1)
+            draw.text((24, 296), "[▲▼] 移动    [OK] 执行/切换    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
         # E. 系统设置界面 (SYSTEM: 版本号/更新/关机/重启/认主 - 支持视口平滑滚动与循环回绕)
         elif self.current_mode == "SYSTEM":

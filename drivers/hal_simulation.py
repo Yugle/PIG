@@ -38,6 +38,15 @@ class SimulationRobotHAL(BaseRobotHAL):
         self.model = None
         self.data = None
         self.viewer = None
+        self.pan_trim = float(kwargs.get("pan_trim", 0.0))
+        self.tilt_trim = float(kwargs.get("tilt_trim", 0.0))
+        self.pan_invert = bool(kwargs.get("pan_invert", False))
+        self.tilt_invert = bool(kwargs.get("tilt_invert", False))
+        self.pan_min = float(kwargs.get("pan_min", 20.0))
+        self.pan_max = float(kwargs.get("pan_max", 160.0))
+        self.tilt_min = float(kwargs.get("tilt_min", 60.0))
+        self.tilt_max = float(kwargs.get("tilt_max", 120.0))
+        self.servo_speed = max(2, int(kwargs.get("servo_speed", 15)))
 
         # 兼容 urdf_path 传参
         if urdf_path is not None:
@@ -60,23 +69,43 @@ class SimulationRobotHAL(BaseRobotHAL):
             if not self.has_mujoco:
                 print("ℹ️ [HAL-Sim] 仿真模式以轻量/Headless模式运行 (无 3D 物理窗口)")
 
-    def set_angles(self, pan: float, tilt: float, smooth: bool = True):
-        pan = max(20.0, min(160.0, float(pan)))
-        tilt = max(60.0, min(120.0, float(tilt)))
+    def update_servo_config(self, cfg: dict):
+        """动态更新仿真端舵机动力学参数"""
+        if "pan_trim" in cfg: self.pan_trim = float(cfg["pan_trim"])
+        if "tilt_trim" in cfg: self.tilt_trim = float(cfg["tilt_trim"])
+        if "pan_invert" in cfg: self.pan_invert = bool(cfg["pan_invert"])
+        if "tilt_invert" in cfg: self.tilt_invert = bool(cfg["tilt_invert"])
+        if "pan_min" in cfg: self.pan_min = float(cfg["pan_min"])
+        if "pan_max" in cfg: self.pan_max = float(cfg["pan_max"])
+        if "tilt_min" in cfg: self.tilt_min = float(cfg["tilt_min"])
+        if "tilt_max" in cfg: self.tilt_max = float(cfg["tilt_max"])
+        if "servo_speed" in cfg: self.servo_speed = max(2, int(cfg["servo_speed"]))
 
-        # 最小变动死区过滤 (小于 1.0° 视为静止，抑制控制台刷屏与微小抖动)
-        if abs(pan - self.cur_pan) < 0.8 and abs(tilt - self.cur_tilt) < 0.8:
+    def set_angles(self, pan: float, tilt: float, smooth: bool = True):
+        # 零点微调与反向
+        target_pan = pan + self.pan_trim
+        target_tilt = tilt + self.tilt_trim
+        if self.pan_invert:
+            target_pan = 180.0 - target_pan
+        if self.tilt_invert:
+            target_tilt = 180.0 - target_tilt
+
+        target_pan = max(self.pan_min, min(self.pan_max, float(target_pan)))
+        target_tilt = max(self.tilt_min, min(self.tilt_max, float(target_tilt)))
+
+        # 最小变动死区过滤 (小于 0.8° 视为静止，抑制控制台刷屏与微小抖动)
+        if abs(target_pan - self.cur_pan) < 0.8 and abs(target_tilt - self.cur_tilt) < 0.8:
             return
 
         if self.has_mujoco and self.model and self.data and self.viewer:
             # 映射角度至弧度 (90 度为中间零位)
-            rad_pan = math.radians(pan - 90.0)
-            rad_tilt = math.radians(tilt - 90.0)
+            rad_pan = math.radians(target_pan - 90.0)
+            rad_tilt = math.radians(target_tilt - 90.0)
 
             self.data.ctrl[0] = rad_pan
             self.data.ctrl[1] = rad_tilt
 
-            steps = 20 if smooth else 1
+            steps = self.servo_speed if smooth else 1
             for _ in range(steps):
                 mujoco.mj_step(self.model, self.data)
                 if self.viewer.is_running():
@@ -84,9 +113,9 @@ class SimulationRobotHAL(BaseRobotHAL):
                 if smooth:
                     time.sleep(0.005)
         else:
-            print(f"📐 [HAL-Sim] 姿态调整 -> Pan(水平): {pan:.1f}°, Tilt(俯仰): {tilt:.1f}°")
+            print(f"📐 [HAL-Sim] 姿态调整 -> Pan(水平): {target_pan:.1f}°, Tilt(俯仰): {target_tilt:.1f}°")
 
-        self.cur_pan, self.cur_tilt = pan, tilt
+        self.cur_pan, self.cur_tilt = target_pan, target_tilt
 
     def display_face(self, pil_image: Image.Image):
         if cv2 is not None and np is not None and not self.headless:

@@ -498,18 +498,12 @@
   <section class="card">
     <div class="card-title">06 / FEISHU BOT & REMOTE NOTIFICATIONS</div>
     <p style="font-size:0.75rem; color:#888; margin-top:-6px; margin-bottom:12px; line-height:1.4;">
-      配置飞书机器人后，机器人异常报警、深夜自进化日记将自动推送至飞书群或私聊，并支持多通道独立会话与指令交互。
+      已接入飞书官方 WebSocket 双向长连接：免公网 IP 直连，支持多端会话隔离、异常实时卡片告警与自进化日记推送。
     </p>
 
-    <div class="form-group">
-      <label>飞书群机器人 Webhook 地址 (极速简单模式)</label>
-      <input type="text" id="feishuWebhookInput" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." style="font-size:0.8rem; font-family:monospace;">
-      <span style="font-size:0.7rem; color:#666; display:block; margin-top:3px;">在飞书任意群聊设置中添加【自定义机器人】，复制 Webhook 粘贴在此即可接收富文本卡片通知</span>
-    </div>
-
-    <div class="form-row" style="margin-top:10px;">
+    <div class="form-row">
       <div class="form-group" style="flex:1;">
-        <label>App ID (双向聊天/企业自建应用)</label>
+        <label>App ID (企业自建应用 / 长连接必填)</label>
         <input type="text" id="feishuAppIdInput" placeholder="cli_a..." style="font-size:0.8rem; font-family:monospace;">
       </div>
       <div class="form-group" style="flex:1;">
@@ -518,15 +512,36 @@
       </div>
     </div>
 
-    <div style="display:flex; gap:8px; margin-top:12px;">
-      <button class="btn" style="flex:1;" onclick="saveFeishuConfig()">保存飞书配置</button>
-      <button class="btn btn-secondary" style="flex:1;" onclick="testFeishuAlert()">🔔 发送测试告警卡片</button>
-      <button class="btn btn-secondary" style="flex:1;" onclick="testFeishuDiary()">🌙 发送进化日记</button>
+    <!-- 可选折叠 Webhook (单向群提醒备用) -->
+    <details style="margin-top:4px; margin-bottom:12px; font-size:0.75rem; color:#777; background:#0d0e11; border:1px dashed #23252a; border-radius:6px; padding:8px 10px;">
+      <summary style="cursor:pointer; color:#999; font-weight:500;">⚙️ 高级备用: 飞书群自定义 Webhook (可选)</summary>
+      <div style="margin-top:8px;">
+        <input type="text" id="feishuWebhookInput" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." style="font-size:0.75rem; font-family:monospace;">
+        <span style="font-size:0.68rem; color:#666; display:block; margin-top:4px;">注：已配置 App ID/Secret 双向长连接时无需填写，通知将直接通过应用推送。</span>
+      </div>
+    </details>
+
+    <!-- 操作按钮组 (避免折行，主操作与测试操作分层) -->
+    <button class="btn" onclick="saveFeishuConfig()">💾 保存飞书配置</button>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;">
+      <button class="btn btn-secondary" style="white-space:nowrap; padding:10px 6px; font-size:0.8rem;" onclick="testFeishuAlert()">🔔 发送测试告警</button>
+      <button class="btn btn-secondary" style="white-space:nowrap; padding:10px 6px; font-size:0.8rem;" onclick="testFeishuDiary()">🌙 发送进化日记</button>
     </div>
 
-    <div style="margin-top:14px; padding-top:10px; border-top:1px solid #222; font-size:0.72rem; color:#888; display:flex; justify-content:space-between; align-items:center;">
-      <span>活跃会话通道 (多 Session 隔离):</span>
-      <span id="activeSessionsDisplay" style="font-family:monospace; color:#10b981; font-weight:600;">device (实体机)</span>
+    <!-- 状态监控仪表板 -->
+    <div style="margin-top:14px; padding:12px; background:#0d0e11; border:1px solid #1f2127; border-radius:8px; font-size:0.74rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span style="color:#888;">长连接网关:</span>
+        <span id="feishuWsStatusDisplay" style="font-family:monospace; font-weight:600;">检测中...</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span style="color:#888; white-space:nowrap;">推送绑定用户:</span>
+        <span id="feishuLastOpenIdDisplay" style="font-family:monospace; text-align:right;">检测中...</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="color:#888; white-space:nowrap; margin-right:8px;">活跃会话通道:</span>
+        <span id="activeSessionsDisplay" style="font-family:monospace; color:#10b981; font-weight:600; text-align:right; display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end;">device</span>
+      </div>
     </div>
   </section>
 
@@ -847,12 +862,36 @@
         const res = await fetch("/api/feishu/status");
         if (res.ok) {
           const d = await res.json();
+          const wsDisp = document.getElementById("feishuWsStatusDisplay");
+          if (wsDisp) {
+            if (d.ws_connected) {
+              wsDisp.innerHTML = "<span style='color:#10b981;'>🟢 已连接 (免公网IP/长连接监听中)</span>";
+            } else if (d.has_app) {
+              wsDisp.innerHTML = "<span style='color:#f59e0b;'>🟡 正在连接...</span>";
+            } else {
+              wsDisp.innerHTML = "<span style='color:#666;'>⚪ 未启动 (需 App ID 与 Secret)</span>";
+            }
+          }
+          const openIdDisp = document.getElementById("feishuLastOpenIdDisplay");
+          if (openIdDisp) {
+            if (d.last_open_id) {
+              const shortId = d.last_open_id.length > 20 ? d.last_open_id.slice(0, 9) + '...' + d.last_open_id.slice(-6) : d.last_open_id;
+              openIdDisp.innerHTML = `<span style="background:#064e3b; color:#34d399; padding:2px 7px; border-radius:4px; font-weight:500;" title="${d.last_open_id}">🟢 已绑定 (${shortId})</span>`;
+            } else {
+              openIdDisp.innerHTML = `<span style="color:#777;">⚪ 暂未绑定 (在飞书发句消息即可)</span>`;
+            }
+          }
           const disp = document.getElementById("activeSessionsDisplay");
           if (d.active_sessions && Object.keys(d.active_sessions).length > 0) {
-            const keys = Object.keys(d.active_sessions);
-            disp.innerText = keys.join(", ");
+            const badges = Object.keys(d.active_sessions).map(k => {
+              if (k === "device") return "<span style='background:#1f2937; color:#10b981; padding:2px 6px; border-radius:4px;'>实体机</span>";
+              if (k.startsWith("feishu_oc_")) return `<span style='background:#1e1b4b; color:#a5b4fc; padding:2px 6px; border-radius:4px;' title='${k}'>飞书群聊</span>`;
+              if (k.startsWith("feishu_ou_")) return `<span style='background:#064e3b; color:#6ee7b7; padding:2px 6px; border-radius:4px;' title='${k}'>飞书私聊</span>`;
+              return `<span style='background:#1f2937; color:#9ca3af; padding:2px 6px; border-radius:4px;'>${k}</span>`;
+            });
+            disp.innerHTML = badges.join("");
           } else {
-            disp.innerText = "device (实体机)";
+            disp.innerHTML = "<span style='background:#1f2937; color:#10b981; padding:2px 6px; border-radius:4px;'>实体机</span>";
           }
         }
       } catch (e) {}
@@ -897,7 +936,7 @@
         if (d.status === "ok") {
           showToast("飞书告警卡片已送达！");
         } else {
-          alert("发送失败: " + (d.error || (d.result && d.result.message) || "请检查 Webhook 配置"));
+          alert("发送失败: " + (d.message || d.error || "请检查 Webhook 或私聊绑定配置"));
         }
       } catch (e) {
         alert("请求失败: " + e);
@@ -920,7 +959,7 @@
         if (d.status === "ok") {
           showToast("自进化日记卡片已送达！");
         } else {
-          alert("发送失败: " + (d.error || (d.result && d.result.message) || "请检查 Webhook 配置"));
+          alert("发送失败: " + (d.message || d.error || "请检查 Webhook 或私聊绑定配置"));
         }
       } catch (e) {
         alert("请求失败: " + e);
@@ -929,6 +968,8 @@
 
     loadSettings();
     refreshWifiStatus();
+    refreshFeishuStatus();
+    setInterval(refreshFeishuStatus, 3000);
   </script>
 </body>
 </html>

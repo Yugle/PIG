@@ -30,7 +30,7 @@ class PhysicalRobotHAL(BaseRobotHAL):
     使用 fswebcam / v4l2 捕获 USB 摄像头画面。
     """
 
-    def __init__(self, pan_pin=18, tilt_pin=13, touch_pin=17, spi_port=0, spi_device=0, dc_pin=25, rst_pin=22):
+    def __init__(self, pan_pin=18, tilt_pin=13, touch_pin=17, spi_port=0, spi_device=0, dc_pin=25, rst_pin=22, **kwargs):
         if pigpio is None:
             raise ImportError(
                 "未找到 pigpio 库，请在树莓派上运行: sudo apt install python3-pigpio 或 pip install pigpio"
@@ -48,6 +48,18 @@ class PhysicalRobotHAL(BaseRobotHAL):
         self.cur_pan = 90.0
         self.cur_tilt = 90.0
         self._cam = None  # 常驻摄像头句柄 (cv2.VideoCapture)
+
+        # 舵机深度运动学参数
+        self.pan_trim = float(kwargs.get("pan_trim", 0.0))
+        self.tilt_trim = float(kwargs.get("tilt_trim", 0.0))
+        self.pan_invert = bool(kwargs.get("pan_invert", False))
+        self.tilt_invert = bool(kwargs.get("tilt_invert", False))
+        self.pan_min = float(kwargs.get("pan_min", 20.0))
+        self.pan_max = float(kwargs.get("pan_max", 160.0))
+        self.tilt_min = float(kwargs.get("tilt_min", 60.0))
+        self.tilt_max = float(kwargs.get("tilt_max", 120.0))
+        self.servo_speed = max(2, int(kwargs.get("servo_speed", 15)))
+        self.auto_detach_delay = max(0.1, float(kwargs.get("servo_auto_detach_delay", 0.8)))
 
         # 舵机防抖与防发热自动卸力定时器
         self._detach_timer = None
@@ -181,37 +193,60 @@ class PhysicalRobotHAL(BaseRobotHAL):
         except Exception:
             pass
 
+    def update_servo_config(self, cfg: dict):
+        """动态更新舵机微调与动力学参数"""
+        if "pan_trim" in cfg: self.pan_trim = float(cfg["pan_trim"])
+        if "tilt_trim" in cfg: self.tilt_trim = float(cfg["tilt_trim"])
+        if "pan_invert" in cfg: self.pan_invert = bool(cfg["pan_invert"])
+        if "tilt_invert" in cfg: self.tilt_invert = bool(cfg["tilt_invert"])
+        if "pan_min" in cfg: self.pan_min = float(cfg["pan_min"])
+        if "pan_max" in cfg: self.pan_max = float(cfg["pan_max"])
+        if "tilt_min" in cfg: self.tilt_min = float(cfg["tilt_min"])
+        if "tilt_max" in cfg: self.tilt_max = float(cfg["tilt_max"])
+        if "servo_speed" in cfg: self.servo_speed = max(2, int(cfg["servo_speed"]))
+        if "servo_auto_detach_delay" in cfg: self.auto_detach_delay = max(0.1, float(cfg["servo_auto_detach_delay"]))
+
     def set_angles(self, pan: float, tilt: float, smooth: bool = True):
         # 唤醒/重置卸力定时器
         self._cancel_detach()
 
-        # 物理机械行程限位保护
-        pan = max(20.0, min(160.0, float(pan)))
-        tilt = max(60.0, min(120.0, float(tilt)))
+        # 软件零点微调 (Trim Offset)
+        target_pan = pan + self.pan_trim
+        target_tilt = tilt + self.tilt_trim
 
-        # 硬件防抖滤波死区 (若目标角度变化小于 1.0°，忽略微小抖动，避免电机频繁唤醒与发热)
-        if abs(pan - self.cur_pan) < 1.0 and abs(tilt - self.cur_tilt) < 1.0:
+        # 软件反向 (Invert)
+        if self.pan_invert:
+            target_pan = 180.0 - target_pan
+        if self.tilt_invert:
+            target_tilt = 180.0 - target_tilt
+
+        # 物理机械行程限位保护 (Min/Max Limits)
+        target_pan = max(self.pan_min, min(self.pan_max, float(target_pan)))
+        target_tilt = max(self.tilt_min, min(self.tilt_max, float(target_tilt)))
+
+        # 硬件防抖滤波死区 (若目标角度变化小于 0.8°，忽略微小抖动，避免电机频繁唤醒与发热)
+        if abs(target_pan - self.cur_pan) < 0.8 and abs(target_tilt - self.cur_tilt) < 0.8:
             return
 
         if not smooth:
-            self.pi.set_servo_pulsewidth(self.pan_pin, self._angle_to_pulse(pan))
-            self.pi.set_servo_pulsewidth(self.tilt_pin, self._angle_to_pulse(tilt))
-            self.cur_pan, self.cur_tilt = pan, tilt
-            self._schedule_servo_detach(0.8)
+            self.pi.set_servo_pulsewidth(self.pan_pin, self._angle_to_pulse(target_pan))
+            self.pi.set_servo_pulsewidth(self.tilt_pin, self._angle_to_pulse(target_tilt))
+            self.cur_pan, self.cur_tilt = target_pan, target_tilt
+            self._schedule_servo_detach(self.auto_detach_delay)
             return
 
-        # 细分步长插值，消除瞬间加减速冲击
-        steps = 15
+        # 细分步长插值，消除瞬间加减速冲击 (受平滑步长 servo_speed 控制)
+        steps = self.servo_speed
         for s in range(1, steps + 1):
-            p = self.cur_pan + (pan - self.cur_pan) * (s / steps)
-            t = self.cur_tilt + (tilt - self.cur_tilt) * (s / steps)
+            p = self.cur_pan + (target_pan - self.cur_pan) * (s / steps)
+            t = self.cur_tilt + (target_tilt - self.cur_tilt) * (s / steps)
             self.pi.set_servo_pulsewidth(self.pan_pin, self._angle_to_pulse(p))
             self.pi.set_servo_pulsewidth(self.tilt_pin, self._angle_to_pulse(t))
             time.sleep(0.015)
 
-        self.cur_pan, self.cur_tilt = pan, tilt
-        # 到位后 0.8 秒自动卸力休眠
-        self._schedule_servo_detach(0.8)
+        self.cur_pan, self.cur_tilt = target_pan, target_tilt
+        # 到位后自动卸力休眠 (受 auto_detach_delay 控制)
+        self._schedule_servo_detach(self.auto_detach_delay)
 
     def display_face(self, pil_image: Image.Image):
         if self.screen is not None:

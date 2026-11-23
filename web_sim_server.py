@@ -86,6 +86,53 @@ def on_alarm_triggered(rem):
 
 skill_mgr.register_trigger_callback(on_alarm_triggered)
 
+# ========================================================
+# 飞书双向消息处理通道 (统一供 WebSocket 长连接与 Webhook 调用)
+# ========================================================
+def handle_feishu_incoming_message(clean_text: str, open_id: str, chat_id: str, msg_id: str = ""):
+    """统一处理飞书传入消息 (无论是 WebSocket 长连接还是 HTTP Webhook 回调)"""
+    def _worker():
+        try:
+            from core.agent_reasoner import AgentReasoner
+            from core.prompt_builder import PromptBuilder
+
+            c_cfg = load_config()
+            reasoner = AgentReasoner(
+                api_key=c_cfg.get("api_key") or c_cfg.get("mimo_api_key") or "",
+                base_url=c_cfg.get("base_url") or "https://api.xiaomimimo.com/v1",
+                model=c_cfg.get("llm_model") or "mimo-v2.6-flash",
+                max_steps=4,
+                enable_thinking=c_cfg.get("llm_thinking", False)
+            )
+            sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=300, skill_manager=skill_mgr)
+            sid = f"feishu_{chat_id or open_id}"
+
+            print(f"🤖 [Feishu Bot] 正在为会话 {sid} 进行思考推演: '{clean_text}'...")
+            res = reasoner.run_react_loop(
+                user_text=clean_text,
+                base_sys_prompt=sys_prompt,
+                memory_manager=mem,
+                skill_manager=skill_mgr,
+                evolution_engine=evolution_engine,
+                session_id=sid,
+                silent=True  # 远程静默执行，绝不触发本地舵机转动与大声发音！
+            )
+            reply_text = res.get("reply", "小猪收到啦！")
+            target_id = chat_id if chat_id else open_id
+            id_type = "chat_id" if chat_id else "open_id"
+            send_res = feishu_client.send_im_message(target_id, "text", {"text": reply_text}, receive_id_type=id_type)
+            print(f"📤 [Feishu Bot] 已回复消息至飞书 {target_id}: '{reply_text[:50]}...' -> {send_res.get('code', send_res.get('status'))}")
+        except Exception as e:
+            print(f"❌ [Feishu Bot] 处理消息失败: {e}")
+
+    threading.Thread(target=_worker, daemon=True, name="FeishuMsgWorker").start()
+
+# 启动飞书官方 WebSocket 长连接守护线程 (零公网 IP / 零域名直连)
+if "feishu" in server_cfg:
+    feishu_client.update_config(server_cfg["feishu"])
+    if feishu_client.app_id and feishu_client.app_secret:
+        feishu_client.start_ws_service(handle_feishu_incoming_message)
+
 # 初始化真机硬件与数字孪生工作中枢
 hardware_agent = HardwareAgent(
     config=server_cfg,
@@ -245,8 +292,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({
                 "configured": feishu_client.is_configured,
-                "has_webhook": bool(feishu_client.webhook_url),
+                "has_webhook": bool(feishu_client.webhook_url and "demo" not in feishu_client.webhook_url),
                 "has_app": bool(feishu_client.app_id and feishu_client.app_secret),
+                "ws_connected": feishu_client.ws_connected,
+                "last_open_id": feishu_client.last_user_open_id,
                 "active_sessions": mem.list_active_sessions() if mem else {}
             }, ensure_ascii=False).encode("utf-8"))
             return
@@ -690,6 +739,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     cur_cfg.setdefault("feishu", {}).update(body["feishu"])
                     from skills.feishu_bot.feishu_client import feishu_client
                     feishu_client.update_config(cur_cfg["feishu"])
+                    if feishu_client.app_id and feishu_client.app_secret:
+                        feishu_client.start_ws_service(handle_feishu_incoming_message)
 
                 with open(cfg_file, "w", encoding="utf-8") as f:
                     json.dump(cur_cfg, f, ensure_ascii=False, indent=2)
@@ -733,37 +784,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         chat_id = msg.get("chat_id", "")
 
                         if clean_text:
-                            def _handle_feishu_chat():
-                                from skills.feishu_bot.feishu_client import feishu_client
-                                from core.agent_reasoner import AgentReasoner
-                                from core.prompt_builder import PromptBuilder
-
-                                c_cfg = load_config()
-                                reasoner = AgentReasoner(
-                                    api_key=c_cfg.get("api_key") or c_cfg.get("mimo_api_key") or "",
-                                    base_url=c_cfg.get("base_url") or "https://api.xiaomimimo.com/v1",
-                                    model=c_cfg.get("llm_model") or "mimo-v2.6-flash",
-                                    max_steps=4,
-                                    enable_thinking=c_cfg.get("llm_thinking", False)
-                                )
-                                sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=300, skill_manager=skill_mgr)
-                                sid = f"feishu_{chat_id or open_id}"
-
-                                res = reasoner.run_react_loop(
-                                    user_text=clean_text,
-                                    base_sys_prompt=sys_prompt,
-                                    memory_manager=mem,
-                                    skill_manager=skill_mgr,
-                                    evolution_engine=evolution_engine,
-                                    session_id=sid,
-                                    silent=True  # 远程静默执行，绝不触发本地舵机转动与大声发音！
-                                )
-                                reply_text = res.get("reply", "小猪收到啦！")
-                                target_id = chat_id if chat_id else open_id
-                                id_type = "chat_id" if chat_id else "open_id"
-                                feishu_client.send_im_message(target_id, "text", {"text": reply_text}, receive_id_type=id_type)
-
-                            threading.Thread(target=_handle_feishu_chat, daemon=True, name="FeishuMsgWorker").start()
+                            handle_feishu_incoming_message(clean_text, open_id, chat_id, msg.get("message_id", ""))
 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -797,6 +818,18 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     )
                 else:
                     res = feishu_client.send_alert_card(title, content, detail="硬件健康正常 | 多 Session 架构就绪")
+                if isinstance(res, dict) and res.get("status") == "error":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": res.get("message", "推送失败"), "result": res}, ensure_ascii=False).encode("utf-8"))
+                    return
+                if isinstance(res, dict) and res.get("code", 0) != 0 and "msg" in res:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": f"飞书返回错误码 {res.get('code')}: {res.get('msg')}", "result": res}, ensure_ascii=False).encode("utf-8"))
+                    return
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
