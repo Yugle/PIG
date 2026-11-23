@@ -1312,7 +1312,7 @@
           <div class="quick-chip" onclick="sendQuickChip('讲个冷笑话逗我开心')">😄 讲笑话</div>
           <div class="quick-chip" onclick="sendQuickChip('帮我查一下有哪些米家设备')">🏠 米家设备</div>
           <div class="quick-chip" onclick="triggerTestProactiveCare('morning')" style="border-color: rgba(255, 64, 129, 0.4); color: #ff4081;">❤️ 主动关怀</div>
-          <div class="quick-chip" onclick="openXiaomiQRModal()" style="border-color: rgba(255, 103, 0, 0.4); color: #ff6700;">📱 扫码绑定</div>
+          <div class="quick-chip" onclick="triggerXiaomiScreenQR()" style="border-color: rgba(255, 103, 0, 0.4); color: #ff6700;">📱 扫码绑定</div>
         </div>
 
         <!-- 独立对话视窗 (自适应撑满高度) -->
@@ -1754,9 +1754,13 @@
           }
         }
       } else if (menuState.mode === "XIAOMI_QR") {
-        if (button === "K4" || button === "K3") {
+        if (button === "K4") {
           menuState.mode = "FACE";
           fetch("/api/xiaomi/qr_dismiss_screen", { method: "POST" }).catch(() => {});
+        } else if (button === "K3") {
+          if (menuState.xiaomi_qr) menuState.xiaomi_qr.status = "正在向服务器刷新二维码...";
+          fetch("/api/xiaomi/qr_start_screen", { method: "POST" }).catch(() => {});
+          setTimeout(syncMenuState, 300);
         }
       } else if (menuState.mode === "MENU_MAIN") {
         const mainLen = (menuState.main_menu_items && menuState.main_menu_items.length) || 4;
@@ -5118,44 +5122,63 @@
       }
     }
 
-    // ====== 米家 App 一键扫码绑定 ======
+    // ====== 米家 App 小猪屏幕直接扫码绑定 (零浏览器弹窗，真机与3D Canvas同构) ======
     let xiaomiQrPollTimer = null;
 
-    async function openXiaomiQRModal() {
-      const modal = document.getElementById("xiaomiQrModal");
-      modal.style.display = "flex";
-      await refreshXiaomiQR();
-    }
+    async function triggerXiaomiScreenQR() {
+      // 1. 本地立即切入 XIAOMI_QR 模式，清空旧二维码，让 3D 机器人面部屏幕立即进入扫码界面
+      menuState.mode = "XIAOMI_QR";
+      menuState.qr_base64 = "";
+      qrCodeLoaded = false;
+      if (menuState.xiaomi_qr) {
+        menuState.xiaomi_qr.status = "正在向小米服务器请求二维码...";
+      }
 
-    function closeXiaomiQRModal() {
-      const modal = document.getElementById("xiaomiQrModal");
-      modal.style.display = "none";
-      if (xiaomiQrPollTimer) {
-        clearInterval(xiaomiQrPollTimer);
-        xiaomiQrPollTimer = null;
+      appendChat('assistant', '📱 **已在小猪屏幕上显示米家授权二维码！**\n请打开手机【米家 App】右上角「+」➜「扫一扫」，直接对准小猪面部屏幕扫描授权。\n（若需退出或刷新，可按面板物理按键 [K4:返回] / [K3:刷新]）');
+
+      try {
+        // 2. 通知后端 FSM 与 XiaomiQRAuth 启动米家授权会话
+        await fetch("/api/xiaomi/qr_start_screen", { method: "POST" });
+
+        // 3. 延迟 300ms 拉取最新 menu/state 与 QR base64 图片流并更新 Canvas 纹理
+        setTimeout(async () => {
+          try {
+            const sRes = await fetch("/api/menu/state");
+            if (sRes.ok) {
+              const sData = await sRes.json();
+              menuState = Object.assign(menuState, sData);
+              if (menuState.qr_base64) {
+                if (!qrCodeImg) {
+                  qrCodeImg = new Image();
+                  qrCodeImg.onload = () => { qrCodeLoaded = true; };
+                }
+                qrCodeImg.src = menuState.qr_base64;
+                qrCodeLoaded = true;
+              }
+            }
+          } catch (err) {}
+        }, 300);
+
+        // 4. 启动长轮询监听扫码状态并在聊天窗给出反馈
+        startXiaomiQrPolling();
+      } catch (e) {
+        console.error("启动米家屏幕二维码失败:", e);
       }
     }
 
-    async function refreshXiaomiQR() {
-      const qrImg = document.getElementById("xiaomiQrImg");
-      const statusText = document.getElementById("xiaomiQrStatus");
-      const devBox = document.getElementById("xiaomiSyncedDevices");
-      if (qrImg) qrImg.src = "";
-      if (statusText) statusText.innerHTML = '<span style="color:#ff9800;">⏳ 正在向小米服务器请求扫码凭证...</span>';
-      if (devBox) devBox.innerHTML = "";
+    // 兼容历史调用名
+    function openXiaomiQRModal() {
+      triggerXiaomiScreenQR();
+    }
 
-      try {
-        const resp = await fetch("/api/xiaomi/qr_start", { method: "POST" });
-        const data = await resp.json();
-        if (data && data.qr_url) {
-          if (qrImg) qrImg.src = data.qr_url;
-          if (statusText) statusText.innerHTML = '<span style="color:var(--cyan);">📱 请打开手机【米家 App】右上角「+」->「扫一扫」扫描二维码</span>';
-          startXiaomiQrPolling();
-        } else {
-          if (statusText) statusText.innerHTML = '<span style="color:#f44336;">❌ 请求二维码失败: ' + (data.error || "未知异常") + '</span>';
-        }
-      } catch (e) {
-        if (statusText) statusText.innerHTML = '<span style="color:#f44336;">❌ 网络请求失败: ' + e + '</span>';
+    function closeXiaomiQRModal() {
+      if (menuState.mode === "XIAOMI_QR") {
+        menuState.mode = "FACE";
+        fetch("/api/xiaomi/qr_dismiss_screen", { method: "POST" }).catch(() => {});
+      }
+      if (xiaomiQrPollTimer) {
+        clearInterval(xiaomiQrPollTimer);
+        xiaomiQrPollTimer = null;
       }
     }
 
@@ -5166,61 +5189,56 @@
           const resp = await fetch("/api/xiaomi/qr_status");
           if (!resp.ok) return;
           const data = await resp.json();
-          const statusText = document.getElementById("xiaomiQrStatus");
-          const devBox = document.getElementById("xiaomiSyncedDevices");
 
           if (data.status === "success") {
             clearInterval(xiaomiQrPollTimer);
             xiaomiQrPollTimer = null;
-            if (statusText) {
-              statusText.innerHTML = '<span style="color:#4caf50; font-weight:bold;">🎉 扫码授权成功！已自动拉取全家设备并生成 Token！</span>';
+            if (menuState.xiaomi_qr) {
+              menuState.xiaomi_qr.status = `绑定成功！已同步 ${data.device_count || (data.devices ? data.devices.length : 0)} 台设备`;
             }
-            if (devBox && data.devices) {
-              devBox.innerHTML = `
-                <div style="margin-top:12px; padding:10px; background:rgba(76,175,80,0.1); border:1px solid #4caf50; border-radius:8px;">
-                  <div style="font-weight:bold; color:#4caf50; margin-bottom:6px;">✅ 已成功接入 ${data.devices.length} 个智能设备：</div>
-                  <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                    ${data.devices.map(d => `<span style="background:rgba(255,255,255,0.08); padding:3px 8px; border-radius:6px; font-size:0.75rem; color:#fff;">${d.name} (${d.ip || 'BLE'})</span>`).join('')}
-                  </div>
-                </div>
-              `;
-            }
-            appendChat('assistant', `🎉 **米家 App 扫码授权成功！**\n已为你全自动拉取并保存了 **${data.device_count || data.devices.length}** 个智能设备与局域网直控 Token。现在你可以直接说“帮我开一下台灯”或“关掉饮水机”！`);
+            appendChat('assistant', `🎉 **米家 App 扫码授权成功！**\n已为你全自动拉取并保存了 **${data.device_count || (data.devices ? data.devices.length : 0)}** 个智能设备与局域网直控 Token。现在你可以直接对小猪说“帮我开一下台灯”或“关掉饮水机”！`);
+            setTimeout(() => {
+              if (menuState.mode === "XIAOMI_QR") {
+                menuState.mode = "FACE";
+              }
+            }, 3000);
           } else if (data.status === "expired") {
             clearInterval(xiaomiQrPollTimer);
             xiaomiQrPollTimer = null;
-            if (statusText) statusText.innerHTML = '<span style="color:#f44336;">⏰ 二维码已超时过期，请点击下方刷新</span>';
+            if (menuState.xiaomi_qr) {
+              menuState.xiaomi_qr.status = "二维码已超时，请按 [K3] 刷新";
+            }
           }
         } catch (e) {
           console.error("Poll xiaomi qr error:", e);
         }
       }, 2000);
     }
-  </script>
 
-  <!-- 📱 米家 App 扫码绑定弹窗 (Xiaomi QR Modal) -->
-  <div id="xiaomiQrModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
-    <div style="background:#0d1117; border:1px solid #ff6700; border-radius:14px; width:92%; max-width:480px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(255,103,0,0.25);">
-      <div style="padding:16px 20px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="margin:0; font-size:1.1rem; color:#ff6700; display:flex; align-items:center; gap:8px;">
-          <span>📱 米家 App 一键扫码授权</span>
-          <span style="font-size:0.72rem; background:rgba(255,103,0,0.2); color:#ff6700; padding:2px 8px; border-radius:12px;">免密码 · 免验证码</span>
-        </h3>
-        <button onclick="closeXiaomiQRModal()" class="btn" style="font-size:1.1rem; padding:4px 10px; cursor:pointer;">✕</button>
-      </div>
-      <div style="padding:24px; text-align:center; display:flex; flex-direction:column; align-items:center;">
-        <div style="background:#fff; padding:12px; border-radius:12px; display:inline-block; box-shadow:0 4px 16px rgba(0,0,0,0.4); margin-bottom:14px;">
-          <img id="xiaomiQrImg" src="" alt="米家扫码登录" style="width:220px; height:220px; display:block; object-fit:contain;" />
-        </div>
-        <div id="xiaomiQrStatus" style="font-size:0.85rem; margin-bottom:12px; min-height:24px;"></div>
-        <p style="font-size:0.75rem; color:var(--text-sub); margin:0 0 16px 0; line-height:1.4;">
-          请打开手机 <b>【米家 App】</b> 首页 ➜ 点击右上角 <b>「+」</b> ➜ 选择 <b>「扫一扫」</b> 直接对准屏幕扫描。<br>手机授权确认后，系统将自动抓取全家设备与局域网 Token！
-        </p>
-        <button class="btn" style="background:#ff6700; color:#fff; border:none; padding:8px 20px; font-size:0.85rem; border-radius:8px; cursor:pointer;" onclick="refreshXiaomiQR()">🔄 刷新二维码</button>
-        <div id="xiaomiSyncedDevices" style="width:100%; text-align:left;"></div>
-      </div>
-    </div>
-  </div>
+    // 定期轻量同步菜单与屏幕模式 (保持真机与仿真器、语音交互多端绝对一致)
+    async function syncMenuState() {
+      if (Date.now() - lastLocalNavTime < 1200 || hwButtonQueue.length > 0) return;
+      try {
+        const res = await fetch("/api/menu/state");
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            menuState = Object.assign(menuState, data);
+            if ((menuState.mode === "XIAOMI_QR" || menuState.mode === "QR_CODE") && menuState.qr_base64) {
+              if (!qrCodeImg) {
+                qrCodeImg = new Image();
+                qrCodeImg.onload = () => { qrCodeLoaded = true; };
+              }
+              if (qrCodeImg.src !== menuState.qr_base64) {
+                qrCodeImg.src = menuState.qr_base64;
+                qrCodeLoaded = true;
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }
+    setInterval(syncMenuState, 1500);
 
   <!-- 动态 SVG 动图库画廊弹窗 -->
   <div id="svgGalleryModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
