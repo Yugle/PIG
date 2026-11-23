@@ -155,6 +155,7 @@ class SkillManager:
         self.load_installed_plugins()
 
         self.trigger_callbacks: List[Callable[[Dict[str, Any]], None]] = []
+        self.register_face_callback: Optional[Callable[[], Any]] = None
         self._running = True
         global _global_skill_manager
         _global_skill_manager = self
@@ -496,6 +497,7 @@ class SkillManager:
             "\n- install_skill(skill_id) / uninstall_skill(skill_id): 安装或卸载技能商店插件。"
             "\n- evolve_action(name, description, keyframes): 用户教你动作或口令时自创动作序列。keyframes 包含动作帧列表，每帧含 pan(水平角0~180), tilt(俯仰角0~180), emotion(表情如HAPPY/WINK/LOVE), delay(毫秒如300)。示例: evolve_action(name=\"点头打招呼\", description=\"上下点头两次\", keyframes=[{\"pan\": 90, \"tilt\": 70, \"emotion\": \"HAPPY\", \"delay\": 300}, {\"pan\": 90, \"tilt\": 90, \"emotion\": \"HAPPY\", \"delay\": 300}])"
             "\n- play_action(action): 指挥机器人展示执行动作库中的自创动作 (如“表演一下上上下下左左右右”)，例如 play_action(action=\"上上下下左左右右\")。"
+            "\n- register_master_face(): 当主人对你说“认主”、“记住我的脸”、“拍照认主”、“记一下我是谁”时调用，命令摄像头捕捉当前人脸并保存为唯一的主人面容识别特征。"
         )
         return "\n".join(lines)
 
@@ -775,6 +777,15 @@ class SkillManager:
             if self.memory_manager:
                 return self.memory_manager.set_user_name(new_name)
             return f"主人称呼已更新为：{new_name}"
+        elif name in ["register_master_face", "register_face", "record_face", "bind_master_face", "face_id"]:
+            if hasattr(self, "register_face_callback") and self.register_face_callback:
+                res = self.register_face_callback()
+                if isinstance(res, dict) and res.get("status") == "ok":
+                    return "👑 主人面容 128 维特征已成功录入并持久化！以后我只要一眼看到您，就能立刻认出是主人！"
+                elif isinstance(res, dict) and res.get("message"):
+                    return f"人脸录入未完成：{res.get('message')}，请正对摄像头保持不动再试一次~"
+                return str(res)
+            return "已触发人脸录入流程，请正视摄像头保持静止。"
         elif name in ["create_skill", "create_custom_skill", "new_skill", "develop_skill"]:
             sid = args.get("skill_id") or args.get("id") or f"custom_{int(time.time())}"
             s_name = args.get("name") or sid

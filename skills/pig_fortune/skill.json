@@ -1,0 +1,26 @@
+{
+  "id": "pig_fortune",
+  "name": "PIG运势签筒",
+  "version": "1.0.0",
+  "author": "AI Self-Evolved (PIG 自进化)",
+  "category": "自创本能",
+  "description": "摇一支今日运势签，包含吉凶等级和PIG专属毒舌解读，可查询历史签文与连续好运 streak",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "抽签 或 查询历史",
+      "default": "抽签"
+    },
+    "topic": {
+      "type": "string",
+      "description": "想问的事（可选），如 考试/跑步/加班",
+      "default": ""
+    }
+  },
+  "default_behavior": {
+    "emotion": "HAPPY",
+    "action": "NOD"
+  },
+  "source": "self_evolved",
+  "created_at": "2026-11-23 17:39:53"
+}

@@ -90,6 +90,10 @@ class MenuFSM:
         self.font_large = None
         self._init_fonts()
         
+        # 人脸录入状态
+        self.face_enroll_msg = ""
+        self.face_enroll_step = 0
+
         # 启动超时守卫线程
         self._running = True
         self._guard_thread = threading.Thread(target=self._timeout_loop, daemon=True, name="MenuTimeoutGuard")
@@ -97,11 +101,66 @@ class MenuFSM:
 
     def _sync_system_items(self):
         self.system_items = [
+            {"id": "face_id", "name": "录入主人面容", "val": "SCAN 拍照绑定", "actionable": True},
             {"id": "version", "name": "系统固件版本", "val": self.version_str, "actionable": False},
             {"id": "update", "name": "检查系统更新", "val": self.update_status, "actionable": True},
             {"id": "restart", "name": "重启机器人服务", "val": "RESTART", "actionable": True},
             {"id": "shutdown", "name": "树莓派安全关机", "val": "POWER OFF", "actionable": True},
         ]
+
+    def trigger_face_id_enrollment(self):
+        """进入人脸录入倒计时模式并在 3 秒后抓拍认主"""
+        self.current_mode = "FACE_ENROLL"
+        self.face_enroll_msg = "请正对摄像头"
+        self.face_enroll_step = 3
+        self._notify_listeners()
+
+        def _worker():
+            for count in [3, 2, 1]:
+                with self._lock:
+                    if self.current_mode != "FACE_ENROLL":
+                        return
+                    self.face_enroll_step = count
+                    self.face_enroll_msg = f"请正对摄像头 ({count}s)"
+                    self._notify_listeners()
+                time.sleep(1.0)
+            
+            with self._lock:
+                if self.current_mode != "FACE_ENROLL":
+                    return
+                self.face_enroll_step = 0
+                self.face_enroll_msg = "📸 正在提取特征..."
+                self._notify_listeners()
+
+            # 抓取画面并录入
+            ok = False
+            msg = ""
+            if self.agent and hasattr(self.agent, "register_master_face"):
+                res = self.agent.register_master_face()
+                if isinstance(res, dict) and res.get("status") == "ok":
+                    ok = True
+                else:
+                    msg = res.get("message", "未识别到清晰人脸") if isinstance(res, dict) else str(res)
+            else:
+                msg = "未连接摄像头设备"
+
+            with self._lock:
+                if self.current_mode != "FACE_ENROLL":
+                    return
+                if ok:
+                    self.face_enroll_msg = "✅ 认主成功！已绑定"
+                else:
+                    self.face_enroll_msg = f"❌ {msg or '录入失败'}"
+                self._notify_listeners()
+
+            time.sleep(2.0)
+            with self._lock:
+                if self.current_mode == "FACE_ENROLL":
+                    self.current_mode = "SYSTEM"
+                    self.cursor = 0
+                    self._notify_listeners()
+
+        threading.Thread(target=_worker, daemon=True, name="FaceEnrollWorker").start()
 
     def check_system_update_async(self):
         """后台异步检查 OTA 系统更新"""
@@ -314,7 +373,7 @@ class MenuFSM:
                     self._notify_listeners()
                 return
 
-            # 6. 处于系统设置页 (SYSTEM: 版本号/更新/关机/重启)
+            # 6. 处于系统设置页 (SYSTEM: 认主/版本号/更新/关机/重启)
             if self.current_mode == "SYSTEM":
                 if button == "K1":
                     self.cursor = (self.cursor - 1) % len(self.system_items)
@@ -324,7 +383,9 @@ class MenuFSM:
                     self._notify_listeners()
                 elif button == "K3":
                     action_id = self.system_items[self.cursor]["id"]
-                    if action_id == "update":
+                    if action_id == "face_id":
+                        self.trigger_face_id_enrollment()
+                    elif action_id == "update":
                         self.check_system_update_async()
                     elif action_id == "restart":
                         self._execute_power_action("restart")
@@ -333,6 +394,14 @@ class MenuFSM:
                 elif button == "K4":
                     self.current_mode = "MENU_MAIN"
                     self.cursor = 3
+                    self._notify_listeners()
+                return
+
+            # 7. 处于人脸录入倒计时中 (FACE_ENROLL)
+            if self.current_mode == "FACE_ENROLL":
+                if button == "K4":
+                    self.current_mode = "SYSTEM"
+                    self.cursor = 0
                     self._notify_listeners()
                 return
 
@@ -434,9 +503,12 @@ class MenuFSM:
                 }
                 for it in self.toggle_items
             ],
-            "power_items": self.power_items,
+            "system_items": self.system_items,
+            "version": self.version_str,
+            "update_status": self.update_status,
             "doctor": self.doctor_cache,
             "settings_url": f"http://{ip}:8090/settings",
+            "qr_base64": self.get_qr_base64(),
             "is_mic_muted": self.is_mic_muted,
             "face_tracking": self.face_tracking_enabled,
             "servo_sleeping": self.is_servo_sleeping,
@@ -584,26 +656,28 @@ class MenuFSM:
             draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
             draw.text((24, 298), "[▲▼] 移动    [OK] 切换    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
-        # E. 电源与服务维护
-        elif self.current_mode == "POWER":
-            draw.text((16, 16), "04 / POWER", fill=(150, 150, 155), font=self.font_small)
-            draw.text((192, 16), "SYSTEM", fill=(110, 110, 115), font=self.font_small)
+        # E. 系统设置界面 (SYSTEM: 版本号/更新/关机/重启)
+        elif self.current_mode == "SYSTEM":
+            draw.text((16, 16), "04 / SYSTEM", fill=(150, 150, 155), font=self.font_small)
+            draw.text((192, 16), "CONFIG", fill=(110, 110, 115), font=self.font_small)
 
-            y = 70
-            for idx, item in enumerate(self.power_items):
+            y = 48
+            for idx, item in enumerate(self.system_items):
                 is_selected = (idx == self.cursor)
                 if is_selected:
-                    draw.rounded_rectangle([14, y, 226, y + 54], radius=8, fill=(255, 255, 255))
-                    draw.text((24, y + 18), f"0{idx+1}  {item['name']}", fill=(0, 0, 0), font=self.font_bold)
+                    draw.rounded_rectangle([14, y, 226, y + 48], radius=8, fill=(255, 255, 255))
+                    draw.text((24, y + 8), f"0{idx+1}  {item['name']}", fill=(0, 0, 0), font=self.font_bold)
+                    draw.text((24, y + 28), str(item["val"]), fill=(70, 70, 75), font=self.font_small)
+                    draw.text((210, y + 14), "›", fill=(0, 0, 0), font=self.font_bold)
                 else:
-                    draw.rounded_rectangle([14, y, 226, y + 54], radius=8, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
-                    draw.text((24, y + 18), f"0{idx+1}  {item['name']}", fill=(210, 210, 215), font=self.font_bold)
-                y += 72
+                    draw.rounded_rectangle([14, y, 226, y + 48], radius=8, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
+                    draw.text((24, y + 8), f"0{idx+1}  {item['name']}", fill=(210, 210, 215), font=self.font_bold)
+                    draw.text((24, y + 28), str(item["val"]), fill=(120, 120, 125), font=self.font_small)
+                    draw.text((210, y + 14), "›", fill=(80, 80, 85), font=self.font_bold)
+                y += 56
 
             draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
-            draw.text((24, 298), "[▲▼] 选择    [OK] 执行    [ESC] 取消", fill=(100, 100, 105), font=self.font_small)
-
-        return img
+            draw.text((24, 298), "[▲▼] 选择    [OK] 执行    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
         return img
 

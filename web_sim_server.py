@@ -135,6 +135,18 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             return
+        if self.path.startswith("/api/menu/qr_image"):
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            return
+        if self.path == "/api/menu/state":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            return
         if self.path.startswith("/api/vision/snapshot") or self.path.startswith("/api/vision/latest_snapshot"):
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
@@ -219,23 +231,14 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         # 动态二维码图片直通流 (供 2.4寸 Canvas 与真机同构绘制)
-        if self.path == "/api/menu/qr_image":
-            import io
-            from core.menu_fsm import get_local_ip
+        if self.path.startswith("/api/menu/qr_image"):
             try:
-                import qrcode
-                ip = get_local_ip()
-                url = f"http://{ip}:8090/settings"
-                qr = qrcode.QRCode(box_size=4, border=2)
-                qr.add_data(url)
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
-                img_bytes = buf.getvalue()
+                img_bytes = menu_fsm.get_qr_png_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", "image/png")
-                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Content-Length", str(len(img_bytes)))
+                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(img_bytes)
                 return
@@ -763,6 +766,33 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "mode": target_mode,
                 "hardware_status": hardware_agent.get_status()
             }, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 检查系统更新
+        if self.path == "/api/system/update_check":
+            menu_fsm.check_system_update_async()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "已是最新版本", "version": menu_fsm.version_str}, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 重启机器人服务
+        if self.path == "/api/system/restart":
+            menu_fsm._execute_power_action("restart")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "restarting"}, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 安全关闭系统
+        if self.path == "/api/system/shutdown":
+            menu_fsm._execute_power_action("shutdown")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "shutting_down"}, ensure_ascii=False).encode("utf-8"))
             return
 
         # 小米米家发起扫码绑定

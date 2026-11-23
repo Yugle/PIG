@@ -72,7 +72,7 @@ class PromptBuilder:
         return """
 【ReAct 多步自主执行与单轮极速响应铁律】:
 1. 极速口头响应与垫话 (边做边说，彻底消除延迟)：
-   - 执行类动作技能（如 set_bot_name, set_user_name, set_alarm, set_timer, evolve_action, play_action, pomodoro, 开关/调节类的 xiaomi_iot 等）：
+   - 执行类动作技能（如 register_master_face, set_bot_name, set_user_name, set_alarm, set_timer, evolve_action, play_action, pomodoro, 开关/调节类的 xiaomi_iot 等）：
      必须在第 1 轮的 `reply` 字段中【直接给出面向主人的最终口语确认】（如：“好嘞胖虎！从现在起我就叫 PIG 啦～” 或 “明天早上8点的起床闹钟已经定好啦！”）。系统会在执行技能后直接以该回复交付主人，实现单轮极速闭环，无需第 2 轮！
    - 信息查询类技能（如 查询设备列表的 xiaomi_iot, weather, crypto_price, news_briefing, bilibili_follower 等）：
      必须在第 1 轮的 `reply` 字段中【直接给出一句极简口头垫话】（如：“好嘞，我来给你查一下！”、“稍等我看一下米家设备～”），系统会立刻朗读垫话，同时在后台查询数据并在第 2 轮给出真实结果汇报，消除等待感！【严禁在第 1 轮凭空编造虚假查询结果】！

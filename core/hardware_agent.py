@@ -108,6 +108,9 @@ class HardwareAgent:
 
         # 人脸视觉注视与两级头部追踪引擎
         self.face_tracker = FaceTracker(enabled=self.cfg.get("face_tracking", False))
+        self.latest_camera_frame = None
+        if self.skill_manager:
+            self.skill_manager.register_face_callback = self.register_master_face
 
         # 尝试初始化麦克风
         self._init_microphone()
@@ -483,6 +486,33 @@ class HardwareAgent:
         """动态启停人脸视觉注视追踪"""
         self.face_tracker.set_enabled(enabled)
 
+    def register_master_face(self, frame=None) -> Dict[str, Any]:
+        """树莓派真机人脸认主录入 (SFace 128-d 特征)"""
+        import numpy as np
+        try:
+            import cv2
+        except ImportError:
+            cv2 = None
+
+        if frame is None and getattr(self, "latest_camera_frame", None) is not None:
+            frame = self.latest_camera_frame
+
+        if frame is None and self.hal and hasattr(self.hal, "capture_image"):
+            try:
+                img_bytes = self.hal.capture_image()
+                if img_bytes and cv2 is not None:
+                    nparr = np.frombuffer(img_bytes, np.uint8)
+                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    self.latest_camera_frame = frame
+            except Exception as e:
+                logger.warning(f"⚠️ [FaceID] 从 HAL capture_image 异常: {e}")
+
+        if frame is None:
+            return {"status": "error", "message": "无法从摄像头捕获有效画面"}
+
+        res = self.face_tracker.register_master_face(frame)
+        return res
+
     def _vision_loop(self):
         """低功耗人脸视觉注视与两级头部追踪后台循环 (~10FPS) - 最低优先级生效"""
         import numpy as np
@@ -510,6 +540,7 @@ class HardwareAgent:
                 if img_bytes:
                     nparr = np.frombuffer(img_bytes, np.uint8)
                     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    self.latest_camera_frame = frame
                     has_face, ox, oy = self.face_tracker.detect_face(frame)
                     if has_face:
                         cur_p = getattr(self.hal, "cur_pan", 90.0)

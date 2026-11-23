@@ -1624,11 +1624,20 @@
       face_tracking: true,
       servo_sleeping: false,
       local_ip: location.hostname || "127.0.0.1",
+      version: "v2.4.0 (733d417)",
+      update_status: "已是最新版本",
+      qr_base64: "",
       main_menu_items: [
         { num: "01", title: "无线配置", desc: "手机扫码进设置后台 / 查IP" },
         { num: "02", title: "系统体检", desc: "网络延迟与外设实时排障" },
         { num: "03", title: "硬件开关", desc: "麦克风静音 / 追踪 / 休眠" },
-        { num: "04", title: "服务电源", desc: "重启服务 / 树莓派安全关机" }
+        { num: "04", title: "系统设置", desc: "固件版本 / 系统更新 / 电源管理" }
+      ],
+      system_items: [
+        { id: "version", name: "系统固件版本", val: "v2.4.0" },
+        { id: "update", name: "检查系统更新", val: "已是最新版本" },
+        { id: "restart", name: "重启机器人服务", val: "平滑重载" },
+        { id: "shutdown", name: "树莓派安全关机", val: "系统断电" }
       ],
       doctor: {
         wifi_ip: location.hostname,
@@ -1646,9 +1655,26 @@
       if (!qrCodeImg) {
         qrCodeImg = new Image();
         qrCodeImg.onload = () => { qrCodeLoaded = true; };
+        qrCodeImg.onerror = () => { qrCodeLoaded = false; };
+      }
+      if (menuState.qr_base64) {
+        qrCodeImg.src = menuState.qr_base64;
+        qrCodeLoaded = true;
+      } else {
         qrCodeImg.src = "/api/menu/qr_image?t=" + Date.now();
       }
     }
+
+    // 页面启动时同步拉取一次菜单状态
+    fetch("/api/menu/state")
+      .then(r => r.json())
+      .then(d => {
+        if (d) {
+          menuState = Object.assign(menuState, d);
+          preloadQrCode();
+        }
+      })
+      .catch(() => {});
 
     async function sendHwButton(button, eventType = "click") {
       // 1. 本地极速响应
@@ -1681,7 +1707,7 @@
             menuState.mode = "TOGGLES";
             menuState.cursor = 0;
           } else if (menuState.cursor === 3) {
-            menuState.mode = "POWER";
+            menuState.mode = "SYSTEM";
             menuState.cursor = 0;
           }
         }
@@ -1696,10 +1722,31 @@
           else if (menuState.cursor === 1) menuState.face_tracking = !menuState.face_tracking;
           else if (menuState.cursor === 2) menuState.servo_sleeping = !menuState.servo_sleeping;
         }
-      } else if (menuState.mode === "POWER") {
-        if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 3; }
+      } else if (menuState.mode === "SYSTEM") {
+        const sysLen = (menuState.system_items && menuState.system_items.length) || 4;
+        if (button === "K1") menuState.cursor = (menuState.cursor - 1 + sysLen) % sysLen;
+        else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % sysLen;
+        else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 3; }
         else if (button === "K3") {
-          menuState.mode = "FACE";
+          const cur = (menuState.system_items && menuState.system_items[menuState.cursor]) || {};
+          if (cur.id === "update") {
+            cur.val = "检查更新中...";
+            fetch("/api/system/update_check", { method: "POST" })
+              .then(r => r.json())
+              .then(d => {
+                if (d.status) {
+                  cur.val = d.status;
+                  menuState.update_status = d.status;
+                }
+              })
+              .catch(() => { cur.val = "检查失败"; });
+          } else if (cur.id === "restart") {
+            cur.val = "正在重启...";
+            fetch("/api/system/restart", { method: "POST" }).catch(() => {});
+          } else if (cur.id === "shutdown") {
+            cur.val = "正在关机...";
+            fetch("/api/system/shutdown", { method: "POST" }).catch(() => {});
+          }
         }
       }
 
@@ -1714,6 +1761,10 @@
           const data = await res.json();
           if (data.menu_state) {
             menuState = Object.assign(menuState, data.menu_state);
+            if (menuState.qr_base64 && qrCodeImg && !qrCodeLoaded) {
+              qrCodeImg.src = menuState.qr_base64;
+              qrCodeLoaded = true;
+            }
           }
         }
       } catch (e) {
@@ -1846,8 +1897,18 @@
         roundRect(ctx, 42, 46, 156, 156, 10, true);
 
         if (!qrCodeImg) preloadQrCode();
-        if (qrCodeLoaded && qrCodeImg) {
-          ctx.drawImage(qrCodeImg, 48, 52, 144, 144);
+        if (menuState.qr_base64 && qrCodeImg && qrCodeImg.src !== menuState.qr_base64) {
+          qrCodeImg.src = menuState.qr_base64;
+          qrCodeLoaded = true;
+        }
+        if (qrCodeLoaded && qrCodeImg && (qrCodeImg.complete || menuState.qr_base64)) {
+          try {
+            ctx.drawImage(qrCodeImg, 48, 52, 144, 144);
+          } catch (e) {
+            ctx.fillStyle = "#000000";
+            ctx.font = "11px sans-serif";
+            ctx.fillText("二维码载入中...", 76, 128);
+          }
         } else {
           ctx.fillStyle = "#000000";
           ctx.font = "11px sans-serif";
@@ -1984,38 +2045,52 @@
         ctx.font = "10px sans-serif";
         ctx.fillText("[▲▼] 移动    [OK] 切换    [ESC] 返回", 24, 306);
 
-      } else if (menuState.mode === "POWER") {
+      } else if (menuState.mode === "SYSTEM") {
         ctx.fillStyle = "#94949b";
         ctx.font = "bold 11px monospace";
-        ctx.fillText("04 / POWER", 16, 24);
+        ctx.fillText("04 / SYSTEM", 16, 24);
         ctx.fillStyle = "#686870";
-        ctx.fillText("SYSTEM", 188, 24);
+        ctx.fillText("CONFIG", 192, 24);
 
-        const pItems = [
-          { num: "01", title: "重启机器人服务" },
-          { num: "02", title: "安全关闭树莓派" }
+        const sysItems = menuState.system_items || [
+          { id: "version", name: "系统固件版本", val: menuState.version || "v2.4.0" },
+          { id: "update", name: "检查系统更新", val: menuState.update_status || "已是最新版本" },
+          { id: "restart", name: "重启机器人服务", val: "平滑重载" },
+          { id: "shutdown", name: "树莓派安全关机", val: "系统断电" }
         ];
 
-        let cy = 70;
-        pItems.forEach((it, idx) => {
+        let cy = 48;
+        sysItems.forEach((it, idx) => {
           const isSel = (idx === menuState.cursor);
           if (isSel) {
             ctx.fillStyle = "#ffffff";
-            roundRect(ctx, 12, cy, 216, 54, 8, true);
+            roundRect(ctx, 12, cy, 216, 48, 8, true);
             ctx.fillStyle = "#000000";
             ctx.font = "bold 13px sans-serif";
-            ctx.fillText(`${it.num}  ${it.title}`, 22, cy + 32);
+            ctx.fillText(`0${idx + 1}  ${it.name}`, 22, cy + 20);
+            ctx.fillStyle = "#55555c";
+            ctx.font = "11px monospace";
+            ctx.fillText(String(it.val), 22, cy + 38);
+            ctx.fillStyle = "#000000";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText("›", 212, cy + 28);
           } else {
             ctx.fillStyle = "#121215";
             ctx.strokeStyle = "#222226";
             ctx.lineWidth = 1;
-            roundRect(ctx, 12, cy, 216, 54, 8, true);
+            roundRect(ctx, 12, cy, 216, 48, 8, true);
             ctx.stroke();
             ctx.fillStyle = "#d1d1d6";
             ctx.font = "bold 13px sans-serif";
-            ctx.fillText(`${it.num}  ${it.title}`, 22, cy + 32);
+            ctx.fillText(`0${idx + 1}  ${it.name}`, 22, cy + 20);
+            ctx.fillStyle = "#787880";
+            ctx.font = "11px monospace";
+            ctx.fillText(String(it.val), 22, cy + 38);
+            ctx.fillStyle = "#4a4a50";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText("›", 212, cy + 28);
           }
-          cy += 72;
+          cy += 56;
         });
 
         ctx.strokeStyle = "#222226";
@@ -2025,7 +2100,7 @@
         ctx.stroke();
         ctx.fillStyle = "#66666e";
         ctx.font = "10px sans-serif";
-        ctx.fillText("[▲▼] 选择    [OK] 执行    [ESC] 取消", 24, 306);
+        ctx.fillText("[▲▼] 选择    [OK] 执行    [ESC] 返回", 24, 306);
       }
     }
 
