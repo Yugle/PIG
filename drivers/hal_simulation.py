@@ -100,20 +100,27 @@ class SimulationRobotHAL(BaseRobotHAL):
     def capture_image(self) -> bytes:
         if cv2 is not None:
             try:
-                cap = cv2.VideoCapture(0)
-                if cap.isOpened():
-                    ret, frame = cap.read()
-                    cap.release()
-                    if ret:
-                        _, buf = cv2.imencode(".jpg", frame)
-                        return buf.tobytes()
+                if not hasattr(self, "_cam") or self._cam is None or not self._cam.isOpened():
+                    self._cam = cv2.VideoCapture(0)
+                if self._cam is not None and self._cam.isOpened():
+                    ret, frame = self._cam.read()
+                    if ret and frame is not None:
+                        success, buf = cv2.imencode(".jpg", frame)
+                        if success:
+                            return buf.tobytes()
             except Exception as e:
-                print(f"⚠️ [HAL-Sim] 摄像头读取失败: {e}")
+                self._cam = None
 
-        # 若无摄像头则返回生成占位图
+        # 若无物理摄像头则返回空字节
         return b""
 
     def close(self):
+        if hasattr(self, "_cam") and self._cam is not None:
+            try:
+                self._cam.release()
+            except Exception:
+                pass
+            self._cam = None
         if cv2 is not None:
             try:
                 cv2.destroyAllWindows()

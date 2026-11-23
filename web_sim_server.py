@@ -479,6 +479,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 body = json.loads(post_data.decode("utf-8"))
                 enabled = body.get("enabled", False)
                 face_tracker.set_enabled(enabled)
+                if hardware_agent:
+                    hardware_agent.set_face_tracking(enabled)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()

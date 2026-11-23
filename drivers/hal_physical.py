@@ -15,6 +15,11 @@ except ImportError:
     spi = None
     st7789 = None
 
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
 
 class PhysicalRobotHAL(BaseRobotHAL):
     """
@@ -40,6 +45,7 @@ class PhysicalRobotHAL(BaseRobotHAL):
         self.tilt_pin = tilt_pin
         self.cur_pan = 90.0
         self.cur_tilt = 90.0
+        self._cam = None  # 常驻摄像头句柄 (cv2.VideoCapture)
 
         # 初始化 ST7789 2.4 寸 SPI 彩屏 (240x320)
         self.screen = None
@@ -94,10 +100,33 @@ class PhysicalRobotHAL(BaseRobotHAL):
                 print(f"⚠️ [HAL-Physical] 屏幕刷新错误: {e}")
 
     def capture_image(self) -> bytes:
+        # 1. 优先使用常驻 OpenCV V4L2 句柄内存取帧 (零磁盘写入，耗时 < 15ms，避免反复创建进程)
+        if cv2 is not None:
+            try:
+                if self._cam is None or not self._cam.isOpened():
+                    self._cam = cv2.VideoCapture(0)
+                    if self._cam.isOpened():
+                        self._cam.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+                        self._cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+                if self._cam is not None and self._cam.isOpened():
+                    ret, frame = self._cam.read()
+                    if ret and frame is not None:
+                        success, buf = cv2.imencode(".jpg", frame)
+                        if success:
+                            return buf.tobytes()
+            except Exception:
+                if self._cam is not None:
+                    try:
+                        self._cam.release()
+                    except Exception:
+                        pass
+                self._cam = None
+
+        # 2. 回退机制：若 OpenCV 句柄失败，降级为 fswebcam 临时抓拍
         tmp_img = "/tmp/capture.jpg"
         try:
             subprocess.run(
-                ["fswebcam", "-r", "640x480", "--no-banner", tmp_img],
+                ["fswebcam", "-r", "320x240", "--no-banner", tmp_img],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=True,
@@ -106,10 +135,18 @@ class PhysicalRobotHAL(BaseRobotHAL):
             with open(tmp_img, "rb") as f:
                 return f.read()
         except Exception as e:
-            print(f"⚠️ [HAL-Physical] fswebcam 抓拍失败: {e}")
+            print(f"⚠️ [HAL-Physical] 摄像头抓拍失败: {e}")
             return b""
 
     def close(self):
+        # 释放摄像头句柄
+        if self._cam is not None:
+            try:
+                self._cam.release()
+            except Exception:
+                pass
+            self._cam = None
+
         # 停用舵机信号输出，防止电机发热与持续蜂鸣
         self.pi.set_servo_pulsewidth(self.pan_pin, 0)
         self.pi.set_servo_pulsewidth(self.tilt_pin, 0)

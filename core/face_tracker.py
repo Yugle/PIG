@@ -21,6 +21,7 @@ class FaceTracker:
         self.enabled = enabled
         self.input_size = input_size
         self.detector = None
+        self.cascade_detector = None
         self._init_detector()
 
         # 视线平滑低通滤波器 (EMA)
@@ -29,19 +30,32 @@ class FaceTracker:
         self.alpha = 0.35  # 平滑系数
 
     def _init_detector(self):
-        if cv2 is None or not os.path.exists(MODEL_PATH):
+        if cv2 is None:
             return
-        try:
-            self.detector = cv2.FaceDetectorYN_create(
-                MODEL_PATH,
-                "",
-                self.input_size,
-                score_threshold=0.6,
-                nms_threshold=0.3,
-                top_k=1
-            )
-        except Exception as e:
-            print(f"⚠️ [FaceTracker] 初始化 YuNet 模型异常: {e}")
+        # 1. 优先加载 OpenCV YuNet 深度学习轻量模型 (228KB)
+        if os.path.exists(MODEL_PATH):
+            try:
+                self.detector = cv2.FaceDetectorYN_create(
+                    MODEL_PATH,
+                    "",
+                    self.input_size,
+                    score_threshold=0.6,
+                    nms_threshold=0.3,
+                    top_k=1
+                )
+            except Exception as e:
+                print(f"⚠️ [FaceTracker] 初始化 YuNet 模型异常: {e}")
+                self.detector = None
+
+        # 2. 备用保障：Haar Cascade 级联分类器
+        if self.detector is None:
+            cascade_path = os.path.join(PROJECT_ROOT, "models", "haarcascade_frontalface_default.xml")
+            if os.path.exists(cascade_path):
+                try:
+                    self.cascade_detector = cv2.CascadeClassifier(cascade_path)
+                    print("👁️ [FaceTracker] YuNet 未就绪，已启用 Haar Cascade 备用人脸检测器")
+                except Exception as e:
+                    print(f"⚠️ [FaceTracker] 初始化 Haar Cascade 异常: {e}")
 
     def set_enabled(self, val: bool):
         self.enabled = bool(val)
@@ -52,7 +66,10 @@ class FaceTracker:
         输入 BGR 图像，输出人脸中心在画面中的相对偏移 [-1.0, 1.0] (0.0 为正中)
         返回: (has_face: bool, offset_x: float, offset_y: float)
         """
-        if not self.enabled or self.detector is None or frame_bgr is None or cv2 is None:
+        if not self.enabled or frame_bgr is None or cv2 is None:
+            return False, 0.0, 0.0
+
+        if self.detector is None and self.cascade_detector is None:
             return False, 0.0, 0.0
 
         h, w = frame_bgr.shape[:2]
@@ -61,24 +78,42 @@ class FaceTracker:
         else:
             frame_resized = frame_bgr
 
-        self.detector.setInputSize(self.input_size)
-        try:
-            _, faces = self.detector.detect(frame_resized)
-            if faces is not None and len(faces) > 0:
-                face = faces[0]
-                box = face[0:4]
-                # 计算人脸中心相对归一化坐标 (-1.0 到 1.0)
-                cx = (box[0] + box[2] / 2.0) / self.input_size[0]
-                cy = (box[1] + box[3] / 2.0) / self.input_size[1]
-                raw_offset_x = (cx - 0.5) * 2.0
-                raw_offset_y = (cy - 0.5) * 2.0
+        # 方案 A: YuNet 深度学习检测
+        if self.detector is not None:
+            try:
+                self.detector.setInputSize(self.input_size)
+                _, faces = self.detector.detect(frame_resized)
+                if faces is not None and len(faces) > 0:
+                    face = faces[0]
+                    box = face[0:4]
+                    cx = (box[0] + box[2] / 2.0) / self.input_size[0]
+                    cy = (box[1] + box[3] / 2.0) / self.input_size[1]
+                    raw_offset_x = (cx - 0.5) * 2.0
+                    raw_offset_y = (cy - 0.5) * 2.0
 
-                # 指数移动平均平滑，消除画面抖动
-                self.smooth_offset_x = self.smooth_offset_x * (1 - self.alpha) + raw_offset_x * self.alpha
-                self.smooth_offset_y = self.smooth_offset_y * (1 - self.alpha) + raw_offset_y * self.alpha
-                return True, self.smooth_offset_x, self.smooth_offset_y
-        except Exception as e:
-            pass
+                    self.smooth_offset_x = self.smooth_offset_x * (1 - self.alpha) + raw_offset_x * self.alpha
+                    self.smooth_offset_y = self.smooth_offset_y * (1 - self.alpha) + raw_offset_y * self.alpha
+                    return True, self.smooth_offset_x, self.smooth_offset_y
+            except Exception:
+                pass
+
+        # 方案 B: Haar Cascade 级联检测回退
+        if self.cascade_detector is not None:
+            try:
+                gray = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2GRAY)
+                faces = self.cascade_detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
+                if len(faces) > 0:
+                    x, y, fw, fh = faces[0]
+                    cx = (x + fw / 2.0) / self.input_size[0]
+                    cy = (y + fh / 2.0) / self.input_size[1]
+                    raw_offset_x = (cx - 0.5) * 2.0
+                    raw_offset_y = (cy - 0.5) * 2.0
+
+                    self.smooth_offset_x = self.smooth_offset_x * (1 - self.alpha) + raw_offset_x * self.alpha
+                    self.smooth_offset_y = self.smooth_offset_y * (1 - self.alpha) + raw_offset_y * self.alpha
+                    return True, self.smooth_offset_x, self.smooth_offset_y
+            except Exception:
+                pass
 
         return False, 0.0, 0.0
 

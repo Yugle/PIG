@@ -2493,6 +2493,21 @@
     function handleDigitalTwinEvent(ev) {
       if (!ev || !ev.type) return;
 
+      if (ev.type === "gaze_track") {
+        if (!isSpeaking && !isThinking) {
+          if (ev.look_x !== undefined && ev.look_y !== undefined) {
+            lookOffset.x = ev.look_x;
+            lookOffset.y = ev.look_y;
+            drawEyes(currentEmotion);
+          }
+          if (ev.target_pan !== undefined && ev.target_tilt !== undefined) {
+            targetPan = ev.target_pan;
+            targetTilt = ev.target_tilt;
+          }
+        }
+        return;
+      }
+
       if (ev.type === "audio_meter") {
         updateAudioMeterUI(ev);
         return;

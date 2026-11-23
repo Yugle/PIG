@@ -20,6 +20,7 @@ import base64
 import logging
 import threading
 from typing import Dict, Any, Optional, Callable, List
+from core.face_tracker import FaceTracker
 
 logger = logging.getLogger("HardwareAgent")
 
@@ -86,6 +87,10 @@ class HardwareAgent:
 
         self._running = False
         self._worker_thread = None
+        self._vision_thread = None
+
+        # 人脸视觉注视与两级头部追踪引擎
+        self.face_tracker = FaceTracker(enabled=self.cfg.get("face_tracking", False))
 
         # 尝试初始化麦克风
         self._init_microphone()
@@ -356,9 +361,60 @@ class HardwareAgent:
         if self._running:
             return
         self._running = True
-        self._worker_thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._worker_thread = threading.Thread(target=self._run_loop, daemon=True, name="AudioOwwLoop")
         self._worker_thread.start()
+        self._vision_thread = threading.Thread(target=self._vision_loop, daemon=True, name="VisionGazeLoop")
+        self._vision_thread.start()
         logger.info("🚀 [HardwareAgent] 后台硬件监听与数字孪生同步引擎已启动")
+
+    def set_face_tracking(self, enabled: bool):
+        """动态启停人脸视觉注视追踪"""
+        self.face_tracker.set_enabled(enabled)
+
+    def _vision_loop(self):
+        """低功耗人脸视觉注视与两级头部追踪后台循环 (~10FPS)"""
+        import numpy as np
+        try:
+            import cv2
+        except ImportError:
+            cv2 = None
+
+        while self._running:
+            if not self.face_tracker.enabled or cv2 is None or not self.hal:
+                time.sleep(0.5)
+                continue
+
+            # 仅在待机 (IDLE) 或余韵 (AFTERGLOW) 状态下执行视觉注视追踪，避免在思考或播报时发生动作冲突
+            if self.state not in (self.STATE_IDLE, self.STATE_AFTERGLOW):
+                time.sleep(0.1)
+                continue
+
+            try:
+                img_bytes = self.hal.capture_image()
+                if img_bytes:
+                    nparr = np.frombuffer(img_bytes, np.uint8)
+                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    has_face, ox, oy = self.face_tracker.detect_face(frame)
+                    if has_face:
+                        cur_p = getattr(self.hal, "cur_pan", 90.0)
+                        cur_t = getattr(self.hal, "cur_tilt", 90.0)
+                        lx, ly, tp, tt = self.face_tracker.compute_gaze_and_angles(ox, oy, cur_p, cur_t)
+                        # 大幅度移动时舵机跟随
+                        if abs(ox) > 0.22 or abs(oy) > 0.22:
+                            self.hal.set_angles(tp, tt)
+                        # 广播视觉注视事件给数字孪生 / Web 前端 (用于前端更新眼球和 3D 头骨)
+                        self.emit_event("gaze_track", {
+                            "has_face": True,
+                            "offset_x": round(ox, 2),
+                            "offset_y": round(oy, 2),
+                            "look_x": lx,
+                            "look_y": ly,
+                            "target_pan": tp,
+                            "target_tilt": tt
+                        })
+                time.sleep(0.08)  # 约 10~12 FPS，极低功耗占用
+            except Exception:
+                time.sleep(0.2)
 
     def stop(self):
         """停止工作线程并安全释放音频设备"""
