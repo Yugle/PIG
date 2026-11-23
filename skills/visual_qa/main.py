@@ -116,8 +116,10 @@ def run(question="请仔细观察这张照片，告诉我你看到了什么？",
                 ]
             }
         ],
-        "max_tokens": 200
+        "max_tokens": 500
     }
+    if not cfg.get("llm_thinking", False):
+        payload["thinking"] = {"type": "disabled"}
 
     try:
         resp = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=20)
