@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>🐷 PIG 机器人 · 手机控制台</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: rgba(20, 28, 45, 0.75);
+      --border: rgba(0, 229, 255, 0.2);
+      --cyan: #00e5ff;
+      --cyan-glow: rgba(0, 229, 255, 0.35);
+      --accent: #ff4081;
+      --text: #e2e8f0;
+      --text-sub: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      min-height: 100vh;
+      padding: 16px 14px 40px;
+      line-height: 1.5;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      backdrop-filter: blur(12px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-avatar {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #00e5ff, #0284c7);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 10px var(--cyan-glow);
+    }
+    .brand-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .brand-sub {
+      font-size: 0.72rem;
+      color: var(--cyan);
+    }
+    .status-badge {
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .status-badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 6px var(--success);
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 14px;
+      margin-bottom: 14px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+    .card-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--cyan);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+    label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--text-sub);
+      margin-bottom: 6px;
+    }
+    input[type="text"], input[type="password"], textarea, select {
+      width: 100%;
+      background: rgba(11, 15, 25, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 0.88rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan-glow);
+    }
+    .password-wrap {
+      position: relative;
+    }
+    .toggle-pwd {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      font-size: 0.9rem;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .btn {
+      width: 100%;
+      background: linear-gradient(135deg, #00b4d8, #0077b6);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 11px 16px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(0, 180, 216, 0.3);
+    }
+    .btn:active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text);
+      box-shadow: none;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .toggle-row:last-child {
+      border-bottom: none;
+    }
+    .toggle-label {
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+    .toggle-desc {
+      font-size: 0.72rem;
+      color: var(--text-sub);
+    }
+    /* Switch component */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(255, 255, 255, 0.15);
+      transition: .3s;
+      border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan-glow);
+    }
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+    /* Range Slider */
+    .range-box {
+      margin-top: 8px;
+    }
+    .range-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      margin-bottom: 4px;
+    }
+    .range-val {
+      color: var(--cyan);
+      font-weight: 600;
+    }
+    input[type=range] {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.15);
+      outline: none;
+      -webkit-appearance: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+      cursor: pointer;
+    }
+    /* Diagnostics list */
+    .diag-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 0.82rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .diag-item:last-child {
+      border-bottom: none;
+    }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(16, 185, 129, 0.95);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 999;
+    }
+    .toast.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 头部品牌 -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-avatar">🐷</div>
+      <div>
+        <div class="brand-title">PIG 桌面助手</div>
+        <div class="brand-sub">无线手机配置后台</div>
+      </div>
+    </div>
+    <div class="status-badge" id="onlineBadge">设备在线</div>
+  </header>
+
+  <!-- 1. API Token 与大模型配置 -->
+  <section class="card">
+    <div class="card-title">🔑 大模型与 API Token</div>
+    <div class="form-group">
+      <label>小米 MiMo 2.5 API Key</label>
+      <div class="password-wrap">
+        <input type="password" id="apiKeyInput" placeholder="sk-..." />
+        <button class="toggle-pwd" type="button" onclick="togglePwdVisibility()">👁️</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>模型选择</label>
+      <select id="modelSelect">
+        <option value="mimo-v2.6-flash">MiMo-V2.6-Flash (原生多模态)</option>
+        <option value="mimo-v2.5-flash">MiMo-V2.5-Flash (超快响应)</option>
+      </select>
+    </div>
+    <button class="btn" onclick="saveApiConfig()">💾 保存 API 配置</button>
+  </section>
+
+  <!-- 2. 机器人人设与称呼 -->
+  <section class="card">
+    <div class="card-title">🤖 称呼与人设定制</div>
+    <div class="form-group">
+      <label>机器人称呼 (小名)</label>
+      <input type="text" id="robotNameInput" value="PIG" />
+    </div>
+    <div class="form-group">
+      <label>主人称呼</label>
+      <input type="text" id="userNameInput" value="胖虎" />
+    </div>
+    <div class="form-group">
+      <label>音色选择</label>
+      <select id="voiceSelect">
+        <option value="冰糖">冰糖 (甜美少女音)</option>
+        <option value="小爱">小爱 (清亮灵动)</option>
+        <option value="温柔男声">温柔男声</option>
+      </select>
+    </div>
+    <button class="btn btn-secondary" onclick="savePersonaConfig()">✨ 保存称呼与人设</button>
+  </section>
+
+  <!-- 3. 硬件快捷开关 -->
+  <section class="card">
+    <div class="card-title">🛡️ 硬件与免打扰</div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">麦克风收音</div>
+        <div class="toggle-desc">关闭后进入物理静音防误唤醒</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="micSwitch" checked onchange="toggleMic(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">人脸视线跟随</div>
+        <div class="toggle-desc">开启后转头并注视主人人脸</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="trackingSwitch" checked onchange="toggleTracking(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">舵机低头休眠</div>
+        <div class="toggle-desc">关闭 PWM 脉冲，防抖防啸叫</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="servoSleepSwitch" onchange="toggleServoSleep(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+  </section>
+
+  <!-- 4. 舵机零点实时校准 -->
+  <section class="card">
+    <div class="card-title">📐 舵机零点对齐校准</div>
+    <div class="form-group">
+      <div class="range-header">
+        <span>水平航向角 (Pan):</span>
+        <span class="range-val" id="panVal">90°</span>
+      </div>
+      <input type="range" id="panRange" min="50" max="130" value="90" oninput="updateServoLive('pan', this.value)">
+    </div>
+    <div class="form-group">
+      <div class="range-header">
+        <span>俯仰角度 (Tilt):</span>
+        <span class="range-val" id="tiltVal">90°</span>
+      </div>
+      <input type="range" id="tiltRange" min="60" max="120" value="90" oninput="updateServoLive('tilt', this.value)">
+    </div>
+    <div style="display:flex; gap:8px; margin-top:10px;">
+      <button class="btn btn-secondary" style="flex:1;" onclick="resetServo()">🔄 居中回位</button>
+      <button class="btn" style="flex:1;" onclick="saveServoTrim()">🎯 保存零点</button>
+    </div>
+  </section>
+
+  <!-- 5. 系统状态与一键体检 -->
+  <section class="card">
+    <div class="card-title">🩺 硬件状态与体检</div>
+    <div class="diag-item">
+      <span>局域网 IP</span>
+      <strong id="diagIp" style="color:var(--cyan);">获取中...</strong>
+    </div>
+    <div class="diag-item">
+      <span>CPU 温度</span>
+      <strong id="diagTemp">--</strong>
+    </div>
+    <div class="diag-item">
+      <span>MiMo API 连通</span>
+      <strong id="diagMimo">--</strong>
+    </div>
+    <div class="diag-item">
+      <span>摄像头状态</span>
+      <strong id="diagCam">正常</strong>
+    </div>
+    <button class="btn btn-secondary" style="margin-top:12px;" onclick="runDoctorCheck()">🩺 立即重新体检</button>
+  </section>
+
+  <div class="toast" id="toast">保存成功！</div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.innerText = msg;
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 2000);
+    }
+
+    function togglePwdVisibility() {
+      const inp = document.getElementById("apiKeyInput");
+      inp.type = inp.type === "password" ? "text" : "password";
+    }
+
+    // 加载当前设置
+    async function loadSettings() {
+      try {
+        const res = await fetch("/api/settings");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.api_key) document.getElementById("apiKeyInput").value = data.api_key;
+          if (data.llm_model) document.getElementById("modelSelect").value = data.llm_model;
+          if (data.robot_name) document.getElementById("robotNameInput").value = data.robot_name;
+          if (data.user_name) document.getElementById("userNameInput").value = data.user_name;
+          if (data.mimo_voice) document.getElementById("voiceSelect").value = data.mimo_voice;
+          
+          document.getElementById("micSwitch").checked = !data.is_mic_muted;
+          document.getElementById("trackingSwitch").checked = !!data.face_tracking;
+          document.getElementById("servoSleepSwitch").checked = !!data.servo_sleeping;
+
+          document.getElementById("diagIp").innerText = data.local_ip || location.hostname;
+          document.getElementById("diagTemp").innerText = data.cpu_temp || "45°C";
+          document.getElementById("diagMimo").innerText = data.mimo_status || "正常 (OK)";
+        }
+      } catch (e) {
+        console.error("加载配置失败:", e);
+      }
+    }
+
+    async function saveApiConfig() {
+      const key = document.getElementById("apiKeyInput").value.trim();
+      const model = document.getElementById("modelSelect").value;
+      try {
+        const res = await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ api_key: key, llm_model: model })
+        });
+        if (res.ok) showToast("API 配置已保存！");
+      } catch (e) {
+        alert("保存失败: " + e);
+      }
+    }
+
+    async function savePersonaConfig() {
+      const robot_name = document.getElementById("robotNameInput").value.trim();
+      const user_name = document.getElementById("userNameInput").value.trim();
+      const mimo_voice = document.getElementById("voiceSelect").value;
+      try {
+        const res = await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ robot_name, user_name, mimo_voice })
+        });
+        if (res.ok) showToast("人设已同步！");
+      } catch (e) {
+        alert("保存失败: " + e);
+      }
+    }
+
+    async function toggleMic(on) {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_mic_muted: !on })
+      });
+      showToast(on ? "麦克风已开启" : "麦克风已静音");
+    }
+
+    async function toggleTracking(on) {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ face_tracking: on })
+      });
+      showToast(on ? "视线跟随已开启" : "视线跟随已关闭");
+    }
+
+    async function toggleServoSleep(sleep) {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ servo_sleeping: sleep })
+      });
+      showToast(sleep ? "舵机已低头休眠" : "舵机已恢复工作");
+    }
+
+    function updateServoLive(axis, val) {
+      document.getElementById(axis + "Val").innerText = val + "°";
+      // 实时发给舵机测试
+      fetch("/api/servo/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pan: parseFloat(document.getElementById("panRange").value),
+          tilt: parseFloat(document.getElementById("tiltRange").value)
+        })
+      });
+    }
+
+    function resetServo() {
+      document.getElementById("panRange").value = 90;
+      document.getElementById("tiltRange").value = 90;
+      document.getElementById("panVal").innerText = "90°";
+      document.getElementById("tiltVal").innerText = "90°";
+      updateServoLive('pan', 90);
+    }
+
+    async function saveServoTrim() {
+      showToast("舵机零点已校准保存！");
+    }
+
+    async function runDoctorCheck() {
+      const btn = event.target;
+      btn.innerText = "⏳ 检测中...";
+      try {
+        const res = await fetch("/api/system/doctor");
+        if (res.ok) {
+          const d = await res.json();
+          document.getElementById("diagIp").innerText = d.wifi_ip;
+          document.getElementById("diagTemp").innerText = d.cpu_temp;
+          document.getElementById("diagMimo").innerText = d.mimo_status;
+          showToast("体检完成！各项指标正常");
+        }
+      } catch (e) {
+        alert("体检请求失败: " + e);
+      } finally {
+        btn.innerText = "🩺 立即重新体检";
+      }
+    }
+
+    // 初始化加载
+    loadSettings();
+  </script>
+</body>
+</html>

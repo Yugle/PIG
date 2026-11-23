@@ -298,6 +298,14 @@ class EyeRenderer:
         else:
             return self.render_eyes("NORMAL", look_x, look_y, now)
 
+        # 叠加 MenuFSM 菜单与二维码浮层 (树莓派 ST7789 硬件屏同构渲染)
+        try:
+            from core.menu_fsm import menu_fsm
+            if menu_fsm:
+                img = menu_fsm.render_pil_overlay(img)
+        except Exception:
+            pass
+
         return img
 
     def start_live_animation(self, hal, fps: int = 25):

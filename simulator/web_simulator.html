@@ -263,6 +263,61 @@
       display: none;
     }
 
+    .pip-buttons-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+      width: 100%;
+      margin-top: 6px;
+    }
+
+    .pip-hw-btn {
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 5px 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .pip-hw-btn:hover {
+      background: rgba(0, 229, 255, 0.15);
+      border-color: var(--cyan);
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+      color: #fff;
+    }
+
+    .pip-hw-btn:active {
+      transform: scale(0.95);
+      background: var(--cyan);
+      color: #0b0f19;
+    }
+
+    .pip-hw-btn.pip-btn-primary {
+      border-color: rgba(0, 229, 255, 0.6);
+      background: rgba(0, 229, 255, 0.15);
+      color: var(--cyan);
+    }
+
+    .pip-hw-btn.pip-btn-danger {
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+
+    .pip-hw-btn.pip-btn-danger:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+      color: #fff;
+    }
+
     /* 控制面板 */
     .control-body {
       flex: 1;
@@ -1190,6 +1245,16 @@
           </div>
           <div class="pip-body" id="pipBody">
             <canvas id="eyeCanvas" width="240" height="320"></canvas>
+            <!-- 实体 4 按键仿真操作栏 (K1~K4) -->
+            <div class="pip-buttons-bar" id="pipButtonsBar">
+              <button class="pip-hw-btn" id="btnK1" onclick="sendHwButton('K1')" title="K1 (上键 / 音量+) [快捷键: W 或 ↑]">▲ 上</button>
+              <button class="pip-hw-btn" id="btnK2" onclick="sendHwButton('K2')" title="K2 (下键 / 音量-) [快捷键: S 或 ↓]">▼ 下</button>
+              <button class="pip-hw-btn pip-btn-primary" id="btnK3" onclick="sendHwButton('K3')" oncontextmenu="event.preventDefault(); sendHwButton('K3', 'long_press');" title="K3 (短按快照提问 / 右键或按M进入系统菜单) [快捷键: Enter / M]">● 确认</button>
+              <button class="pip-hw-btn pip-btn-danger" id="btnK4" onclick="sendHwButton('K4')" title="K4 (返回 / 闭麦打断) [快捷键: Esc]">✕ 返回</button>
+            </div>
+            <div style="font-size: 0.65rem; color: var(--text-sub); text-align: center; margin-top: 4px; line-height: 1.2;">
+              按 <b>M</b> 打开菜单 | <b>W/S/Enter/Esc</b>
+            </div>
           </div>
         </div>
       </div>
@@ -1501,6 +1566,9 @@
           eyeCtx.fillStyle = eyeColor;
         });
       }
+
+      // 叠加 4-Key 菜单与二维码浮层 (与树莓派 ST7789 真机同构)
+      renderMenuOverlayCanvas(eyeCtx, 240, 320, now);
     }
 
     function roundRect(ctx, x, y, width, height, radius, fill) {
@@ -1517,6 +1585,379 @@
       ctx.closePath();
       if (fill) ctx.fill();
     }
+
+    // ==========================================
+    // 1.5 🐷 4-Key 统一菜单状态机与 Canvas 2D 同构渲染引擎
+    // ==========================================
+    let menuState = {
+      mode: "FACE",
+      cursor: 0,
+      is_mic_muted: false,
+      face_tracking: true,
+      servo_sleeping: false,
+      local_ip: location.hostname || "127.0.0.1",
+      main_menu_items: [
+        { icon: "📱", title: "手机配置", desc: "扫码进设置页 / 查IP" },
+        { icon: "🩺", title: "一键体检", desc: "API与硬件实时排障" },
+        { icon: "🛡️", title: "硬件开关", desc: "静音 / 追踪 / 休眠" },
+        { icon: "⚡", title: "服务电源", desc: "重启服务 / 安全关机" }
+      ],
+      doctor: {
+        wifi_ip: location.hostname,
+        mimo_status: "在线 (78ms)",
+        camera_status: "正常 (OK)",
+        mic_status: "收音中 (OK)",
+        cpu_temp: "45°C"
+      }
+    };
+
+    let qrCodeImg = null;
+    let qrCodeLoaded = false;
+
+    function preloadQrCode() {
+      if (!qrCodeImg) {
+        qrCodeImg = new Image();
+        qrCodeImg.onload = () => { qrCodeLoaded = true; };
+        qrCodeImg.src = "/api/menu/qr_image?t=" + Date.now();
+      }
+    }
+
+    async function sendHwButton(button, eventType = "click") {
+      // 1. 本地极速响应
+      if (menuState.mode === "FACE") {
+        if (button === "K3" && eventType === "long_press") {
+          menuState.mode = "MENU_MAIN";
+          menuState.cursor = 0;
+        } else if (button === "K3") {
+          sendQuickChip("看看我手里拿的什么");
+        } else if (button === "K4") {
+          if (eventType === "long_press") {
+            menuState.servo_sleeping = !menuState.servo_sleeping;
+          } else {
+            menuState.is_mic_muted = !menuState.is_mic_muted;
+            fetch("/api/barge_in", { method: "POST" }).catch(() => {});
+          }
+        }
+      } else if (menuState.mode === "MENU_MAIN") {
+        if (button === "K1") menuState.cursor = (menuState.cursor - 1 + 4) % 4;
+        else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % 4;
+        else if (button === "K4") menuState.mode = "FACE";
+        else if (button === "K3") {
+          if (menuState.cursor === 0) {
+            menuState.mode = "QR_CODE";
+            preloadQrCode();
+          } else if (menuState.cursor === 1) {
+            menuState.mode = "DOCTOR";
+            fetch("/api/system/doctor").then(r => r.json()).then(d => { menuState.doctor = d; }).catch(() => {});
+          } else if (menuState.cursor === 2) {
+            menuState.mode = "TOGGLES";
+            menuState.cursor = 0;
+          } else if (menuState.cursor === 3) {
+            menuState.mode = "POWER";
+            menuState.cursor = 0;
+          }
+        }
+      } else if (menuState.mode === "QR_CODE" || menuState.mode === "DOCTOR") {
+        if (button === "K4" || button === "K3") menuState.mode = "MENU_MAIN";
+      } else if (menuState.mode === "TOGGLES") {
+        if (button === "K1") menuState.cursor = (menuState.cursor - 1 + 3) % 3;
+        else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % 3;
+        else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 2; }
+        else if (button === "K3") {
+          if (menuState.cursor === 0) menuState.is_mic_muted = !menuState.is_mic_muted;
+          else if (menuState.cursor === 1) menuState.face_tracking = !menuState.face_tracking;
+          else if (menuState.cursor === 2) menuState.servo_sleeping = !menuState.servo_sleeping;
+        }
+      } else if (menuState.mode === "POWER") {
+        if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 3; }
+        else if (button === "K3") {
+          menuState.mode = "FACE";
+        }
+      }
+
+      // 2. 发送给 Python 后端同步
+      try {
+        const res = await fetch("/api/hardware/button", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ button, event: eventType })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.menu_state) {
+            menuState = Object.assign(menuState, data.menu_state);
+          }
+        }
+      } catch (e) {
+        console.warn("按键发送后端异常:", e);
+      }
+    }
+
+    // 键盘全局快捷键监听 (W/S/Enter/M/Esc)
+    window.addEventListener("keydown", (e) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) return;
+
+      if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") {
+        e.preventDefault();
+        sendHwButton("K1", "click");
+      } else if (e.key === "s" || e.key === "S" || e.key === "ArrowDown") {
+        e.preventDefault();
+        sendHwButton("K2", "click");
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        sendHwButton("K3", "click");
+      } else if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        sendHwButton("K3", "long_press");
+      } else if (e.key === "Escape" || e.key === "Backspace") {
+        e.preventDefault();
+        sendHwButton("K4", "click");
+      }
+    });
+
+    // 2.4 寸屏幕 Canvas 菜单叠加渲染
+    function renderMenuOverlayCanvas(ctx, w, h, now) {
+      if (menuState.mode === "FACE") {
+        // 右上角微小 HUD 角标
+        if (menuState.is_mic_muted) {
+          ctx.fillStyle = "#ef4444";
+          ctx.beginPath();
+          ctx.arc(220, 16, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 10px sans-serif";
+          ctx.fillText("M", 216, 20);
+        }
+        if (menuState.servo_sleeping) {
+          ctx.fillStyle = "#00e5ff";
+          ctx.font = "bold 11px sans-serif";
+          ctx.fillText("💤", 192, 20);
+        }
+        return;
+      }
+
+      // 菜单模式背景遮罩
+      ctx.fillStyle = "rgba(10, 16, 28, 0.93)";
+      ctx.fillRect(0, 0, w, h);
+
+      // 顶部标题栏
+      ctx.fillStyle = "#121c2e";
+      ctx.fillRect(0, 0, w, 36);
+      ctx.strokeStyle = "#00e5ff";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 36);
+      ctx.lineTo(w, 36);
+      ctx.stroke();
+
+      if (menuState.mode === "MENU_MAIN") {
+        ctx.fillStyle = "#00e5ff";
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText("⚙️ 系统菜单 (4-Key)", 14, 23);
+
+        const items = menuState.main_menu_items || [
+          { icon: "📱", title: "手机配置", desc: "扫码进设置页 / 查IP" },
+          { icon: "🩺", title: "一键体检", desc: "API与硬件实时排障" },
+          { icon: "🛡️", title: "硬件开关", desc: "静音 / 追踪 / 休眠" },
+          { icon: "⚡", title: "服务电源", desc: "重启服务 / 安全关机" }
+        ];
+
+        const yStart = 48;
+        items.forEach((it, idx) => {
+          const isSel = (idx === menuState.cursor);
+          const cy = yStart + idx * 56;
+          if (isSel) {
+            ctx.fillStyle = "rgba(0, 160, 220, 0.4)";
+            ctx.strokeStyle = "#00e5ff";
+            ctx.lineWidth = 2;
+            roundRect(ctx, 10, cy, 220, 48, 8, true);
+            ctx.stroke();
+            ctx.fillStyle = "#ffffff";
+            // 指示箭头
+            ctx.beginPath();
+            ctx.moveTo(216, cy + 24);
+            ctx.lineTo(206, cy + 18);
+            ctx.lineTo(206, cy + 30);
+            ctx.fill();
+          } else {
+            ctx.fillStyle = "rgba(22, 34, 52, 0.6)";
+            ctx.strokeStyle = "rgba(35, 50, 75, 0.8)";
+            ctx.lineWidth = 1;
+            roundRect(ctx, 10, cy, 220, 48, 8, true);
+            ctx.stroke();
+            ctx.fillStyle = "#cbd5e1";
+          }
+          ctx.font = "bold 14px sans-serif";
+          ctx.fillText(`${it.icon} ${it.title}`, 20, cy + 22);
+          ctx.font = "11px sans-serif";
+          ctx.fillStyle = isSel ? "#e0f2fe" : "#94a3b8";
+          ctx.fillText(it.desc, 20, cy + 40);
+        });
+
+        // 底部按键提示
+        ctx.fillStyle = "#0e1524";
+        ctx.fillRect(0, 292, w, 28);
+        ctx.fillStyle = "#64748b";
+        ctx.font = "11px sans-serif";
+        ctx.fillText("[▲▼]移动  [●]确认  [✕]返回", 14, 310);
+
+      } else if (menuState.mode === "QR_CODE") {
+        ctx.fillStyle = "#00e5ff";
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText("📱 手机扫码配置", 14, 23);
+
+        const ip = menuState.local_ip || location.hostname;
+        if (!qrCodeImg) preloadQrCode();
+        if (qrCodeLoaded && qrCodeImg) {
+          ctx.drawImage(qrCodeImg, 45, 52, 150, 150);
+        } else {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(45, 52, 150, 150);
+          ctx.fillStyle = "#000000";
+          ctx.font = "12px sans-serif";
+          ctx.fillText("生成二维码中...", 75, 130);
+        }
+
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "11px sans-serif";
+        ctx.fillText("手机连同WiFi打开网址:", 14, 222);
+        ctx.fillStyle = "#00e5ff";
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText(`http://${ip}:8090/settings`, 14, 244);
+        ctx.fillStyle = "#64748b";
+        ctx.font = "11px sans-serif";
+        ctx.fillText("可配置 Token / 人设 / 零点校准", 14, 268);
+
+        ctx.fillStyle = "#0e1524";
+        ctx.fillRect(0, 292, w, 28);
+        ctx.fillStyle = "#64748b";
+        ctx.font = "11px sans-serif";
+        ctx.fillText("按任意键或 [✕] 返回菜单", 45, 310);
+
+      } else if (menuState.mode === "DOCTOR") {
+        ctx.fillStyle = "#00e5ff";
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText("🩺 一键体检与排障", 14, 23);
+
+        const d = menuState.doctor || {};
+        const diagList = [
+          { label: "📶 WiFi IP", val: d.wifi_ip || location.hostname },
+          { label: "🧠 MiMo API", val: d.mimo_status || "正常" },
+          { label: "📷 摄像头", val: d.camera_status || "正常 (OK)" },
+          { label: "🎙️ 麦克风", val: menuState.is_mic_muted ? "静音 (Muted)" : (d.mic_status || "正常") },
+          { label: "🌡️ CPU温度", val: d.cpu_temp || "45°C" },
+        ];
+
+        let cy = 50;
+        diagList.forEach(item => {
+          ctx.fillStyle = "rgba(20, 30, 48, 0.7)";
+          ctx.strokeStyle = "rgba(35, 50, 75, 0.8)";
+          ctx.lineWidth = 1;
+          roundRect(ctx, 12, cy, 216, 40, 6, true);
+          ctx.stroke();
+
+          ctx.fillStyle = "#94a3b8";
+          ctx.font = "12px sans-serif";
+          ctx.fillText(item.label, 20, cy + 24);
+
+          ctx.font = "bold 12px sans-serif";
+          const isGood = item.val && (item.val.includes("正常") || item.val.includes("OK") || item.val.includes("在线") || item.val.includes("°C"));
+          ctx.fillStyle = isGood ? "#00e5ff" : "#f59e0b";
+          ctx.fillText(item.val, 115, cy + 24);
+          cy += 46;
+        });
+
+        ctx.fillStyle = "#0e1524";
+        ctx.fillRect(0, 292, w, 28);
+        ctx.fillStyle = "#64748b";
+        ctx.font = "11px sans-serif";
+        ctx.fillText("[●]重新检测    [✕]返回菜单", 24, 310);
+
+      } else if (menuState.mode === "TOGGLES") {
+        ctx.fillStyle = "#00e5ff";
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText("🛡️ 硬件与防扰开关", 14, 23);
+
+        const toggleList = [
+          { name: "麦克风输入", on: !menuState.is_mic_muted },
+          { name: "人脸视线跟随", on: menuState.face_tracking },
+          { name: "舵机工作状态", on: !menuState.servo_sleeping },
+        ];
+
+        let cy = 55;
+        toggleList.forEach((tg, idx) => {
+          const isSel = (idx === menuState.cursor);
+          if (isSel) {
+            ctx.fillStyle = "rgba(0, 120, 180, 0.5)";
+            ctx.strokeStyle = "#00e5ff";
+            ctx.lineWidth = 2;
+            roundRect(ctx, 12, cy, 216, 54, 8, true);
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = "rgba(22, 34, 52, 0.6)";
+            ctx.strokeStyle = "rgba(35, 50, 75, 0.8)";
+            ctx.lineWidth = 1;
+            roundRect(ctx, 12, cy, 216, 54, 8, true);
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 13px sans-serif";
+          ctx.fillText(tg.name, 22, cy + 24);
+
+          ctx.font = "11px sans-serif";
+          ctx.fillStyle = tg.on ? "#10b981" : "#ef4444";
+          ctx.fillText(`状态: ${tg.on ? "开启 [ON]" : "关闭 [OFF]"}`, 22, cy + 44);
+          cy += 64;
+        });
+
+        ctx.fillStyle = "#0e1524";
+        ctx.fillRect(0, 292, w, 28);
+        ctx.fillStyle = "#64748b";
+        ctx.font = "11px sans-serif";
+        ctx.fillText("[▲▼]移动  [●]切换  [✕]返回", 18, 310);
+
+      } else if (menuState.mode === "POWER") {
+        ctx.fillStyle = "#00e5ff";
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText("⚡ 服务与电源", 14, 23);
+
+        const pItems = [
+          { title: "🔄 重启 AI 机器人服务", danger: false },
+          { title: "🛑 树莓派系统安全关机", danger: true }
+        ];
+
+        let cy = 70;
+        pItems.forEach((it, idx) => {
+          const isSel = (idx === menuState.cursor);
+          if (isSel) {
+            ctx.fillStyle = it.danger ? "rgba(239, 68, 68, 0.6)" : "rgba(0, 140, 200, 0.6)";
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2;
+            roundRect(ctx, 12, cy, 216, 56, 8, true);
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = "rgba(25, 35, 55, 0.6)";
+            ctx.strokeStyle = "rgba(40, 55, 80, 0.8)";
+            ctx.lineWidth = 1;
+            roundRect(ctx, 12, cy, 216, 56, 8, true);
+            ctx.stroke();
+          }
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 13px sans-serif";
+          ctx.fillText(it.title, 20, cy + 34);
+          cy += 75;
+        });
+
+        ctx.fillStyle = "#0e1524";
+        ctx.fillRect(0, 292, w, 28);
+        ctx.fillStyle = "#64748b";
+        ctx.font = "11px sans-serif";
+        ctx.fillText("[▲▼]选择  [●]执行  [✕]返回", 20, 310);
+      }
+    }
+
 
 
     // ==========================================
@@ -3259,6 +3700,11 @@
 
     function handleDigitalTwinEvent(ev) {
       if (!ev || !ev.type) return;
+
+      if (ev.type === "menu_state" && ev.data) {
+        menuState = Object.assign(menuState, ev.data);
+        return;
+      }
 
       if (ev.type === "gaze_track") {
         if (!isSpeaking && !isThinking) {

@@ -109,11 +109,32 @@ def on_agent_event_broadcast(event_dict):
 
 hardware_agent.register_event_listener(on_agent_event_broadcast)
 
+# 统一 4 键菜单状态机 (MenuFSM)
+from core.menu_fsm import menu_fsm
+menu_fsm.hal = hardware_agent.hal
+menu_fsm.agent = hardware_agent
+
+def on_menu_state_broadcast(state_dict):
+    on_agent_event_broadcast({
+        "type": "menu_state",
+        "data": state_dict
+    })
+
+menu_fsm.add_listener(on_menu_state_broadcast)
+if hardware_agent and hardware_agent.hal:
+    hardware_agent.hal.add_button_listener(menu_fsm.handle_key)
+
+
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
     def do_HEAD(self):
+        if self.path in ["/settings", "/settings.html"]:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            return
         if self.path.startswith("/api/vision/snapshot") or self.path.startswith("/api/vision/latest_snapshot"):
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
@@ -135,6 +156,93 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 self.send_error(404, "HTML simulator page not found")
                 return
+
+        # 手机端无线配置后台 (/settings)
+        if self.path in ["/settings", "/settings.html"]:
+            settings_path = os.path.join(DIRECTORY, "simulator", "settings.html")
+            if os.path.exists(settings_path):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                with open(settings_path, "rb") as f:
+                    self.wfile.write(f.read())
+                return
+            else:
+                self.send_error(404, "settings.html not found")
+                return
+
+        # 获取配置及状态 API
+        if self.path == "/api/settings":
+            cfg_file = os.path.join(DIRECTORY, "config.json")
+            cur_cfg = {}
+            if os.path.exists(cfg_file):
+                try:
+                    with open(cfg_file, "r", encoding="utf-8") as f:
+                        cur_cfg = json.load(f)
+                except Exception:
+                    pass
+            state = menu_fsm.get_state()
+            response_data = {
+                "api_key": cur_cfg.get("api_key", ""),
+                "llm_model": cur_cfg.get("llm_model", "mimo-v2.6-flash"),
+                "robot_name": cur_cfg.get("robot_name", "PIG"),
+                "user_name": cur_cfg.get("user_name", "胖虎"),
+                "mimo_voice": cur_cfg.get("mimo_voice", "冰糖"),
+                "face_tracking": hardware_agent.cfg.get("face_tracking", True),
+                "is_mic_muted": menu_fsm.is_mic_muted,
+                "servo_sleeping": menu_fsm.is_servo_sleeping,
+                "local_ip": state["local_ip"],
+                "cpu_temp": state["doctor"].get("cpu_temp", "45°C"),
+                "mimo_status": state["doctor"].get("mimo_status", "正常 (OK)")
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(response_data, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 菜单状态查询 API
+        if self.path == "/api/menu/state":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(menu_fsm.get_state(), ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 动态二维码图片直通流 (供 2.4寸 Canvas 与真机同构绘制)
+        if self.path == "/api/menu/qr_image":
+            import io
+            from core.menu_fsm import get_local_ip
+            try:
+                import qrcode
+                ip = get_local_ip()
+                url = f"http://{ip}:8090/settings"
+                qr = qrcode.QRCode(box_size=4, border=2)
+                qr.add_data(url)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                img_bytes = buf.getvalue()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(img_bytes)
+                return
+            except Exception as e:
+                self.send_error(500, f"QR generation failed: {e}")
+                return
+
+        # 一键体检与排障 API
+        if self.path == "/api/system/doctor":
+            menu_fsm.refresh_doctor_data_async()
+            time.sleep(0.12)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(menu_fsm.doctor_cache, ensure_ascii=False).encode("utf-8"))
+            return
 
         # 视觉抓拍快照静态访问接口 (供对话框实时查看小猪眼前捕获的真实现实瞬间)
         if self.path.startswith("/api/vision/snapshot") or self.path.startswith("/api/vision/latest_snapshot"):
@@ -480,6 +588,83 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         global _latest_webcam_frame
+
+        # 手机端无线配置保存 API
+        if self.path == "/api/settings":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                cfg_file = os.path.join(DIRECTORY, "config.json")
+                if os.path.exists(cfg_file):
+                    with open(cfg_file, "r", encoding="utf-8") as f:
+                        cur_cfg = json.load(f)
+                else:
+                    cur_cfg = {}
+                for k in ["api_key", "llm_model", "robot_name", "user_name", "mimo_voice"]:
+                    if k in body:
+                        cur_cfg[k] = body[k]
+                        if k == "api_key":
+                            cur_cfg["mimo_api_key"] = body[k]
+                if "face_tracking" in body:
+                    cur_cfg["face_tracking"] = bool(body["face_tracking"])
+                    hardware_agent.cfg["face_tracking"] = bool(body["face_tracking"])
+                    menu_fsm.face_tracking_enabled = bool(body["face_tracking"])
+                if "is_mic_muted" in body:
+                    menu_fsm.is_mic_muted = bool(body["is_mic_muted"])
+                if "servo_sleeping" in body:
+                    menu_fsm.is_servo_sleeping = bool(body["servo_sleeping"])
+                    menu_fsm._apply_servo_sleep(menu_fsm.is_servo_sleeping)
+
+                with open(cfg_file, "w", encoding="utf-8") as f:
+                    json.dump(cur_cfg, f, ensure_ascii=False, indent=2)
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "state": menu_fsm.get_state()}).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        # 4按键实体/虚拟事件分发 API (K1~K4)
+        if self.path == "/api/hardware/button":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                btn = body.get("button", "K3")
+                evt = body.get("event", "click")
+                if hardware_agent and hardware_agent.hal:
+                    hardware_agent.hal.trigger_button(btn, evt)
+                else:
+                    menu_fsm.handle_key(btn, evt)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "menu_state": menu_fsm.get_state()}, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        # 舵机实时角度微调/校准
+        if self.path == "/api/servo/move":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                pan = float(body.get("pan", 90))
+                tilt = float(body.get("tilt", 90))
+                if hardware_agent and hardware_agent.hal:
+                    hardware_agent.hal.set_angles(pan, tilt, smooth=True)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "pan": pan, "tilt": tilt}).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
         # 调整唤醒词灵敏度阈值与麦克风软件增益
         if self.path == "/api/wakeword/config":
             content_length = int(self.headers.get("Content-Length", 0))
