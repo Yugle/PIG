@@ -82,18 +82,30 @@
     main {
       flex: 1;
       display: grid;
-      grid-template-columns: 330px 1fr 370px;
+      grid-template-columns: 320px 1fr 370px;
       gap: 14px;
       padding: 14px;
       overflow: hidden;
       min-height: 0;
+      transition: grid-template-columns 0.25s ease;
+    }
+
+    main.left-collapsed {
+      grid-template-columns: 1fr 370px !important;
+    }
+
+    main.left-collapsed #left-control-panel {
+      display: none !important;
     }
 
     @media (max-width: 1360px) {
       main {
-        grid-template-columns: 300px 1fr 340px;
+        grid-template-columns: 290px 1fr 340px;
         gap: 12px;
         padding: 12px;
+      }
+      main.left-collapsed {
+        grid-template-columns: 1fr 340px !important;
       }
     }
 
@@ -102,6 +114,10 @@
         grid-template-columns: 1fr;
         grid-template-rows: auto 520px auto;
         overflow-y: auto;
+      }
+      main.left-collapsed {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: 520px auto !important;
       }
     }
 
@@ -431,8 +447,15 @@
 
     .quick-chips-container {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      overflow-x: auto;
       gap: 6px;
+      padding: 2px 2px 6px 2px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .quick-chips-container::-webkit-scrollbar {
+      display: none;
     }
 
     .quick-chip {
@@ -559,6 +582,31 @@
       color: var(--cyan);
       font-weight: 600;
     }
+
+    /* 🎛️ 调试控制台三联分栏标签样式 */
+    .ctrl-tab {
+      flex: 1;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-sub);
+      padding: 6px 4px;
+      border-radius: 6px;
+      font-size: 0.74rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .ctrl-tab:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .ctrl-tab.active {
+      background: rgba(0, 229, 255, 0.15);
+      border-color: var(--cyan);
+      color: var(--cyan);
+      font-weight: 600;
+    }
   </style>
 
   <!-- 引入 Three.js 3D 渲染库 -->
@@ -567,57 +615,39 @@
 </head>
 <body>
 
-  <header>
-    <div class="brand">
-      🤖 桌面具身 AI 伴侣机器人
-      <span class="badge">Sim-to-Real 3D 仿真工作台</span>
+  <header style="padding: 10px 18px; background: rgba(13, 17, 23, 0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; z-index: 50;">
+    <div class="brand" style="display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 1.15rem; font-weight: 700; background: linear-gradient(135deg, #00e5ff, #a371f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🤖 小猪伴侣</span>
+      <span class="badge" style="font-size: 0.7rem; background: rgba(0, 229, 255, 0.1); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); padding: 2px 8px; border-radius: 10px;">3D 孪生工作台</span>
     </div>
-    <div style="display: flex; align-items: center; gap: 10px;">
-      <!-- 双模切换开关 -->
-      <div id="mode-badge" onclick="toggleRunMode()" style="cursor:pointer; font-size: 0.78rem; background: rgba(0, 229, 255, 0.08); border: 1px solid var(--cyan); padding: 4px 10px; border-radius: 12px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;" title="点击切换：真机数字孪生模式 / 纯网页仿真模式">
-        <span style="color:var(--text-sub);">模式:</span>
-        <span id="mode-name" style="color: var(--cyan); font-weight: 600;">🤖 孪生真机</span>
-      </div>
 
-      <!-- 硬件/麦克风状态指示器 -->
-      <div id="hw-badge" style="font-size: 0.78rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 12px; color: var(--text-sub); display: flex; align-items: center; gap: 6px;" title="物理蓝牙/USB麦克风与硬件连通状态">
-        <div id="hw-dot" class="status-dot"></div>
-        <span id="hw-status-label">🎙️ 硬件检测中...</span>
-      </div>
-
-      <!-- 实时麦克风音量与唤醒得分指示器 -->
-      <div id="mic-meter-box" style="font-size: 0.75rem; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(0, 229, 255, 0.25); padding: 3px 10px; border-radius: 12px; display: flex; align-items: center; gap: 8px;" title="物理蓝牙/USB麦克风实时音频电平与唤醒词置信度">
-        <span style="color: var(--text-sub); display: flex; align-items: center; gap: 4px;">
-          <span id="meter-icon">🎙️</span> 音量:
-        </span>
-        <div style="width: 70px; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; position: relative;">
-          <div id="meter-fill" style="width: 0%; height: 100%; background: #10b981; border-radius: 4px; transition: width 0.08s ease-out, background-color 0.1s;"></div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <!-- 极简模式与麦克风状态药丸胶囊 -->
+      <div style="display: flex; align-items: center; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-color); border-radius: 20px; padding: 3px 10px; gap: 8px;">
+        <div id="mode-badge" onclick="toggleRunMode()" style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.76rem;" title="点击切换真机孪生 / 纯网页模式">
+          <span id="mode-name" style="color: var(--cyan); font-weight: 600;">🤖 孪生真机</span>
         </div>
-        <span id="meter-val" style="font-family: monospace; min-width: 30px; color: #10b981; font-weight: 600;">0</span>
-        <span id="meter-score" style="color: #f59e0b; font-family: monospace; margin-left: 2px;">
-          置信度: <span id="meter-score-val">0.00 / 0.20</span>
-        </span>
+        <span style="color: var(--border-color); font-size: 0.65rem;">|</span>
+        <div id="hw-badge" style="display: flex; align-items: center; gap: 5px; font-size: 0.74rem;" title="物理硬件连通状态">
+          <div id="hw-dot" class="status-dot"></div>
+          <span id="hw-status-label" style="color: var(--text-sub);">硬件检测中...</span>
+        </div>
+        <span style="color: var(--border-color); font-size: 0.65rem;">|</span>
+        <div id="mic-meter-box" style="display: flex; align-items: center; gap: 5px; font-size: 0.74rem;" title="麦克风音量与唤醒置信度">
+          <span id="meter-icon" style="font-size: 0.8rem;">🎙️</span>
+          <div style="width: 32px; height: 5px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden;">
+            <div id="meter-fill" style="width: 0%; height: 100%; background: #10b981; border-radius: 3px; transition: width 0.08s;"></div>
+          </div>
+          <span id="meter-val" style="font-family: monospace; font-size: 0.72rem; color: #10b981; font-weight: 600; min-width: 18px;">0</span>
+          <span id="meter-score" style="display:none;"><span id="meter-score-val">0.00 / 0.20</span></span>
+        </div>
       </div>
 
-      <!-- 快速灵敏度调优与一键手动唤醒 -->
+      <!-- 核心控制按钮组 -->
       <div style="display: flex; align-items: center; gap: 6px;">
-        <button id="manual-wake-btn" onclick="triggerManualWake()" style="background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; border: none; border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35); transition: all 0.2s;" title="跳过唤醒词检测，直接手动唤醒机器人倾听并对话">⚡ 一键唤醒</button>
-        <button id="system-settings-btn" onclick="openSystemSettingsModal()" style="background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid var(--cyan); border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" title="打开全栈系统设置中心 (大模型Key/音色/注视/灵敏度/更名)">⚙️ 系统设置</button>
-      </div>
-
-      <div id="memory-badge" style="font-size: 0.78rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 12px; color: var(--text-sub); display: flex; align-items: center; gap: 6px;">
-        <span>🧠 伴侣记忆:</span>
-        <span id="mem-name" style="color: var(--cyan); font-weight: 600;">主人</span>
-        <span id="mem-intimacy" style="background: rgba(255, 176, 32, 0.15); color: #ffb020; border: 1px solid #ffb020; border-radius: 8px; padding: 1px 5px; font-size: 0.7rem;">Lv.1</span>
-      </div>
-
-      <!-- 主动关怀守护开关 -->
-      <div id="care-badge" onclick="toggleProactiveCare()" style="cursor:pointer; font-size: 0.78rem; background: rgba(255, 64, 129, 0.1); border: 1px solid #ff4081; padding: 4px 10px; border-radius: 12px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;" title="点击切换：主动关怀守护功能 (晨间初见问候、工位久坐疲劳、深夜伴睡)">
-        <span id="care-badge-label" style="color: #ff4081; font-weight: 600;">❤️ 主动关怀: 开启</span>
-      </div>
-      <div class="status-tag">
-        <div class="status-dot"></div>
-        物理动力学 & 表情引擎运行中
+        <button id="manual-wake-btn" onclick="triggerManualWake()" style="background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; border: none; border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35); transition: all 0.2s;" title="跳过唤醒词检测，直接手动唤醒机器人">⚡ 一键唤醒</button>
+        <button id="toggleConsoleBtn" onclick="toggleLeftPanel()" style="background: rgba(255, 255, 255, 0.06); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" title="展开/收起左侧调试控制台 (释放沉浸式 3D 视野)">🎛️ 调试面板</button>
+        <button id="system-settings-btn" onclick="openSystemSettingsModal()" style="background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid var(--cyan); border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" title="打开全栈系统设置中心">⚙️ 系统设置</button>
       </div>
     </div>
   </header>
@@ -803,152 +833,175 @@
 
   <main>
     <!-- 左侧：具身控制台 (姿态、动作、表情、技能生态、元认知) -->
-    <div class="panel">
-      <div class="panel-header">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span>🎛️ 具身控制台</span>
-          <span style="font-size: 0.72rem; background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); padding: 1px 6px; border-radius: 4px;">硬件 & 技能</span>
+    <div class="panel" id="left-control-panel">
+      <div class="panel-header" style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-weight:600; font-size:0.86rem;">🎛️ 调试控制台</span>
         </div>
-        <button class="btn" style="padding: 2px 8px; font-size: 0.75rem;" onclick="resetAngles()">角度回正</button>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button class="btn" style="padding: 2px 8px; font-size: 0.72rem;" onclick="resetAngles()" title="舵机角度归位到 90°">角度回正</button>
+          <button class="btn" style="padding: 2px 6px; font-size: 0.72rem; color:var(--text-sub);" onclick="toggleLeftPanel()" title="收起控制台，释放更广阔的 3D 视野">◀ 收起</button>
+        </div>
       </div>
-      <div class="control-body">
 
-        <!-- 舵机实时调姿 -->
-        <div class="control-section">
-          <div class="section-title">
-            <span>二轴关节角度微调</span>
-          </div>
-          <div class="slider-group">
-            <div class="slider-label">
-              <span>水平转向 (Pan / Yaw)</span>
-              <span id="val-pan">90°</span>
+      <!-- 控制台三联标签页 (Segmented Tabs) -->
+      <div style="display:flex; background:rgba(0,0,0,0.3); padding:4px; gap:4px; border-bottom:1px solid var(--border-color);">
+        <button id="btn-panel-motion" class="ctrl-tab active" onclick="switchControlTab('motion')">🕹️ 姿态动作</button>
+        <button id="btn-panel-emotion" class="ctrl-tab" onclick="switchControlTab('emotion')">😊 动态表情</button>
+        <button id="btn-panel-skills" class="ctrl-tab" onclick="switchControlTab('skills')">🧩 技能认知</button>
+      </div>
+
+      <div class="control-body" style="padding:12px; gap:12px;">
+        <!-- 标签页 1: 姿态与动作 -->
+        <div id="pane-motion" class="ctrl-pane">
+          <!-- 舵机实时调姿 -->
+          <div class="control-section">
+            <div class="section-title">
+              <span>二轴关节角度微调</span>
             </div>
-            <input type="range" id="slider-pan" min="20" max="160" value="90" oninput="onPanSlider(this.value)">
-          </div>
-          <div class="slider-group">
-            <div class="slider-label">
-              <span>俯仰角度 (Tilt / Pitch)</span>
-              <span id="val-tilt">90°</span>
+            <div class="slider-group">
+              <div class="slider-label">
+                <span>水平转向 (Pan / Yaw)</span>
+                <span id="val-pan" style="color:var(--cyan); font-weight:600;">90°</span>
+              </div>
+              <input type="range" id="slider-pan" min="20" max="160" value="90" oninput="onPanSlider(this.value)">
             </div>
-            <input type="range" id="slider-tilt" min="60" max="120" value="90" oninput="onTiltSlider(this.value)">
-          </div>
-        </div>
-
-        <!-- 常用动作指令 -->
-        <div class="control-section">
-          <div class="section-title">预设具身动作触发</div>
-          <div class="btn-grid">
-            <button class="btn" onclick="triggerAction('NOD')">👏 赞同点头 (NOD)</button>
-            <button class="btn" onclick="triggerAction('SHAKE')">🙅 疑惑摇头 (SHAKE)</button>
-            <button class="btn" onclick="triggerAction('LOOK_UP')">👀 抬头望人 (LOOK UP)</button>
-            <button class="btn" onclick="triggerAction('SURPRISE')">😲 吃惊注视 (SURPRISE)</button>
-          </div>
-        </div>
-
-        <!-- 切换表情 -->
-        <div class="control-section">
-          <div class="section-title">动态表情切换</div>
-          <div class="btn-grid" style="grid-template-columns: repeat(3, 1fr);">
-            <button class="btn" onclick="setEmotion('NORMAL')">😊 常规</button>
-            <button class="btn" onclick="setEmotion('HAPPY')">😄 开心</button>
-            <button class="btn" onclick="setEmotion('LOVE')">❤️ 爱意</button>
-            <button class="btn" onclick="setEmotion('WINK')">😉 眨眼</button>
-            <button class="btn" onclick="setEmotion('CONFUSED')">🤔 困惑</button>
-            <button class="btn" onclick="setEmotion('THINKING')">🧐 思考</button>
-            <button class="btn" onclick="setEmotion('SURPRISED')">😳 吃惊</button>
-            <button class="btn" onclick="setEmotion('SLEEPY')">😴 困倦</button>
-            <button class="btn" onclick="setEmotion('DIZZY')">🌀 眩晕</button>
-            <button class="btn" onclick="setEmotion('SAD')">🥺 委屈</button>
-            <button class="btn" onclick="setEmotion('ANGRY')">😡 愤怒</button>
-            <button class="btn" onclick="setEmotion('BLINK')">😑 闭目</button>
-          </div>
-          <button class="btn" style="margin-top: 8px; width: 100%; border-color: #ff007f; color: #ff4081; font-weight: bold; background: rgba(255, 64, 129, 0.08); display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="openSvgGalleryModal()">
-            🎨 查看 / 下载 12 款动态 SVG 动图库
-          </button>
-        </div>
-
-        <!-- 🧩 统一技能中枢与应用生态 (Skills & Ecosystem) -->
-        <div class="control-section">
-          <div class="section-title">
-            <span>🧩 统一技能与插件中枢</span>
-            <button class="btn" style="padding:2px 8px; font-size:0.7rem; color:var(--cyan); border-color:rgba(0, 229, 255, 0.4); background:rgba(0, 229, 255, 0.1);" onclick="openSkillStoreModal()">🏪 技能应用商店</button>
-          </div>
-          
-          <!-- 插件状态与闹钟 -->
-          <div style="font-size:0.75rem; color:var(--text-sub); display:flex; flex-direction:column; gap:6px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span>🔌 <strong>已激活插件</strong>:</span>
-              <span id="pluginsCountBadge" style="color:var(--cyan); font-weight:600;">3 个</span>
-            </div>
-            <div id="installedPluginsBadges" style="display:flex; flex-wrap:wrap; gap:4px;">
-              <span class="btn" style="padding:2px 6px; font-size:0.7rem; color:#7ee787; border-color:#238636;">🌦️ weather</span>
-              <span class="btn" style="padding:2px 6px; font-size:0.7rem; color:#ff6700; border-color:#ff6700;">🏠 xiaomi_iot</span>
-              <span class="btn" style="padding:2px 6px; font-size:0.7rem; color:#7ee787; border-color:#238636;">📰 news_briefing</span>
+            <div class="slider-group">
+              <div class="slider-label">
+                <span>俯仰角度 (Tilt / Pitch)</span>
+                <span id="val-tilt" style="color:var(--cyan); font-weight:600;">90°</span>
+              </div>
+              <input type="range" id="slider-tilt" min="60" max="120" value="90" oninput="onTiltSlider(this.value)">
             </div>
           </div>
 
-          <div style="border-top:1px dashed var(--border-color); padding-top:6px; font-size:0.75rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <span style="color:var(--text-sub);">⏰ 活跃闹钟与倒计时:</span>
-              <span id="remindersCountBadge" style="font-size:0.7rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:1px 6px; border-radius:10px;">0 个</span>
-            </div>
-            <div id="remindersList" style="display:flex; flex-direction:column; gap:4px; max-height:80px; overflow-y:auto;">
-              <div style="color:var(--text-sub); text-align:center; padding:2px 0;">暂无活跃闹钟，试着说“10秒后提醒我关火”</div>
-            </div>
-          </div>
-
-          <div style="border-top:1px dashed var(--border-color); padding-top:6px; font-size:0.75rem;">
-            <div style="color:var(--text-sub); margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
-              <span>💃 自进化自创动作库:</span>
-              <span id="actionsCountBadge" style="color:var(--cyan); font-weight:600;">1 个</span>
-            </div>
-            <div id="evolvedActionsBadges" style="display:flex; flex-wrap:wrap; gap:4px;">
-              <span class="btn" style="padding:2px 8px; font-size:0.7rem;" onclick="playEvolvedAction('SHY_DANCE')">💃 SHY_DANCE</span>
+          <!-- 常用动作指令 -->
+          <div class="control-section" style="margin-top:10px;">
+            <div class="section-title">预设具身动作触发</div>
+            <div class="btn-grid">
+              <button class="btn" onclick="triggerAction('NOD')">👏 赞同点头 (NOD)</button>
+              <button class="btn" onclick="triggerAction('SHAKE')">🙅 疑惑摇头 (SHAKE)</button>
+              <button class="btn" onclick="triggerAction('LOOK_UP')">👀 抬头望人 (LOOK UP)</button>
+              <button class="btn" onclick="triggerAction('SURPRISE')">😲 吃惊注视 (SURPRISE)</button>
             </div>
           </div>
         </div>
 
-        <!-- 🌱 元认知自进化与海马体反思 (Evolution & Reflection) -->
-        <div class="control-section">
-          <div class="section-title">
-            <span>🌱 元认知自进化看板</span>
-            <button class="btn" style="padding:2px 8px; font-size:0.7rem; color:#a371f7; border-color:rgba(163, 113, 247, 0.4); background:rgba(163, 113, 247, 0.1);" onclick="triggerNightlyReflection()" id="reflectBtn">🌙 触发记忆升华反思</button>
-          </div>
-          <div style="font-size:0.78rem; display:flex; flex-direction:column; gap:6px; color:var(--text-sub); background:#161b22; padding:6px 10px; border-radius:6px; border:1px solid #30363d;">
-            <div>🕒 <strong style="color:var(--cyan);">推算作息习惯</strong>: <span id="habitsDesc" style="color:var(--text-main);">09:00 起床 · 14:00 易疲劳 · 23:00 睡前</span></div>
-            <div>🧠 <strong style="color:#a371f7;">最近记忆升华</strong>: <span id="reflectionDesc" style="color:#7ee787;">尚未进行夜间反思</span></div>
+        <!-- 标签页 2: 动态表情 -->
+        <div id="pane-emotion" class="ctrl-pane" style="display:none;">
+          <div class="control-section">
+            <div class="section-title">12 款动态情绪表情切换</div>
+            <div class="btn-grid" style="grid-template-columns: repeat(3, 1fr); gap:6px;">
+              <button class="btn" onclick="setEmotion('NORMAL')">😊 常规</button>
+              <button class="btn" onclick="setEmotion('HAPPY')">😄 开心</button>
+              <button class="btn" onclick="setEmotion('LOVE')">❤️ 爱意</button>
+              <button class="btn" onclick="setEmotion('WINK')">😉 眨眼</button>
+              <button class="btn" onclick="setEmotion('CONFUSED')">🤔 困惑</button>
+              <button class="btn" onclick="setEmotion('THINKING')">🧐 思考</button>
+              <button class="btn" onclick="setEmotion('SURPRISED')">😳 吃惊</button>
+              <button class="btn" onclick="setEmotion('SLEEPY')">😴 困倦</button>
+              <button class="btn" onclick="setEmotion('DIZZY')">🌀 眩晕</button>
+              <button class="btn" onclick="setEmotion('SAD')">🥺 委屈</button>
+              <button class="btn" onclick="setEmotion('ANGRY')">😡 愤怒</button>
+              <button class="btn" onclick="setEmotion('BLINK')">😑 闭目</button>
+            </div>
+            <button class="btn" style="margin-top: 8px; width: 100%; border-color: #ff007f; color: #ff4081; font-weight: bold; background: rgba(255, 64, 129, 0.08); display: flex; align-items: center; justify-content: center; gap: 6px; font-size:0.75rem;" onclick="openSvgGalleryModal()">
+              🎨 查看 / 下载 12 款动态 SVG 动图库
+            </button>
           </div>
         </div>
 
+        <!-- 标签页 3: 技能与认知 -->
+        <div id="pane-skills" class="ctrl-pane" style="display:none; display:flex; flex-direction:column; gap:10px;">
+          <!-- 伴侣记忆与主动关怀状态 -->
+          <div style="display:flex; gap:8px;">
+            <div id="memory-badge" style="flex:1; background:rgba(255,255,255,0.04); border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; font-size:0.75rem;">
+              <span style="color:var(--text-sub);">🧠 主人: <strong id="mem-name" style="color:var(--cyan);">胖虎</strong></span>
+              <span id="mem-intimacy" style="background:rgba(255, 176, 32, 0.15); color:#ffb020; border:1px solid #ffb020; border-radius:8px; padding:1px 5px; font-size:0.68rem;">Lv.1</span>
+            </div>
+            <div id="care-badge" onclick="toggleProactiveCare()" style="cursor:pointer; flex:1; background:rgba(255, 64, 129, 0.08); border:1px solid #ff4081; padding:6px 10px; border-radius:8px; display:flex; justify-content:center; align-items:center; font-size:0.75rem;" title="点击切换主动关怀守护">
+              <span id="care-badge-label" style="color:#ff4081; font-weight:600;">❤️ 主动关怀: 开启</span>
+            </div>
+          </div>
+
+          <!-- 插件生态 -->
+          <div class="control-section">
+            <div class="section-title">
+              <span>🧩 技能与插件中枢</span>
+              <button class="btn" style="padding:2px 8px; font-size:0.7rem; color:var(--cyan); border-color:rgba(0, 229, 255, 0.4); background:rgba(0, 229, 255, 0.1);" onclick="openSkillStoreModal()">🏪 技能应用商店</button>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-sub); display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span>🔌 <strong>已激活插件</strong>:</span>
+                <span id="pluginsCountBadge" style="color:var(--cyan); font-weight:600;">3 个</span>
+              </div>
+              <div id="installedPluginsBadges" style="display:flex; flex-wrap:wrap; gap:4px;">
+                <span class="btn" style="padding:2px 6px; font-size:0.7rem; color:#7ee787; border-color:#238636;">🌦️ weather</span>
+                <span class="btn" style="padding:2px 6px; font-size:0.7rem; color:#ff6700; border-color:#ff6700;">🏠 xiaomi_iot</span>
+                <span class="btn" style="padding:2px 6px; font-size:0.7rem; color:#7ee787; border-color:#238636;">📰 news_briefing</span>
+              </div>
+            </div>
+            <div style="border-top:1px dashed var(--border-color); padding-top:6px; font-size:0.75rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <span style="color:var(--text-sub);">⏰ 活跃闹钟与倒计时:</span>
+                <span id="remindersCountBadge" style="font-size:0.7rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:1px 6px; border-radius:10px;">0 个</span>
+              </div>
+              <div id="remindersList" style="display:flex; flex-direction:column; gap:4px; max-height:80px; overflow-y:auto;">
+                <div style="color:var(--text-sub); text-align:center; padding:2px 0;">暂无活跃闹钟</div>
+              </div>
+            </div>
+            <div style="border-top:1px dashed var(--border-color); padding-top:6px; font-size:0.75rem;">
+              <div style="color:var(--text-sub); margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+                <span>💃 自创动作库:</span>
+                <span id="actionsCountBadge" style="color:var(--cyan); font-weight:600;">1 个</span>
+              </div>
+              <div id="evolvedActionsBadges" style="display:flex; flex-wrap:wrap; gap:4px;">
+                <span class="btn" style="padding:2px 8px; font-size:0.7rem;" onclick="playEvolvedAction('SHY_DANCE')">💃 SHY_DANCE</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 元认知看板 -->
+          <div class="control-section">
+            <div class="section-title">
+              <span>🌱 元认知自进化看板</span>
+              <button class="btn" style="padding:2px 8px; font-size:0.7rem; color:#a371f7; border-color:rgba(163, 113, 247, 0.4); background:rgba(163, 113, 247, 0.1);" onclick="triggerNightlyReflection()" id="reflectBtn">🌙 触发反思</button>
+            </div>
+            <div style="font-size:0.75rem; display:flex; flex-direction:column; gap:4px; color:var(--text-sub); background:#161b22; padding:6px 10px; border-radius:6px; border:1px solid #30363d;">
+              <div>🕒 <strong style="color:var(--cyan);">作息习惯</strong>: <span id="habitsDesc" style="color:var(--text-main);">09:00 起床 · 14:00 易疲劳</span></div>
+              <div>🧠 <strong style="color:#a371f7;">记忆升华</strong>: <span id="reflectionDesc" style="color:#7ee787;">尚未进行夜间反思</span></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- 中间：3D 实体动力学主视窗 (屏幕贴合于 3D 机器人面部) -->
     <div class="panel">
-      <div class="panel-header">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span>🎮 3D 具身机械仿真 (Three.js WebGL)</span>
-          <span style="font-size: 0.72rem; background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); padding: 1px 6px; border-radius: 4px;">📺 面部 2.4" 屏幕动态纹理贴合</span>
+      <div class="panel-header" style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-weight:600; font-size:0.86rem;">🎮 3D 具身仿真</span>
+          <span style="font-size: 0.7rem; background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); padding: 1px 6px; border-radius: 4px;">2.4" 屏幕贴合</span>
         </div>
-        <div style="display:flex; align-items:center; gap:12px;">
-          <span id="current-emotion-tag" style="font-size: 0.8rem; color: var(--cyan); font-weight:600;">表情: NORMAL</span>
-          <span style="font-size: 0.75rem; color: var(--text-sub);">鼠标左键旋转 / 滚轮缩放</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span id="current-emotion-tag" style="font-size: 0.78rem; color: var(--cyan); font-weight:600;">表情: NORMAL</span>
         </div>
       </div>
       <div id="viewport-container">
         <canvas id="threejs-canvas"></canvas>
-        <div class="viewport-overlay">
-          <div>水平航向 (Pan): <span id="overlay-pan" style="color:var(--cyan);">90.0°</span></div>
-          <div>俯仰角度 (Tilt): <span id="overlay-tilt" style="color:var(--cyan);">90.0°</span></div>
-          <div>当前动作: <span id="overlay-action" style="color:#7ee787;">待机 (IDLE)</span></div>
-          <div>生命节律: <span id="overlay-fsm" style="color:#a371f7;">🫁 呼吸待机 (IDLE)</span></div>
+        <div class="viewport-overlay" style="display:flex; flex-direction:row; gap:8px; align-items:center; padding:4px 10px; border-radius:20px; font-size:0.75rem; background:rgba(13, 17, 23, 0.65); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,0.08);">
+          <span style="color:var(--cyan); font-weight:600;"><span id="overlay-pan">90.0°</span> / <span id="overlay-tilt">90.0°</span></span>
+          <span style="color:var(--border-color); font-size:0.6rem;">•</span>
+          <span id="overlay-action" style="color:#7ee787;">待机 (IDLE)</span>
+          <span style="color:var(--border-color); font-size:0.6rem;">•</span>
+          <span id="overlay-fsm" style="color:#a371f7;">🫁 呼吸待机 (IDLE)</span>
         </div>
 
         <div class="viewport-controls-bar">
-          <button class="view-btn" id="gazeToggleBtn" onclick="toggleGazeTracking()" title="开启后，机器人头部与眼球将跟随您的鼠标两级视线注视">👁️ 鼠标注视: 关</button>
-          <button class="view-btn" id="webcamGazeBtn" onclick="toggleWebcamGaze()" title="开启电脑真实摄像头，通过轻量级 YuNet 人脸检测实时驱动 3D 机器人头颈注视跟随">📷 电脑摄像头追踪: 关</button>
-          <button class="view-btn" onclick="setCameraView('close')">🎯 正面特写</button>
-          <button class="view-btn" onclick="setCameraView('front')">🔄 伴侣全景</button>
+          <button class="view-btn" id="gazeToggleBtn" onclick="toggleGazeTracking()" title="开启后，头部眼球跟随鼠标注视">👁️ 鼠标注视: 关</button>
+          <button class="view-btn" id="webcamGazeBtn" onclick="toggleWebcamGaze()" title="开启电脑真实摄像头人脸注视追踪">📷 摄像头追踪: 关</button>
+          <button class="view-btn" onclick="setCameraView('close')">🎯 特写</button>
+          <button class="view-btn" onclick="setCameraView('front')">🔄 全景</button>
         </div>
 
         <!-- 📷 电脑真实摄像头实时人脸注视追踪 HUD 监视小窗 -->
@@ -997,17 +1050,15 @@
         </div>
       </div>
       <div class="chat-panel-body">
-        <!-- 快捷场景提问气泡 -->
+        <!-- 快捷场景提问气泡 (单行横向丝滑滑动，释放对话纵向高度) -->
         <div class="quick-chips-container">
-          <div class="quick-chip" onclick="triggerTestProactiveCare('morning')" style="border-color: #ff4081; color: #ff4081; background: rgba(255, 64, 129, 0.1);">❤️ 体验主动关怀</div>
-          <div class="quick-chip" onclick="openXiaomiQRModal()" style="border-color: #ff6700; color: #ff6700; background: rgba(255, 103, 0, 0.1);">📱 米家扫码绑定</div>
-          <div class="quick-chip" onclick="sendQuickChip('帮我查一下有哪些米家设备')">🔍 查米家设备</div>
-          <div class="quick-chip" onclick="sendQuickChip('帮我开一下台灯')">💡 打开台灯</div>
-          <div class="quick-chip" onclick="sendQuickChip('今天天气怎么样？')">🌦️ 天气查询</div>
-          <div class="quick-chip" onclick="sendQuickChip('10秒后提醒我关火')">⏰ 倒计时闹钟</div>
+          <div class="quick-chip" onclick="sendQuickChip('今天天气怎么样？')">🌦️ 天气</div>
+          <div class="quick-chip" onclick="sendQuickChip('10秒后提醒我关火')">⏰ 倒计时</div>
           <div class="quick-chip" onclick="sendQuickChip('跳个害羞舞看看')">💃 害羞舞</div>
           <div class="quick-chip" onclick="sendQuickChip('讲个冷笑话逗我开心')">😄 讲笑话</div>
-          <div class="quick-chip" onclick="sendQuickChip('主人准备睡觉啦，晚安！')">😴 晚安作息</div>
+          <div class="quick-chip" onclick="sendQuickChip('帮我查一下有哪些米家设备')">🏠 米家设备</div>
+          <div class="quick-chip" onclick="triggerTestProactiveCare('morning')" style="border-color: rgba(255, 64, 129, 0.4); color: #ff4081;">❤️ 主动关怀</div>
+          <div class="quick-chip" onclick="openXiaomiQRModal()" style="border-color: rgba(255, 103, 0, 0.4); color: #ff6700;">📱 扫码绑定</div>
         </div>
 
         <!-- 独立对话视窗 (自适应撑满高度) -->
@@ -3210,6 +3261,34 @@
       if (modal) modal.style.display = modal.style.display === "none" ? "block" : "none";
     }
 
+    // 🎛️ 左侧调试控制台展开/收起切换 (释放极致 3D 沉浸视野)
+    function toggleLeftPanel() {
+      const mainEl = document.querySelector("main");
+      const btn = document.getElementById("toggleConsoleBtn");
+      if (!mainEl) return;
+      const isCollapsed = mainEl.classList.toggle("left-collapsed");
+      if (btn) {
+        btn.innerHTML = isCollapsed ? "🎛️ 展开调试" : "🎛️ 调试面板";
+        btn.style.background = isCollapsed ? "rgba(0, 229, 255, 0.12)" : "rgba(255, 255, 255, 0.06)";
+        btn.style.borderColor = isCollapsed ? "var(--cyan)" : "var(--border-color)";
+        btn.style.color = isCollapsed ? "var(--cyan)" : "var(--text-main)";
+      }
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+      }, 50);
+    }
+
+    // 🎛️ 调试控制台三联选项卡切换 (姿态动作 / 动态表情 / 技能生态)
+    function switchControlTab(tabKey) {
+      const tabs = ["motion", "emotion", "skills"];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`btn-panel-${t}`);
+        const pane = document.getElementById(`pane-${t}`);
+        if (btn) btn.classList.toggle("active", t === tabKey);
+        if (pane) pane.style.display = (t === tabKey ? (t === "skills" ? "flex" : "block") : "none");
+      });
+    }
+
     let _settingsDebounceTimer = null;
     function onAudioSettingsChange() {
       const tSlider = document.getElementById("setting-thresh-slider");
@@ -3822,7 +3901,6 @@
       </div>
     </div>
   </div>
-  </script>
 
   <!-- 动态 SVG 动图库画廊弹窗 -->
   <div id="svgGalleryModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
