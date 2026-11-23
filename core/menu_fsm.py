@@ -85,7 +85,7 @@ class MenuFSM:
         self.xiaomi_device_count = 0
 
         # 锁与监听器
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self.state_change_listeners: List[Callable[[Dict[str, Any]], None]] = []
         
         # 加载中文字体

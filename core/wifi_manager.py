@@ -41,7 +41,7 @@ def get_local_ip() -> str:
 
 class WiFiManager:
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self.ap_mode = False
         self.ap_ssid = "PIG-Setup-8090"
         self.ap_password = "88888888"

@@ -144,6 +144,20 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
+    def log_message(self, format, *args):
+        # 过滤高频轮询心跳请求，避免控制台与后台任务缓冲区被刷屏
+        if args and len(args) > 0:
+            req_line = str(args[0])
+            for noisy_path in [
+                "/api/alarm_events", "/api/reminders", "/api/skills/store",
+                "/api/circadian", "/api/evolution/personality", "/api/evolved_actions",
+                "/api/memory", "/api/system/mode", "/api/proactive_care",
+                "/api/agent/events", "/api/menu/state", "/favicon.ico"
+            ]:
+                if noisy_path in req_line:
+                    return
+        super().log_message(format, *args)
+
     def do_HEAD(self):
         if self.path in ["/settings", "/settings.html"]:
             self.send_response(200)
