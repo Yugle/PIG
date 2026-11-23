@@ -656,28 +656,55 @@ class MenuFSM:
             draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
             draw.text((24, 298), "[▲▼] 移动    [OK] 切换    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
-        # E. 系统设置界面 (SYSTEM: 版本号/更新/关机/重启)
+        # E. 系统设置界面 (SYSTEM: 版本号/更新/关机/重启/认主)
         elif self.current_mode == "SYSTEM":
             draw.text((16, 16), "04 / SYSTEM", fill=(150, 150, 155), font=self.font_small)
             draw.text((192, 16), "CONFIG", fill=(110, 110, 115), font=self.font_small)
 
-            y = 48
+            y = 44
             for idx, item in enumerate(self.system_items):
                 is_selected = (idx == self.cursor)
                 if is_selected:
-                    draw.rounded_rectangle([14, y, 226, y + 48], radius=8, fill=(255, 255, 255))
-                    draw.text((24, y + 8), f"0{idx+1}  {item['name']}", fill=(0, 0, 0), font=self.font_bold)
-                    draw.text((24, y + 28), str(item["val"]), fill=(70, 70, 75), font=self.font_small)
-                    draw.text((210, y + 14), "›", fill=(0, 0, 0), font=self.font_bold)
+                    draw.rounded_rectangle([14, y, 226, y + 42], radius=6, fill=(255, 255, 255))
+                    draw.text((24, y + 5), f"0{idx+1}  {item['name']}", fill=(0, 0, 0), font=self.font_bold)
+                    draw.text((24, y + 23), str(item["val"]), fill=(70, 70, 75), font=self.font_small)
+                    draw.text((210, y + 11), "›", fill=(0, 0, 0), font=self.font_bold)
                 else:
-                    draw.rounded_rectangle([14, y, 226, y + 48], radius=8, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
-                    draw.text((24, y + 8), f"0{idx+1}  {item['name']}", fill=(210, 210, 215), font=self.font_bold)
-                    draw.text((24, y + 28), str(item["val"]), fill=(120, 120, 125), font=self.font_small)
-                    draw.text((210, y + 14), "›", fill=(80, 80, 85), font=self.font_bold)
-                y += 56
+                    draw.rounded_rectangle([14, y, 226, y + 42], radius=6, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
+                    draw.text((24, y + 5), f"0{idx+1}  {item['name']}", fill=(210, 210, 215), font=self.font_bold)
+                    draw.text((24, y + 23), str(item["val"]), fill=(120, 120, 125), font=self.font_small)
+                    draw.text((210, y + 11), "›", fill=(80, 80, 85), font=self.font_bold)
+                y += 48
 
             draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
             draw.text((24, 298), "[▲▼] 选择    [OK] 执行    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
+
+        # F. 人脸录入倒计时/取景界面 (FACE_ENROLL)
+        elif self.current_mode == "FACE_ENROLL":
+            draw.text((16, 16), "FACE ID ENROLL", fill=(255, 200, 0), font=self.font_bold)
+            draw.text((192, 16), "04/04", fill=(110, 110, 115), font=self.font_small)
+
+            # 居中取景框
+            box_col = (255, 200, 0) if self.face_enroll_step > 0 else (34, 197, 94)
+            draw.rectangle([40, 52, 200, 212], outline=box_col, width=2)
+            cl = 14
+            draw.line([(40, 52), (40+cl, 52)], fill=(255, 255, 255), width=3)
+            draw.line([(40, 52), (40, 52+cl)], fill=(255, 255, 255), width=3)
+            draw.line([(200, 52), (200-cl, 52)], fill=(255, 255, 255), width=3)
+            draw.line([(200, 52), (200, 52+cl)], fill=(255, 255, 255), width=3)
+            draw.line([(40, 212), (40+cl, 212)], fill=(255, 255, 255), width=3)
+            draw.line([(40, 212), (40, 212-cl)], fill=(255, 255, 255), width=3)
+            draw.line([(200, 212), (200-cl, 212)], fill=(255, 255, 255), width=3)
+            draw.line([(200, 212), (200, 212-cl)], fill=(255, 255, 255), width=3)
+
+            # 倒计时显示
+            if self.face_enroll_step > 0:
+                draw.text((112, 115), str(self.face_enroll_step), fill=(255, 255, 255), font=self.font_bold)
+
+            # 状态文案
+            draw.text((28, 230), self.face_enroll_msg, fill=(255, 255, 255), font=self.font_bold)
+            draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
+            draw.text((24, 298), "[ESC] 取消返回", fill=(100, 100, 105), font=self.font_small)
 
         return img
 

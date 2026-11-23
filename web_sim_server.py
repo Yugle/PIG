@@ -114,6 +114,20 @@ from core.menu_fsm import menu_fsm
 menu_fsm.hal = hardware_agent.hal
 menu_fsm.agent = hardware_agent
 
+def _sim_register_master_face():
+    global _latest_webcam_frame
+    frame = None
+    if _latest_webcam_frame:
+        import cv2, numpy as np
+        nparr = np.frombuffer(_latest_webcam_frame, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    return face_tracker.register_master_face(frame)
+
+if skill_mgr:
+    skill_mgr.register_face_callback = _sim_register_master_face
+if hardware_agent:
+    hardware_agent.register_master_face = _sim_register_master_face
+
 def on_menu_state_broadcast(state_dict):
     on_agent_event_broadcast({
         "type": "menu_state",
