@@ -346,7 +346,7 @@ class HardwareAgent:
                 "status": self.STATE_AFTERGLOW,
                 "message": "✋ 主人摸头打断，已停止播报"
             })
-            self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "LOVE"})
+            self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "HAPPY"})
             if self.hal:
                 self.hal.set_angles(90, 80)
             import core.sound_effects as sound_effects
@@ -374,7 +374,7 @@ class HardwareAgent:
             "status": "TOUCHED",
             "message": "🥰 享受主人的摸头杀中..."
         })
-        self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "LOVE"})
+        self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "HAPPY"})
         if self.hal:
             self.hal.set_angles(90, 80)
 

@@ -2926,7 +2926,11 @@
         const res = await resp.json();
         if (res.success) {
           playChirp("wake_chime");
-          setEmotion("LOVE");
+          // 认主成功：微动开心眨眼反馈，并在 1.5 秒后自然回归 NORMAL 灵动大眼，不挂着夸张爱心眼
+          setEmotion("HAPPY");
+          setTimeout(() => {
+            setEmotion("NORMAL");
+          }, 1500);
           const idBadge = document.getElementById("faceIdText");
           if (idBadge) idBadge.innerHTML = `<span style="color:#ffb020; font-weight:600;">👑 主人 (100%)</span>`;
           alert("🎉 " + res.msg);
@@ -3409,8 +3413,9 @@
         this.chunkMap.clear();
         this.fallbackQueue = [];
         this.isFallbackPlaying = false;
-        if (this.audioCtx) {
-          this.nextStartTime = this.audioCtx.currentTime;
+        const ctx = this._getAudioContext();
+        if (ctx) {
+          this.nextStartTime = ctx.currentTime;
         } else {
           this.nextStartTime = 0;
         }
