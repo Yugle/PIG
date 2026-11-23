@@ -1,13 +1,13 @@
 [Unit]
-Description=Desktop Embodied AI Robot Agent
+Description=PIG Desktop Embodied AI Robot Agent & Twin Server
 After=network.target pigpiod.service
 Wants=pigpiod.service
 
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/desktop_robot
-ExecStart=/usr/bin/python3 /home/pi/desktop_robot/main_agent.py
+WorkingDirectory=/home/pi/pig
+ExecStart=/usr/bin/python3 /home/pi/pig/web_sim_server.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

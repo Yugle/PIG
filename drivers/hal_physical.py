@@ -1,4 +1,5 @@
 import time
+import threading
 import subprocess
 from PIL import Image
 from .hal_base import BaseRobotHAL
@@ -29,7 +30,7 @@ class PhysicalRobotHAL(BaseRobotHAL):
     使用 fswebcam / v4l2 捕获 USB 摄像头画面。
     """
 
-    def __init__(self, pan_pin=18, tilt_pin=13, spi_port=0, spi_device=0, dc_pin=25, rst_pin=22):
+    def __init__(self, pan_pin=18, tilt_pin=13, touch_pin=17, spi_port=0, spi_device=0, dc_pin=25, rst_pin=22):
         if pigpio is None:
             raise ImportError(
                 "未找到 pigpio 库，请在树莓派上运行: sudo apt install python3-pigpio 或 pip install pigpio"
@@ -43,9 +44,28 @@ class PhysicalRobotHAL(BaseRobotHAL):
 
         self.pan_pin = pan_pin
         self.tilt_pin = tilt_pin
+        self.touch_pin = touch_pin
         self.cur_pan = 90.0
         self.cur_tilt = 90.0
         self._cam = None  # 常驻摄像头句柄 (cv2.VideoCapture)
+
+        # 舵机防抖与防发热自动卸力定时器
+        self._detach_timer = None
+        self._detach_lock = threading.Lock()
+
+        # 触摸监听回调列表
+        self.touch_listeners = []
+        self._touch_cb_handle = None
+
+        # 初始化 TTP223 摸头传感器 (默认点动高电平有效)
+        if self.touch_pin is not None:
+            try:
+                self.pi.set_mode(self.touch_pin, pigpio.INPUT)
+                self.pi.set_pull_up_down(self.touch_pin, pigpio.PUD_DOWN)
+                self._touch_cb_handle = self.pi.callback(self.touch_pin, pigpio.RISING_EDGE, self._on_gpio_touch)
+                print(f"👆 [HAL-Physical] TTP223 摸头传感器已就绪 (GPIO {self.touch_pin})")
+            except Exception as e:
+                print(f"⚠️ [HAL-Physical] 摸头传感器初始化跳过: {e}")
 
         # 初始化 ST7789 2.4 寸 SPI 彩屏 (240x320)
         self.screen = None
@@ -63,6 +83,23 @@ class PhysicalRobotHAL(BaseRobotHAL):
         self.set_angles(90, 90, smooth=False)
         print("🤖 [HAL-Physical] 物理舵机与外设初始化完毕")
 
+    def _on_gpio_touch(self, gpio, level, tick):
+        """GPIO 边缘中断回调"""
+        self.trigger_touch()
+
+    def add_touch_listener(self, callback):
+        """注册摸头事件回调"""
+        if callback not in self.touch_listeners:
+            self.touch_listeners.append(callback)
+
+    def trigger_touch(self):
+        """触发触摸事件广播"""
+        for cb in list(self.touch_listeners):
+            try:
+                cb()
+            except Exception as e:
+                print(f"⚠️ [HAL-Physical] 触摸回调执行异常: {e}")
+
     def _angle_to_pulse(self, angle: float) -> int:
         """
         舵机角度转 PWM 脉宽 (SG90 通常 500us~2500us 对应 0°~180°)
@@ -70,7 +107,35 @@ class PhysicalRobotHAL(BaseRobotHAL):
         angle = max(10.0, min(170.0, float(angle)))
         return int(500 + (angle / 180.0) * 2000)
 
+    def _cancel_detach(self):
+        """取消待执行的卸力计划"""
+        with self._detach_lock:
+            if self._detach_timer:
+                self._detach_timer.cancel()
+                self._detach_timer = None
+
+    def _schedule_servo_detach(self, delay: float = 0.8):
+        """延迟自动释放 PWM 脉冲，杜绝 SG90 持续啸叫、发热与抖动"""
+        with self._detach_lock:
+            if self._detach_timer:
+                self._detach_timer.cancel()
+            self._detach_timer = threading.Timer(delay, self._detach_servos)
+            self._detach_timer.daemon = True
+            self._detach_timer.start()
+
+    def _detach_servos(self):
+        """真正切断舵机 PWM 脉宽输出"""
+        try:
+            if self.pi and self.pi.connected:
+                self.pi.set_servo_pulsewidth(self.pan_pin, 0)
+                self.pi.set_servo_pulsewidth(self.tilt_pin, 0)
+        except Exception:
+            pass
+
     def set_angles(self, pan: float, tilt: float, smooth: bool = True):
+        # 唤醒/重置卸力定时器
+        self._cancel_detach()
+
         # 物理机械行程限位保护
         pan = max(20.0, min(160.0, float(pan)))
         tilt = max(60.0, min(120.0, float(tilt)))
@@ -79,6 +144,7 @@ class PhysicalRobotHAL(BaseRobotHAL):
             self.pi.set_servo_pulsewidth(self.pan_pin, self._angle_to_pulse(pan))
             self.pi.set_servo_pulsewidth(self.tilt_pin, self._angle_to_pulse(tilt))
             self.cur_pan, self.cur_tilt = pan, tilt
+            self._schedule_servo_detach(0.8)
             return
 
         # 细分步长插值，消除瞬间加减速冲击
@@ -91,6 +157,8 @@ class PhysicalRobotHAL(BaseRobotHAL):
             time.sleep(0.015)
 
         self.cur_pan, self.cur_tilt = pan, tilt
+        # 到位后 0.8 秒自动卸力休眠
+        self._schedule_servo_detach(0.8)
 
     def display_face(self, pil_image: Image.Image):
         if self.screen is not None:
@@ -139,6 +207,17 @@ class PhysicalRobotHAL(BaseRobotHAL):
             return b""
 
     def close(self):
+        # 释放摸头传感器中断
+        if self._touch_cb_handle is not None:
+            try:
+                self._touch_cb_handle.cancel()
+            except Exception:
+                pass
+            self._touch_cb_handle = None
+
+        # 取消卸力定时器
+        self._cancel_detach()
+
         # 释放摄像头句柄
         if self._cam is not None:
             try:
@@ -148,7 +227,10 @@ class PhysicalRobotHAL(BaseRobotHAL):
             self._cam = None
 
         # 停用舵机信号输出，防止电机发热与持续蜂鸣
-        self.pi.set_servo_pulsewidth(self.pan_pin, 0)
-        self.pi.set_servo_pulsewidth(self.tilt_pin, 0)
-        self.pi.stop()
+        try:
+            self.pi.set_servo_pulsewidth(self.pan_pin, 0)
+            self.pi.set_servo_pulsewidth(self.tilt_pin, 0)
+            self.pi.stop()
+        except Exception:
+            pass
         print("🛑 [HAL-Physical] 树莓派硬件资源已释放")

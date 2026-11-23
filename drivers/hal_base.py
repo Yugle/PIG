@@ -39,3 +39,16 @@ class BaseRobotHAL(ABC):
         安全释放所有硬件/外设资源。
         """
         pass
+
+    def add_touch_listener(self, callback):
+        """
+        注册摸头传感器 (TTP223) 触摸事件监听回调。
+        :param callback: 无参函数 Callable[[], None]
+        """
+        pass
+
+    def trigger_touch(self):
+        """
+        手动或仿真触发一次触摸事件。
+        """
+        pass

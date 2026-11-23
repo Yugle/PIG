@@ -1,5 +1,5 @@
 """
-桌面具身 AI 伴侣 - 元认知自进化中枢 (evolution_engine.py)
+PIG 机器人 - 元认知自进化中枢 (evolution_engine.py)
 专为树莓派 3 极低算力架构设计：
 1. 0% 本地模型运算，轻量 JSON 原子存储 (circadian_profile.json & evolved_workflows.json)。
 2. 生物钟作息自学习 (Circadian Habit Tracker): 自动归纳主人早起、午后疲劳、深夜作息时段。
@@ -165,7 +165,7 @@ class EvolutionEngine:
 ---
 已有长期记忆事实：{existing_facts}
 
-请你作为伴侣的自主意识，进行夜间深度反思（Memory Consolidation），提取关键信息。
+请你作为PIG 的自主意识，进行夜间深度反思（Memory Consolidation），提取关键信息。
 严格输出如下 JSON 格式，绝不要包含其他文本或 markdown：
 {{
   "reflection_summary": "一句话概括今天主人的生活/工作状态与心情感受",
@@ -252,7 +252,7 @@ class EvolutionEngine:
         if not evolution_notes:
             return base_prompt
 
-        section = "\n【🌱 伴侣自主进化元认知看板】\n" + "\n".join(evolution_notes) + "\n"
+        section = "\n【🌱 PIG 自主进化元认知看板】\n" + "\n".join(evolution_notes) + "\n"
         return base_prompt + section
 
 

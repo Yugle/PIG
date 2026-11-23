@@ -32,7 +32,7 @@ tts = TTSEngine()
 
 app = FastAPI(
     title="Desktop Embodied AI Robot Remote API",
-    description="用于手机局域网或外部系统向伴侣机器人发送广播指令、表情及动作",
+    description="用于手机局域网或外部系统向PIG 机器人发送广播指令、表情及动作",
     version="1.0.0"
 )
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-小猪系统设置与个性化调节技能 (skills/system_config/main.py)
+PIG 系统设置与个性化调节技能 (skills/system_config/main.py)
 支持语音动态调整系统参数、开关硬件外设、个性化更名。
 """
 
@@ -72,7 +72,7 @@ def run(action="query", value="", **kwargs):
         status_text = "开启" if enable else "关闭"
         return {
             "status": "success",
-            "message": f"❤️ 主动关怀守护已经为你{status_text}！{'小猪会按时提醒你喝水休息～' if enable else '小猪已保持安静，只在唤醒时回应你。'}",
+            "message": f"❤️ 主动关怀守护已经为你{status_text}！{'PIG 会按时提醒你喝水休息～' if enable else 'PIG 已保持安静，只在唤醒时回应你。'}",
             "behavior": {"emotion": "HAPPY" if enable else "NORMAL", "action": "NOD"}
         }
 
@@ -91,10 +91,10 @@ def run(action="query", value="", **kwargs):
         }
 
     # 4. 设置机器人名字
-    if "bot" in act or "robot" in act or "名字" in act or "小猪" in act:
+    if "bot" in act or "robot" in act or "名字" in act or "pig" in act:
         new_name = str(value or "").strip()
         if not new_name:
-            new_name = "小猪"
+            new_name = "PIG"
         cfg["robot_name"] = new_name
         _save_config(cfg)
         _update_memory("bot_name", new_name)
@@ -112,7 +112,7 @@ def run(action="query", value="", **kwargs):
         status_text = "开启" if enable else "关闭"
         return {
             "status": "success",
-            "message": f"🎶 萌趣非语言音效已{status_text}！{'在交互时小猪会发出各种可爱的呼噜与轻鸣声~' if enable else '已进入静音无音效模式。'}",
+            "message": f"🎶 萌趣非语言音效已{status_text}！{'在交互时 PIG 会发出各种可爱的呼噜与轻鸣声~' if enable else '已进入静音无音效模式。'}",
             "behavior": {"emotion": "HAPPY" if enable else "NORMAL", "action": "NOD"}
         }
 
@@ -120,7 +120,7 @@ def run(action="query", value="", **kwargs):
     ft_state = "开启" if cfg.get("face_tracking", False) else "关闭"
     care_state = "开启" if cfg.get("proactive_care", True) else "关闭"
     u_name = cfg.get("user_name", "胖虎")
-    b_name = cfg.get("robot_name", "小猪")
+    b_name = cfg.get("robot_name", "PIG")
 
     return {
         "status": "success",

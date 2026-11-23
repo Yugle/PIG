@@ -1,4 +1,4 @@
-# 🤖 PIG 桌面具身 AI 伴侣 - 全景系统架构与电气连线拓扑
+# 🤖 PIG PIG 机器人 - 全景系统架构与电气连线拓扑
 
 > **版本**：v2.0.0 (Embodied Release)  
 > **适用平台**：树莓派 3B / 3B+ / 4B (Raspberry Pi OS 64-bit Lite) + PC WebGL 3D 数字孪生仿真平台  
@@ -17,11 +17,11 @@ flowchart TD
     end
 
     %% ======================= 第一层：认知大脑与智能中枢 =======================
-    subgraph Brain_Layer ["1. 具身认知大脑层 (Cognitive Brain & Reasoning)"]
+    subgraph Brain_Layer ["1. PIG 认知大脑层 (Cognitive Brain & Reasoning)"]
         LLM["🧠 认知大模型引擎 (Xiaomi MiMo-v2.6-Flash / 本地模型)"]
         Reasoner["⚡ ReAct 极速推理中枢 (AgentReasoner)<br/>• 动作指令：单轮投机执行直出 (FastPath ~1.2s)<br/>• 查询指令：首轮垫话 + 观测真实汇报<br/>• 严格防幻觉铁律 (真实 Observation 约束)"]
         PromptBuilder["📝 自适应提示词引擎 (PromptBuilder)<br/>• 指令型：15~35 字极简利落<br/>• 内容型 (笑话/故事)：80~200 字完整展开"]
-        Memory["🧠 海马体长期记忆 (MemoryManager)<br/>• 用户档案/画像 • 机器人名字 (小猪)<br/>• 生物钟昼夜节律 profile • 向量化记忆提取"]
+        Memory["🧠 海马体长期记忆 (MemoryManager)<br/>• 用户档案/画像 • 机器人名字 (PIG)<br/>• 生物钟昼夜节律 profile • 向量化记忆提取"]
     end
 
     %% ======================= 第二层：技能插件生态 =======================
@@ -44,7 +44,7 @@ flowchart TD
     subgraph HAL_Layer ["4. 统一硬件抽象层 (HAL - Hardware Abstraction)"]
         HAL_Sim["🖥️ HAL-Simulation (虚拟孪生驱动)<br/>(WebGL Head / Canvas Eyes / Virtual Audio)"]
         HAL_Real["🔌 HAL-Hardware (物理外设驱动)<br/>(RPi.GPIO / SPI fb / OpenCV V4L2 / ALSA)"]
-        MotionFSM["🤖 具身微动作状态机 (BehaviorFSM)<br/>• S曲线平滑加减速 • 昼夜生物钟 (发呆/打哈欠/伴睡)"]
+        MotionFSM["🤖 PIG 微动作状态机 (BehaviorFSM)<br/>• S曲线平滑加减速 • 昼夜生物钟 (发呆/打哈欠/伴睡)"]
         EyeRenderer["👀 240x320 动态眼球渲染 (SvgAnimator)<br/>(HAPPY / LOVE / WINK / SLEEP / DIZZY / NORMAL)"]
     end
 
@@ -206,7 +206,7 @@ sequenceDiagram
     actor User as 主人 (胖虎)
     participant HW as 物理硬件 (麦克风/触控/眼球/舵机)
     participant Pipeline as 流式交互管线 (Audio & SSE)
-    participant Brain as 具身大脑 (AgentReasoner & ReAct)
+    participant Brain as PIG 大脑 (AgentReasoner & ReAct)
     participant Skill as 技能中枢 (SkillManager)
     participant IoT as 米家生态 (MiHome / MIoT)
 
@@ -222,7 +222,7 @@ sequenceDiagram
     Pipeline->>Brain: 用户文本：“我米家都有什么设备？”
     
     Note over Brain: Round 1 推理：识别为查询类技能<br/>生成先行口头垫话 + 调度 xiaomi_iot
-    Brain-->>Pipeline: SSE push: type="thought" (具身大脑实时思考中...)
+    Brain-->>Pipeline: SSE push: type="thought" (PIG 大脑实时思考中...)
     Brain-->>Pipeline: SSE push: type="sentence" ("好嘞胖虎，我来看看你米家都有啥设备～")
     Pipeline->>HW: Y57 音箱 0.8s 极速朗读垫话（消除主人等待感）
 

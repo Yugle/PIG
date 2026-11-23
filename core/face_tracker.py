@@ -1,5 +1,5 @@
 """
-桌面具身 AI 伴侣机器人 - 人脸视觉注视与头部追踪中枢 (Gaze & Face Tracker)
+PIG 机器人 - 人脸视觉注视与头部追踪中枢 (Gaze & Face Tracker)
 基于轻量级 OpenCV YuNet 深度学习人脸模型 (仅 228KB，树莓派 3B CPU 纯软解 30~50ms)。
 具备两级拟人生理注视逻辑 (Two-tier Gaze Mechanism)：
 1. 小幅度偏移: 仅转动眼球瞳孔 (look_x, look_y)，脖子不动；

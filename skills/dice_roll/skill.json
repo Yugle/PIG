@@ -3,7 +3,7 @@
   "name": "随机掷骰子",
   "version": "1.0.0",
   "author": "AI Self-Evolved",
-  "category": "伴侣自进化",
+  "category": "PIG 自进化",
   "description": "掷出一个1到6点的随机骰子，用于日常趣味小互动",
   "parameters": {},
   "default_behavior": {

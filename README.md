@@ -1,4 +1,4 @@
-# 基于树莓派 3B 的桌面具身 AI 机器人 PIG 全栈落地工程指南
+# 基于树莓派 3B 的桌面 AI 机器人 PIG 全栈落地工程指南
 
 > 本项目只是一名老程序员用AI做的能想到的比较动人一封情书，就像电影《失控玩家》一样，把她的人物画像，你的语音，你们的故事注入到 PIG 里，PIG 会自己学习，学习她的习惯、她的作息，会记录她的不舒服，帮她定时喂猫，提醒她锅里煮的茶叶蛋马上好了。。。  
 > 叫 PIG 是因为，首先是基于 PI 的，其次做 PIG 的人是一只 🐖。  
@@ -35,7 +35,7 @@
    * 双层认知与持久化记忆中枢 (`core/memory_manager.py`)
    * 轻量技能与动作自进化中枢 (`core/skill_manager.py`)
    * 元认知自进化与海马体反思中枢 (`core/evolution_engine.py`)
-   * 具身交互多模态主中枢 (`main_agent.py`)
+   * PIG 多模态交互主中枢 (`main_agent.py`)
    * 3D WebGL 浏览器仿真系统 (`simulator/web_simulator.html` & `web_sim_server.py`)
    * 局域网远程代播服务 (`services/remote_server.py`)
    * OTA 自动化静默升级 (`services/ota_updater.py`)
@@ -60,11 +60,11 @@ flowchart TD
     end
 
     %% ======================= 第一层：认知大脑与智能中枢 =======================
-    subgraph Brain_Layer ["1. 具身认知大脑层 (Cognitive Brain & Reasoning)"]
+    subgraph Brain_Layer ["1. PIG 认知大脑层 (Cognitive Brain & Reasoning)"]
         LLM["🧠 认知大模型引擎 (Xiaomi MiMo-v2.6-Flash / 本地模型)"]
         Reasoner["⚡ ReAct 极速推理中枢 (AgentReasoner)<br/>• 动作指令：单轮投机执行直出 (FastPath ~1.2s)<br/>• 查询指令：首轮垫话 + 观测真实汇报<br/>• 严格防幻觉铁律 (真实 Observation 约束)"]
         PromptBuilder["📝 自适应提示词引擎 (PromptBuilder)<br/>• 指令型：15~35 字极简利落<br/>• 内容型 (笑话/故事)：80~200 字完整展开"]
-        Memory["🧠 海马体长期记忆 (MemoryManager)<br/>• 用户档案/画像 • 机器人名字 (小猪)<br/>• 生物钟昼夜节律 profile • 向量化记忆提取"]
+        Memory["🧠 海马体长期记忆 (MemoryManager)<br/>• 用户档案/画像 • 机器人名字 (PIG)<br/>• 生物钟昼夜节律 profile • 向量化记忆提取"]
     end
 
     %% ======================= 第二层：技能插件生态 =======================
@@ -87,7 +87,7 @@ flowchart TD
     subgraph HAL_Layer ["4. 统一硬件抽象层 (HAL - Hardware Abstraction)"]
         HAL_Sim["🖥️ HAL-Simulation (虚拟孪生驱动)<br/>(WebGL Head / Canvas Eyes / Virtual Audio)"]
         HAL_Real["🔌 HAL-Hardware (物理外设驱动)<br/>(RPi.GPIO / SPI fb / OpenCV V4L2 / ALSA)"]
-        MotionFSM["🤖 具身微动作状态机 (BehaviorFSM)<br/>• S曲线平滑加减速 • 昼夜生物钟 (发呆/打哈欠/伴睡)"]
+        MotionFSM["🤖 PIG 微动作状态机 (BehaviorFSM)<br/>• S曲线平滑加减速 • 昼夜生物钟 (发呆/打哈欠/伴睡)"]
         EyeRenderer["👀 240x320 动态眼球渲染 (SvgAnimator)<br/>(HAPPY / LOVE / WINK / SLEEP / DIZZY / NORMAL)"]
     end
 
@@ -151,7 +151,7 @@ sequenceDiagram
     actor User as 主人 (胖虎)
     participant HW as 物理硬件 (麦克风/触控/眼球/舵机)
     participant Pipeline as 流式交互管线 (Audio & SSE)
-    participant Brain as 具身大脑 (AgentReasoner & ReAct)
+    participant Brain as PIG 大脑 (AgentReasoner & ReAct)
     participant Skill as 技能中枢 (SkillManager)
     participant IoT as 米家生态 (MiHome / MIoT)
 
@@ -167,7 +167,7 @@ sequenceDiagram
     Pipeline->>Brain: 用户文本：“我米家都有什么设备？”
     
     Note over Brain: Round 1 推理：识别为查询类技能<br/>生成先行口头垫话 + 调度 xiaomi_iot
-    Brain-->>Pipeline: SSE push: type="thought" (具身大脑实时思考中...)
+    Brain-->>Pipeline: SSE push: type="thought" (PIG 大脑实时思考中...)
     Brain-->>Pipeline: SSE push: type="sentence" ("好嘞胖虎，我来看看你米家都有啥设备～")
     Pipeline->>HW: Y57 音箱 0.8s 极速朗读垫话（消除主人等待感）
 
@@ -195,11 +195,11 @@ sequenceDiagram
 | **主控板** | 树莓派 3B / 3B+ / 4B (自备) | 运行官方 64-bit Raspberry Pi OS Lite，TF 卡 16GB 以上 (Class 10) | 自备 |
 | **彩色屏幕** | **2.4寸 ST7789 8Pin 蓝板模块** | **认准：8针已焊接排针、不带触摸**（带触摸过厚装不进面罩），分辨率 $240 \times 320$ | ~13.1 元 |
 | **二轴脖子** | **SG90 二自由度云台套件** | 选**包含黑色支架 + 2 个 SG90 9g 舵机**整套（电流小防欠压，含安装螺丝与舵盘；追求金属齿可选 MG90S） | ~16.7 元 |
-| **视觉输入** | **1080P/720P USB 摄像头裸板模组** | **认准：720P 没有外壳 60度无畸变 1米线**（轻薄裸板约 10g，正卡小猪额头 9.5mm 圆孔，UVC 免驱） | ~25.9 元 |
+| **视觉输入** | **1080P/720P USB 摄像头裸板模组** | **认准：720P 没有外壳 60度无畸变 1米线**（轻薄裸板约 10g，正卡 PIG 额头 9.5mm 圆孔，UVC 免驱） | ~25.9 元 |
 | **声音输入** | **树莓派 USB 迷你麦克风 直插** | 超微型直插款（无线鼠标接收器大小），免驱即插即用，插树莓派后背全向收音 | ~7.4 元 |
 | **声音输出** | **Y57 型 USB 扩音小喇叭 (一线通)** | **认准：内置数字声卡+功放+喇叭一线通 (USB直头单线)**！免电池、免充电、零底噪、不占 3.5mm 孔 | ~16.2 元 |
 | **摸头感知** | **TTP223 电容触摸传感器模块** | **认准：一路触摸传感器/点动型 (已焊排针)**，贴在头壳内侧隔空感应，实现“摸头杀”亲密互动 | ~2.8 元 |
-| **接线耗材** | **杜邦线 20cm (母对母 40P)** | 20cm 黄金长度，保证小猪转头 180° 与俯仰点头时不绷紧、不卡线、不扯脱插针 | ~2.0 元 |
+| **接线耗材** | **杜邦线 20cm (母对母 40P)** | 20cm 黄金长度，保证 PIG 转头 180° 与俯仰点头时不绷紧、不卡线、不扯脱插针 | ~2.0 元 |
 | **整套总计** | **全套 6 大核心电子元器件** | **全部实测认证，直接加入购物车结算** | **约 93 元** |
 
 ---
@@ -337,7 +337,7 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 ```
 
-> ⚠️ **关键硬件防踩坑说明**：音频发声必须使用 **USB 数字喇叭 (Y57)**，**严禁使用 I2S 音频模块 (如 MAX98357A)**！因为树莓派的 I2S 时钟必须强占 `GPIO 18`，而水平舵机也必须占用 `GPIO 18` 硬件 PWM，若接入 I2S 会导致小猪一边说话舵机一边疯狂抽搐暴走！走 USB 总线即可完全解耦。
+> ⚠️ **关键硬件防踩坑说明**：音频发声必须使用 **USB 数字喇叭 (Y57)**，**严禁使用 I2S 音频模块 (如 MAX98357A)**！因为树莓派的 I2S 时钟必须强占 `GPIO 18`，而水平舵机也必须占用 `GPIO 18` 硬件 PWM，若接入 I2S 会导致 PIG 一边说话舵机一边疯狂抽搐暴走！走 USB 总线即可完全解耦。
 
 ---
 
@@ -585,7 +585,7 @@ ctl.!default {
 
 ```text
 pig/
-├── main_agent.py          # 具身多模态主程序 (语音唤醒/感知/决策/执行闭环)
+├── main_agent.py          # PIG 多模态主程序 (语音唤醒/感知/决策/执行闭环)
 ├── web_sim_server.py      # 3D 仿真 Web 服务器与可视化控制台 (端口 8090)
 ├── config.json            # 核心配置 (API Key, 舵机引脚, 外设参数)
 ├── requirements.txt       # Python 依赖清单
@@ -981,14 +981,14 @@ class MemoryManager:
 ```
 
 ### 10. 轻量技能与动作自进化中枢 (`skill_manager.py`)
-专为低算力、低内存设备（如树莓派 3，512MB~1GB 内存）量身定制，实现日常实用技能与具身元认知自进化：
+专为低算力、低内存设备（如树莓派 3，512MB~1GB 内存）量身定制，实现日常实用技能与元认知自进化：
 - **零算力负担架构**: 内存常驻占用 < 1MB，CPU 占用 < 0.1%（后台以严格 1.0 秒节拍轻量比对时间戳）。
 - **原子持久化保障**: 采用临时文件写入 + `os.replace` 原子替换，即便树莓派突发意外掉电拔插头，`reminders.json` 与 `evolved_actions.json` 也绝对不会发生数据截断或文件损坏。
 - **四大核心技能闭环**:
   1. **相对倒计时 (`set_timer`)**: 如“10分钟后提醒我喝水”，毫秒级时间戳触发。
   2. **绝对时间闹钟 (`set_alarm`)**: 如“明天早上8点叫我”、“下午3点提醒开会”，基于系统时钟自动跨天推算。
   3. **日程备忘管理 (`list_reminders` / `cancel_reminder`)**: 自然语言查询或按关键词模糊取消。
-  4. **具身动作自进化 (`evolve_action`)**: 允许大模型在云端针对复杂情感情境或用户口令，自主规划出全新舵机角度微调与眼部微表情序列（如自创 `SPIN_DANCE` 转圈舞），永久收录进本地动作库，下次随时复现！
+  4. **PIG 动作自进化 (`evolve_action`)**: 允许大模型在云端针对复杂情感情境或用户口令，自主规划出全新舵机角度微调与眼部微表情序列（如自创 `SPIN_DANCE` 转圈舞），永久收录进本地动作库，下次随时复现！
 - **多模态主动抢占通知**: 闹钟到点瞬间，机器人强制打断打瞌睡，抬头 75°，播放清脆唤醒铃声，双眼呈现 `SURPRISED` / `HAPPY`，并主动以 TTS 叫醒主人。
 
 ```python
@@ -1015,7 +1015,7 @@ class SkillManager:
 赋予机器人长期自我学习主人生活规律与深度情感沉淀的仿生机制：
 - **生物钟作息自学习 (Circadian Tracker)**:
   - 自动打点每日互动时间分布（`circadian_profile.json`），精准归纳主人通常的早起时间、午后犯困时间与深夜睡前时间；
-  - 在闲置或特定作息节点，自适应触发针对性具身关怀（如 14:00 提醒喝水活动、23:00 催促早睡）。
+  - 在闲置或特定作息节点，自适应触发针对性PIG 关怀（如 14:00 提醒喝水活动、23:00 催促早睡）。
 - **海马体夜间反思与记忆升华 (Nightly Reflection)**:
   - 模拟人类深度睡眠中的记忆固化过程，异步调用轻量云端推理，过滤日常琐碎对话，浓缩提炼出 1~2 条深层长效事实（如身体不适、饮食忌口、正在冲刺的交付任务）永久融入 `memory.json`；
   - 沉淀次日清晨主动关怀切入点，并自主对自身陪伴性格进行温和微调。
@@ -1034,11 +1034,11 @@ class EvolutionEngine:
         # ...
 ```
 
-### 12. 具身多模态交互主中枢 (`main_agent.py`)
+### 12. PIG 多模态交互主中枢 (`main_agent.py`)
 整合感知、认知中枢、P0~P3 生体灵动中枢、Skill 技能调用、元认知自进化、大模型推理与音画同步执行的完整事件主循环：
 
 ```python
-# 运行具身主中枢
+# 运行 PIG 主中枢
 python3 main_agent.py
 ```
 - **自动辨识真机/仿真**: 树莓派自动加载 `PhysicalRobotHAL`，PC 自动加载 MuJoCo `SimulationRobotHAL`。

@@ -1,5 +1,5 @@
 """
-桌面具身 AI 伴侣 - 核心大脑与元认知层 (core)
+PIG 机器人 - 核心大脑与元认知层 (core)
 """
 
 from .memory_manager import MemoryManager

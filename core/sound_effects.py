@@ -1,5 +1,5 @@
 """
-桌面具身 AI 伴侣机器人 - 非语言萌趣音效库 (Non-verbal Emotional Audio)
+PIG 机器人 - 非语言萌趣音效库 (Non-verbal Emotional Audio)
 无需外部网络资源，基于纯数学物理波形程序化生成（Procedural Audio）。
 包含：欢快啁啾、困惑咕噜、惊奇唧声、思考蜂鸣、清脆唤醒三和弦。
 """

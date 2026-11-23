@@ -1,0 +1,19 @@
+{
+  "id": "visual_qa",
+  "name": "多模态视觉之眼",
+  "version": "1.0.0",
+  "author": "Antigravity Lab",
+  "category": "视觉感知",
+  "description": "通过机器人的摄像头拍照并看懂现实世界。当主人询问'看看我手里拿的什么'、'帮我看看这是什么'、'看看我的穿搭'、'帮我看下说明书/包装'、'拍照看看'或任何需要机器人用眼睛观察现实世界时必须调用此技能。",
+  "parameters": {
+    "question": {
+      "type": "string",
+      "description": "主人针对当前视觉画面的提问或观察要求，如 '手里拿的是什么', '帮我看看我穿这身好看吗', '帮我看下这个包装上的字'",
+      "default": "请仔细观察这张照片，告诉我你看到了什么？"
+    }
+  },
+  "default_behavior": {
+    "emotion": "WINK",
+    "action": "LOOK_UP"
+  }
+}

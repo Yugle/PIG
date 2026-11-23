@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>桌面具身 AI 伴侣机器人 - 3D 仿真工作台</title>
+  <title>PIG - 3D 仿真工作台</title>
   <style>
     :root {
       --bg-dark: #0d1117;
@@ -359,7 +359,7 @@
       box-shadow: 0 0 10px var(--cyan-glow);
     }
 
-    /* 具身对话面板与气泡交互 */
+    /* PIG 对话面板与气泡交互 */
     .chat-panel-body {
       flex: 1;
       padding: 14px;
@@ -617,7 +617,7 @@
 
   <header style="padding: 10px 18px; background: rgba(13, 17, 23, 0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; z-index: 50;">
     <div class="brand" style="display: flex; align-items: center; gap: 10px;">
-      <span style="font-size: 1.15rem; font-weight: 700; background: linear-gradient(135deg, #00e5ff, #a371f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🤖 小猪伴侣</span>
+      <span style="font-size: 1.15rem; font-weight: 700; background: linear-gradient(135deg, #00e5ff, #a371f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🤖 PIG</span>
       <span class="badge" style="font-size: 0.7rem; background: rgba(0, 229, 255, 0.1); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); padding: 2px 8px; border-radius: 10px;">3D 孪生工作台</span>
     </div>
 
@@ -645,6 +645,8 @@
 
       <!-- 核心控制按钮组 -->
       <div style="display: flex; align-items: center; gap: 6px;">
+        <button id="touch-head-btn" onclick="triggerTouchHead()" style="background: linear-gradient(135deg, #ec4899, #f43f5e); color: white; border: none; border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(236, 72, 153, 0.35); transition: all 0.2s;" title="手掌轻抚机器人头顶 (摸头杀/语音打断)">🥰 摸摸头</button>
+        <button id="barge-in-btn" onclick="triggerBargeIn()" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" title="立即掐断当前正在进行的语音播报 (全双工打断)">🛑 打断播报</button>
         <button id="manual-wake-btn" onclick="triggerManualWake()" style="background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; border: none; border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35); transition: all 0.2s;" title="跳过唤醒词检测，直接手动唤醒机器人">⚡ 一键唤醒</button>
         <button id="toggleConsoleBtn" onclick="toggleLeftPanel()" style="background: rgba(255, 255, 255, 0.06); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" title="展开/收起左侧调试控制台 (释放沉浸式 3D 视野)">🎛️ 调试面板</button>
         <button id="system-settings-btn" onclick="openSystemSettingsModal()" style="background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid var(--cyan); border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" title="打开全栈系统设置中心">⚙️ 系统设置</button>
@@ -658,7 +660,7 @@
       <!-- 头部 -->
       <div style="background:linear-gradient(90deg, rgba(0, 229, 255, 0.15), rgba(163, 113, 247, 0.15)); padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center;">
         <div style="font-size:1.05rem; font-weight:bold; color:#00e5ff; display:flex; align-items:center; gap:8px;">
-          <span>⚙️ 具身机器人全栈系统设置中心</span>
+          <span>⚙️ PIG 系统设置中心</span>
           <span id="cfg-env-badge" style="font-size:0.7rem; background:rgba(0, 229, 255, 0.2); padding:2px 8px; border-radius:10px; font-weight:normal;">检测中...</span>
         </div>
         <span onclick="closeSystemSettingsModal()" style="cursor:pointer; color:#888; font-size:1.3rem; padding:0 4px; line-height:1;">✕</span>
@@ -680,7 +682,7 @@
         <div id="tab-persona" class="cfg-pane">
           <div style="margin-bottom:14px;">
             <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">机器人名字 (唤醒与自称):</label>
-            <input type="text" id="cfg-bot-name" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;" placeholder="小猪" />
+            <input type="text" id="cfg-bot-name" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;" placeholder="PIG" />
           </div>
           <div style="margin-bottom:14px;">
             <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">主人尊称 (机器人对您的称呼):</label>
@@ -737,7 +739,7 @@
           <div style="margin-bottom:14px;">
             <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">朗读语音音色 (TTS Voice):</label>
             <select id="cfg-tts-voice" style="width:100%; background:#1c2333; border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;">
-              <option value="冰糖">冰糖 (MiMo 甜美伴侣女声，高拟真度)</option>
+              <option value="冰糖">冰糖 (MiMo 甜美拟真女声)</option>
               <option value="zh-CN-XiaoyiNeural">微软 晓伊 (温柔治愈系女声，富有情感)</option>
               <option value="zh-CN-YunjianNeural">微软 云健 (阳光温暖年轻男声)</option>
               <option value="zh-CN-YunxiNeural">微软 云希 (活泼机灵男童萌音)</option>
@@ -832,11 +834,11 @@
   </div>
 
   <main>
-    <!-- 左侧：具身控制台 (姿态、动作、表情、技能生态、元认知) -->
+    <!-- 左侧：PIG 控制台 (姿态、动作、表情、技能生态、元认知) -->
     <div class="panel" id="left-control-panel">
       <div class="panel-header" style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px;">
         <div style="display:flex; align-items:center; gap:6px;">
-          <span style="font-weight:600; font-size:0.86rem;">🎛️ 调试控制台</span>
+          <span style="font-weight:600; font-size:0.86rem;">🎛️ PIG 控制台</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
           <button class="btn" style="padding: 2px 8px; font-size: 0.72rem;" onclick="resetAngles()" title="舵机角度归位到 90°">角度回正</button>
@@ -877,7 +879,7 @@
 
           <!-- 常用动作指令 -->
           <div class="control-section" style="margin-top:10px;">
-            <div class="section-title">预设具身动作触发</div>
+            <div class="section-title">预设动作触发</div>
             <div class="btn-grid">
               <button class="btn" onclick="triggerAction('NOD')">👏 赞同点头 (NOD)</button>
               <button class="btn" onclick="triggerAction('SHAKE')">🙅 疑惑摇头 (SHAKE)</button>
@@ -913,7 +915,7 @@
 
         <!-- 标签页 3: 技能与认知 -->
         <div id="pane-skills" class="ctrl-pane" style="display:none; display:flex; flex-direction:column; gap:10px;">
-          <!-- 伴侣记忆与主动关怀状态 -->
+          <!-- PIG 记忆与主动关怀状态 -->
           <div style="display:flex; gap:8px;">
             <div id="memory-badge" style="flex:1; background:rgba(255,255,255,0.04); border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; font-size:0.75rem;">
               <span style="color:var(--text-sub);">🧠 主人: <strong id="mem-name" style="color:var(--cyan);">胖虎</strong></span>
@@ -980,7 +982,7 @@
     <div class="panel">
       <div class="panel-header" style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px;">
         <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-weight:600; font-size:0.86rem;">🎮 3D 具身仿真</span>
+          <span style="font-weight:600; font-size:0.86rem;">🎮 3D PIG 机械仿真</span>
           <span style="font-size: 0.7rem; background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); padding: 1px 6px; border-radius: 4px;">2.4" 屏幕贴合</span>
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
@@ -1017,7 +1019,7 @@
           <div id="webcamStatusText" style="padding:4px 6px; font-size:0.7rem; color:var(--text-sub); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">正在捕获人脸...</div>
         </div>
 
-        <!-- 🔔 具身主动打断提醒弹窗 -->
+        <!-- 🔔 PIG 主动打断提醒弹窗 -->
         <div id="alarmAlertModal" style="display:none; position:absolute; top:20px; left:50%; transform:translateX(-50%); background:rgba(22, 27, 34, 0.96); border:2px solid #ffb020; box-shadow:0 0 25px rgba(255, 176, 32, 0.6); border-radius:12px; padding:12px 24px; z-index:100; text-align:center; min-width:300px; backdrop-filter:blur(8px); animation: pulseAlert 1.5s infinite alternate;">
           <div style="font-size:1.15rem; margin-bottom:4px; font-weight:bold; color:#ffb020;">🔔 <span id="alarmModalTitle">闹钟提醒到点啦！</span></div>
           <div id="alarmModalContent" style="color:#ffffff; font-size:0.95rem; margin-bottom:12px; font-weight:500;">主人，提醒你：关火！</div>
@@ -1037,11 +1039,11 @@
       </div>
     </div>
 
-    <!-- 右侧：具身对话与语音交互 (AI Brain 对话框) -->
+    <!-- 右侧：PIG 对话与语音交互 (AI Brain 对话框) -->
     <div class="panel" id="chatPanelContainer">
       <div class="panel-header" style="display:flex; align-items:center; justify-content:space-between; gap:6px; flex-wrap:nowrap; overflow:hidden;">
         <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1; overflow:hidden;">
-          <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:0.86rem;" title="💬 具身伴侣对话与交互">💬 对话交互</span>
+          <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:0.86rem;" title="💬 PIG 对话与交互">💬 对话交互</span>
           <span id="chatStatusPill" style="font-size:0.72rem; white-space:nowrap; flex-shrink:0; background:rgba(46, 160, 67, 0.15); color:#7ee787; border:1px solid #238636; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center;">就绪 (Online)</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
@@ -1064,7 +1066,7 @@
         <!-- 独立对话视窗 (自适应撑满高度) -->
         <div class="chat-box">
           <div class="chat-messages" id="chatLogs">
-            <div class="msg bot">你好！我是你的桌面具身 AI 伴侣。你可以跟我聊天，我会根据你说的话做出肢体动作和表情哦！</div>
+            <div class="msg bot">你好！我是 PIG。你可以跟我聊天，我会根据你说的话做出肢体动作和表情哦！</div>
           </div>
           <div class="chat-input-bar">
             <input type="text" id="chatInput" placeholder="输入文字，或点击麦克风说话..." onkeydown="if(event.key==='Enter') sendChat()">
@@ -2236,7 +2238,7 @@
     function clearChatLogs() {
       const chatLogs = document.getElementById("chatLogs");
       if (chatLogs) {
-        chatLogs.innerHTML = '<div class="msg bot">你好！历史消息已清空。我是你的桌面具身 AI 伴侣，有什么想对我说呢？</div>';
+        chatLogs.innerHTML = '<div class="msg bot">你好！历史消息已清空。我是 PIG，有什么想对我说呢？</div>';
       }
     }
 
@@ -2413,7 +2415,7 @@
 
       const botDiv = document.createElement("div");
       botDiv.className = "msg bot";
-      botDiv.innerHTML = '<span style="color:var(--text-sub);">💭 具身大脑实时思考中...</span>';
+      botDiv.innerHTML = '<span style="color:var(--text-sub);">💭 PIG 正在实时思考中...</span>';
       chatLogs.appendChild(botDiv);
       chatLogs.scrollTop = chatLogs.scrollHeight;
 
@@ -2559,7 +2561,7 @@
               fetchEvolvedActions();
             } else if (ev.type === "error") {
               stopThinkingCadence();
-              botDiv.innerHTML = `<div style="color:#f85149;">⚠️ 具身大脑交互异常: ${ev.message || "未知错误"}</div>`;
+              botDiv.innerHTML = `<div style="color:#f85149;">⚠️ PIG 交互异常: ${ev.message || "未知错误"}</div>`;
             }
           }
         }
@@ -3176,7 +3178,7 @@
           const cfg = await resp.json();
           currentSystemConfig = cfg;
 
-          document.getElementById("cfg-bot-name").value = cfg.bot_name || cfg.robot_name || "小猪";
+          document.getElementById("cfg-bot-name").value = cfg.bot_name || cfg.robot_name || "PIG";
           document.getElementById("cfg-user-name").value = cfg.user_name || "胖虎";
           document.getElementById("cfg-reply-len").value = String(cfg.max_reply_length || 200);
 
@@ -3240,8 +3242,8 @@
       saveBtn.innerText = "⏳ 正在保存...";
 
       const payload = {
-        robot_name: document.getElementById("cfg-bot-name").value.trim() || "小猪",
-        bot_name: document.getElementById("cfg-bot-name").value.trim() || "小猪",
+        robot_name: document.getElementById("cfg-bot-name").value.trim() || "PIG",
+        bot_name: document.getElementById("cfg-bot-name").value.trim() || "PIG",
         user_name: document.getElementById("cfg-user-name").value.trim() || "胖虎",
         max_reply_length: parseInt(document.getElementById("cfg-reply-len").value) || 200,
         face_tracking: document.getElementById("cfg-face-tracking").checked,
@@ -3369,6 +3371,34 @@
             btn.innerText = "⚡ 一键唤醒";
           }
         }, 2000);
+      }
+    }
+
+    async function triggerTouchHead() {
+      const btn = document.getElementById("touch-head-btn");
+      if (btn) {
+        btn.style.transform = "scale(0.92)";
+        setTimeout(() => { btn.style.transform = "none"; }, 200);
+      }
+      try {
+        await fetch("/api/touch", { method: "POST" });
+        console.log("👆 摸头事件已发送给机器人中枢");
+      } catch (e) {
+        console.error("摸头触发失败:", e);
+      }
+    }
+
+    async function triggerBargeIn() {
+      const btn = document.getElementById("barge-in-btn");
+      if (btn) {
+        btn.style.transform = "scale(0.92)";
+        setTimeout(() => { btn.style.transform = "none"; }, 200);
+      }
+      try {
+        await fetch("/api/stop", { method: "POST" });
+        console.log("🛑 全双工打断信号已发送给机器人中枢");
+      } catch (e) {
+        console.error("打断触发失败:", e);
       }
     }
 
@@ -3959,10 +3989,10 @@
       <div style="padding:16px 20px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
         <div>
           <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); display:flex; align-items:center; gap:8px;">
-            <span>🌐 开源社区技能市场 & ✨ 伴侣自进化工坊</span>
+            <span>🌐 开源社区技能市场 & ✨ PIG 自进化工坊</span>
             <span style="font-size:0.75rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:2px 8px; border-radius:12px;">社区开源生态 · 大模型现场编程 · 零重启热加载</span>
           </h3>
-          <p style="margin:4px 0 0; font-size:0.78rem; color:var(--text-sub);">公共通用技能可一键下载安装；长尾或私密需求可直接语音对小猪说“帮我新整一个xxx技能”，大模型现场手写代码并热加载为永久本能！</p>
+          <p style="margin:4px 0 0; font-size:0.78rem; color:var(--text-sub);">公共通用技能可一键下载安装；长尾或私密需求可直接语音对 PIG 说“帮我新整一个xxx技能”，大模型现场手写代码并热加载为永久本能！</p>
         </div>
         <button onclick="closeSkillStoreModal()" class="btn" style="font-size:1.1rem; padding:4px 10px; cursor:pointer;">✕</button>
       </div>

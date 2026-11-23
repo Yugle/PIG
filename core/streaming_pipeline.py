@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-桌面具身 AI 伴侣 - 高并发流式推理与即时断句音频合成流水线 (streaming_pipeline.py)
+PIG 机器人 - 高并发流式推理与即时断句音频合成流水线 (streaming_pipeline.py)
 核心机制：
 1. StreamingJsonReplyExtractor: 结构化 JSON 流式增量状态机提取器（避免读出 thought 和 skill 等内部字段）。
 2. SentenceChunker: 依据中英文标点进行流式断句切片（8~18字最佳听觉分块）。

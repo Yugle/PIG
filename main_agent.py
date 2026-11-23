@@ -75,11 +75,8 @@ tts = TTSEngine(
 
 import requests
 
-# 初始化百度智能云 ASR 语音识别
-asr_engine = None
-if cfg.get("baidu_api_key") and cfg.get("baidu_secret_key"):
-    asr_engine = BaiduASR(cfg["baidu_api_key"], cfg["baidu_secret_key"])
-    print("🎙️ [ASR 初始化] 百度智能云语音识别已就绪")
+from drivers.asr_engine import get_asr_engine
+asr_engine = get_asr_engine(cfg)
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -391,12 +388,12 @@ def run_loop():
     """主调度循环"""
     hal.display_face(eyes.render_eyes("NORMAL"))
     print("\n" + "="*50)
-    print("🤖 具身交互引擎已激活！")
+    print("🤖 PIG 交互引擎已激活！")
     print(f"🎵 非语言萌趣音效: 已激活 (Procedural Audio)")
     print(f"🫁 闲置呼吸状态机: 已激活 (Sine Wave Breathing & FSM)")
     print(f"👁️ 人脸视觉注视追踪: {'ON (开启)' if face_tracker.enabled else 'OFF (关闭)'}")
     if has_mic:
-        print("🔔 等待唤醒词唤醒 (如: 小猪小猪 / Hey Jarvis)...")
+        print("🔔 等待唤醒词唤醒 (如: PIG / Hey Jarvis)...")
     else:
         print("⌨️  已进入终端文字交互调试模式 (输入消息回车即可测试，输入 exit 退出)")
     print("="*50 + "\n")
@@ -409,7 +406,7 @@ def run_loop():
                 preds = oww_model.predict(audio_np)
 
                 if any(v > cfg.get("wakeword_threshold", 0.5) for v in preds.values()):
-                    print("\n🔔 [唤醒成功] 触发具身注意力机制！")
+                    print("\n🔔 [唤醒成功] 触发PIG 注意力机制！")
                     sound_effects.play_sound("wake_chime")
                     idle_fsm.notify_active()
                     oww_model.reset()

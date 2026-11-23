@@ -30,6 +30,20 @@ idle_fsm = IdleFSM()
 skill_mgr = SkillManager(storage_dir=DATA_DIR, memory_manager=mem)
 evolution_engine = EvolutionEngine(DATA_DIR, memory_manager=mem, skill_manager=skill_mgr)
 
+_latest_webcam_frame = None
+
+def get_latest_vision_frame():
+    """获取最新视觉帧字节流 (优先网页/客户端摄像头，其次硬件 HAL)"""
+    global _latest_webcam_frame
+    if _latest_webcam_frame:
+        return _latest_webcam_frame
+    if hardware_agent and hardware_agent.hal:
+        try:
+            return hardware_agent.hal.capture_image()
+        except Exception:
+            pass
+    return None
+
 def load_config():
     cfg_file = os.path.join(DIRECTORY, "config.json")
     if os.path.exists(cfg_file):
@@ -180,7 +194,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 try:
                     with open(os.path.join(DATA_DIR, "memory.json"), "r", encoding="utf-8") as f:
                         m_data = json.load(f)
-                        merged_info["bot_name"] = m_data.get("bot_name", "小猪")
+                        merged_info["bot_name"] = m_data.get("bot_name", "PIG")
                         merged_info["user_name"] = m_data.get("user_name", "胖虎")
                 except Exception:
                     pass
@@ -212,6 +226,28 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps(proactive_care.get_status(), ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 触发摸头杀或打断 (GET 调试通道)
+        if self.path == "/api/touch":
+            if hardware_agent:
+                if hasattr(hardware_agent.hal, "trigger_touch"):
+                    hardware_agent.hal.trigger_touch()
+                else:
+                    hardware_agent._on_touch_event()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "action": "touch_triggered"}, ensure_ascii=False).encode("utf-8"))
+            return
+
+        if self.path in ["/api/stop", "/api/barge_in"]:
+            if hardware_agent:
+                hardware_agent.stop_speaking()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "action": "barge_in_triggered"}, ensure_ascii=False).encode("utf-8"))
             return
 
         # 小米米家扫码绑定状态查询
@@ -505,6 +541,28 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self.send_error(500, str(e))
             return
+        # 摸头与全双工打断 POST 接口
+        if self.path == "/api/touch":
+            if hardware_agent:
+                if hasattr(hardware_agent.hal, "trigger_touch"):
+                    hardware_agent.hal.trigger_touch()
+                else:
+                    hardware_agent._on_touch_event()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "action": "touch_triggered"}, ensure_ascii=False).encode("utf-8"))
+            return
+
+        if self.path in ["/api/stop", "/api/barge_in"]:
+            if hardware_agent:
+                hardware_agent.stop_speaking()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "action": "barge_in_triggered"}, ensure_ascii=False).encode("utf-8"))
+            return
+
         # 人脸视觉注视追踪开关切换
         if self.path == "/api/face_tracking":
             content_length = int(self.headers.get("Content-Length", 0))
@@ -572,6 +630,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 if "," in img_data:
                     img_data = img_data.split(",", 1)[1]
                 img_bytes = base64.b64decode(img_data)
+                global _latest_webcam_frame
+                _latest_webcam_frame = img_bytes
                 import numpy as np
                 import cv2
                 nparr = np.frombuffer(img_bytes, np.uint8)
@@ -1008,9 +1068,9 @@ def run_server():
     http.server.ThreadingHTTPServer.allow_reuse_address = True
     with http.server.ThreadingHTTPServer(("", PORT), CustomHandler) as httpd:
         print("="*60)
-        print("🚀 [Web 3D 仿真工作台已就绪]")
+        print("🚀 [PIG 3D 仿真工作台已就绪]")
         print(f"👉 本地访问地址: http://localhost:{PORT}")
-        print("✨ 包含: 3D WebGL 机械实体视角 + 2.4寸动态眼球屏 + 具身动作交互")
+        print("✨ 包含: 3D WebGL 机械实体视角 + 2.4寸动态眼球屏 + PIG 动作交互")
         print("="*60)
         try:
             httpd.serve_forever()

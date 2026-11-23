@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-具身实体与数字孪生硬件智能体中枢 (hardware_agent.py)
+PIG 实体与数字孪生硬件智能体中枢 (hardware_agent.py)
 核心职能：
 1. 双模无缝支持：真机数字孪生模式 (Twin/Physical) vs 纯网页仿真模式 (Simulation)。
 2. 物理麦克风与 openWakeWord 离线唤醒词后台常驻监听。
@@ -35,6 +35,14 @@ if os.path.exists("/proc/device-tree/model"):
         pass
 
 
+_global_hardware_agent = None
+
+def get_hardware_agent() -> Optional["HardwareAgent"]:
+    """获取全局活跃的 HardwareAgent 实例"""
+    global _global_hardware_agent
+    return _global_hardware_agent
+
+
 class HardwareAgent:
     """
     真机硬件智能体与数字孪生中枢
@@ -56,6 +64,9 @@ class HardwareAgent:
         proactive_care=None,
         hal=None
     ):
+        global _global_hardware_agent
+        _global_hardware_agent = self
+
         self.cfg = config
         self.memory_manager = memory_manager
         self.skill_manager = skill_manager
@@ -92,11 +103,18 @@ class HardwareAgent:
         # 动作执行独占锁与时间戳 (动作优先级高于注视追踪)
         self._action_busy_until = 0.0
 
+        # 全双工打断 (Barge-in) 请求标记
+        self._interrupt_requested = False
+
         # 人脸视觉注视与两级头部追踪引擎
         self.face_tracker = FaceTracker(enabled=self.cfg.get("face_tracking", False))
 
         # 尝试初始化麦克风
         self._init_microphone()
+
+        # 注册 TTP223 摸头传感器与全双工打断回调
+        if hasattr(self.hal, "add_touch_listener"):
+            self.hal.add_touch_listener(self._on_touch_event)
 
     def _init_hal(self):
         """初始化物理驱动或轻量级仿真驱动"""
@@ -120,16 +138,16 @@ class HardwareAgent:
         return hal
 
     def _init_asr(self):
-        """初始化百度智能云 ASR"""
-        b_key = self.cfg.get("baidu_api_key")
-        b_sec = self.cfg.get("baidu_secret_key")
-        if b_key and b_sec:
-            try:
-                from drivers.asr_engine import BaiduASR
-                return BaiduASR(b_key, b_sec)
-            except Exception as e:
-                logger.warning(f"⚠️ [ASR] 百度语音识别加载失败: {e}")
-        return None
+        """初始化 ASR 语音识别引擎 (优先小米 MiMo 原生 ASR，兼容百度)"""
+        try:
+            from drivers.asr_engine import get_asr_engine
+            asr = get_asr_engine(self.cfg)
+            if asr:
+                logger.info(f"🎙️ [ASR] 语音识别引擎已就绪: {asr.__class__.__name__}")
+            return asr
+        except Exception as e:
+            logger.warning(f"⚠️ [ASR] 语音识别引擎初始化异常: {e}")
+            return None
 
     def _init_tts(self):
         """初始化 TTS 引擎"""
@@ -263,39 +281,122 @@ class HardwareAgent:
         import core.sound_effects as sound_effects
         sound_effects.play_sound("wake_chime", async_play=True)
 
-        def _wake_worker():
+        self._start_listening_flow(custom_intent=custom_intent)
+        return True
+
+    def _start_listening_flow(self, custom_intent: str = ""):
+        """执行录音 -> ASR -> 意图思考的标准倾听工作流"""
+        def _worker():
             if custom_intent:
                 self.process_voice_intent(custom_intent)
-            else:
-                self.state = self.STATE_LISTENING
-                self.emit_event("status_change", {
-                    "status": self.STATE_LISTENING,
-                    "message": "🎙️ 正在倾听主人说话..."
-                })
-                clip_path = self.record_audio_clip()
-                user_text = ""
-                if clip_path and os.path.exists(clip_path) and self.asr_engine:
-                    self.emit_event("status_change", {
-                        "status": self.STATE_THINKING,
-                        "message": "🔍 百度智能云语音识别转写中..."
-                    })
-                    user_text = self.asr_engine.recognize(clip_path)
+                return
 
-                if user_text:
-                    print(f"🎙️ [手动唤醒识别成功]: {user_text}", flush=True)
-                    threading.Thread(target=self.process_voice_intent, args=(user_text,), daemon=True).start()
-                else:
+            self.state = self.STATE_LISTENING
+            self.emit_event("status_change", {
+                "status": self.STATE_LISTENING,
+                "message": "🎙️ 正在倾听主人说话..."
+            })
+            clip_path = self.record_audio_clip()
+            user_text = ""
+            if clip_path and os.path.exists(clip_path) and self.asr_engine:
+                self.emit_event("status_change", {
+                    "status": self.STATE_THINKING,
+                    "message": "🔍 百度智能云语音识别转写中..."
+                })
+                user_text = self.asr_engine.recognize(clip_path)
+
+            if user_text:
+                print(f"🎙️ [识别成功]: {user_text}", flush=True)
+                threading.Thread(target=self.process_voice_intent, args=(user_text,), daemon=True).start()
+            else:
+                self.emit_event("status_change", {
+                    "status": self.STATE_IDLE,
+                    "message": "未能听清内容，已恢复待机监听"
+                })
+                self.emit_event("pose_sync", {"pan": 90, "tilt": 90, "emotion": "NORMAL"})
+                self.state = self.STATE_IDLE
+                if self.hal:
+                    self.hal.set_angles(90, 90)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def stop_speaking(self):
+        """立即掐断当前正在进行的语音播放 (Barge-in 打断)"""
+        self._interrupt_requested = True
+        if self.tts_engine:
+            try:
+                self.tts_engine.stop()
+            except Exception:
+                pass
+        self.emit_event("barge_in", {"action": "interrupted", "timestamp": time.time()})
+
+    def _on_touch_event(self):
+        """处理摸头传感器 (TTP223) 触摸事件"""
+        logger.info("👆 [Touch] 捕获到头顶摸头传感器 (TTP223) 信号")
+
+        # 1. 若当前正在播报语音，摸头作为全双工硬件打断 (Barge-in)
+        if self.state == self.STATE_SPEAKING:
+            logger.info("🛑 [Barge-in] 播报中检测到摸头，立即打断语音播放！")
+            self.stop_speaking()
+            self.state = self.STATE_AFTERGLOW
+            self.emit_event("status_change", {
+                "status": self.STATE_AFTERGLOW,
+                "message": "✋ 主人摸头打断，已停止播报"
+            })
+            self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "LOVE"})
+            if self.hal:
+                self.hal.set_angles(90, 80)
+            import core.sound_effects as sound_effects
+            sound_effects.play_sound("purr", async_play=True)
+
+            def _barge_recover():
+                time.sleep(1.2)
+                if self.state == self.STATE_AFTERGLOW:
+                    self.state = self.STATE_IDLE
                     self.emit_event("status_change", {
                         "status": self.STATE_IDLE,
-                        "message": "未能听清内容，已恢复待机监听"
+                        "message": "就绪 (Online)"
                     })
                     self.emit_event("pose_sync", {"pan": 90, "tilt": 90, "emotion": "NORMAL"})
-                    self.state = self.STATE_IDLE
                     if self.hal:
                         self.hal.set_angles(90, 90)
 
-        threading.Thread(target=_wake_worker, daemon=True).start()
-        return True
+            threading.Thread(target=_barge_recover, daemon=True).start()
+            return
+
+        # 2. 待机或余韵状态下，触发情感摸头杀
+        self.mark_action_playing(2.2)
+        self.emit_event("touch", {"action": "pet_head", "timestamp": time.time()})
+        self.emit_event("status_change", {
+            "status": "TOUCHED",
+            "message": "🥰 享受主人的摸头杀中..."
+        })
+        self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "LOVE"})
+        if self.hal:
+            self.hal.set_angles(90, 80)
+
+        import core.sound_effects as sound_effects
+        sound_effects.play_sound("purr", async_play=True)
+
+        if self.memory_manager:
+            try:
+                self.memory_manager.record_interaction()
+            except Exception:
+                pass
+
+        def _recover():
+            time.sleep(2.0)
+            if self.state in [self.STATE_IDLE, "TOUCHED"]:
+                self.state = self.STATE_IDLE
+                self.emit_event("status_change", {
+                    "status": self.STATE_IDLE,
+                    "message": "就绪 (Online)"
+                })
+                self.emit_event("pose_sync", {"pan": 90, "tilt": 90, "emotion": "NORMAL"})
+                if self.hal:
+                    self.hal.set_angles(90, 90)
+
+        threading.Thread(target=_recover, daemon=True).start()
 
     def trigger_proactive_care_payload(self, payload: Dict[str, Any]):
         """执行主动关怀载荷 (广播事件、移动姿态、播放音效与异步语音)"""
@@ -532,6 +633,7 @@ class HardwareAgent:
         if not user_text.strip():
             return
 
+        self._interrupt_requested = False
         self.state = self.STATE_THINKING
         self.emit_event("status_change", {
             "status": self.STATE_THINKING,
@@ -574,6 +676,10 @@ class HardwareAgent:
                 skill_manager=self.skill_manager,
                 evolution_engine=self.evolution_engine
             ):
+                if self._interrupt_requested:
+                    logger.info("🛑 [Barge-in] 收到打断信号，停止后续句子生成。")
+                    break
+
                 ev_type = ev.get("type")
                 if ev_type == "tool_start":
                     self.emit_event("tool_start", {"name": ev.get("name"), "args": ev.get("args")})
@@ -607,9 +713,12 @@ class HardwareAgent:
                                 self.tts_engine.play_async(tmp_chunk_path, dur)
                                 if self.hal:
                                     self.hal.set_angles(90, 85)
-                                # 等待本句音频完整播报完毕，避免流式断句重叠
+                                # 等待本句音频完整播报完毕，避免流式断句重叠；支持打断即停
                                 play_start = time.time()
                                 while self.tts_engine.is_playing() and (time.time() - play_start) < (dur + 0.5):
+                                    if self._interrupt_requested:
+                                        self.tts_engine.stop()
+                                        break
                                     time.sleep(0.05)
                             except Exception as e:
                                 logger.warning(f"音频播放异常: {e}")
@@ -628,6 +737,10 @@ class HardwareAgent:
             logger.error(f"语音指令处理异常: {e}")
             final_reply = f"抱歉主人，执行过程遇到异常错误：{e}，未能完成操作。"
             self.emit_event("done", {"reply": final_reply, "behaviors": []})
+
+        # 若中途被摸头或语音打断，跳过正常余韵，由打断处理逻辑恢复待机
+        if self._interrupt_requested:
+            return
 
         # 话毕进入 1.8 秒情感余韵与注视倾听
         self.state = self.STATE_AFTERGLOW
@@ -684,8 +797,32 @@ class HardwareAgent:
                 w_name = self.cfg.get("wakeword_model", "hey_jarvis")
                 threshold = float(self.cfg.get("wakeword_threshold", 0.20))
 
-                # 若当前处于非空闲状态 (思考中/语音播报中/余韵中)，继续平滑读取排空声卡缓冲区，刷新实时音量条，但不重复触发唤醒词
+                # 若当前处于非空闲状态 (思考中/语音播报中/余韵中)，继续平滑读取排空声卡缓冲区，刷新实时音量条
                 if self.state != self.STATE_IDLE:
+                    # 全双工语音打断检测 (Voice Barge-in)
+                    # 当机器人正在播报 (SPEAKING) 时，若主人大声喊出唤醒词打断 (置信度 > 0.38)
+                    if self.state == self.STATE_SPEAKING and self.oww_model:
+                        preds = self.oww_model.predict(audio_np)
+                        max_score = float(max(preds.values())) if preds else 0.0
+                        if max_score > max(0.38, threshold * 1.5):
+                            logger.info(f"🛑 [Voice Barge-in] 播报中监听到唤醒词打断 ({max_score:.2f})！掐断播报并进入倾听。")
+                            self.stop_speaking()
+                            self.last_waking_time = time.time()
+                            self.oww_model.reset()
+                            self.state = self.STATE_WAKING
+                            self.emit_event("status_change", {
+                                "status": self.STATE_WAKING,
+                                "wake_word": w_name,
+                                "message": f"✋ 主人语音打断：{w_name}！"
+                            })
+                            self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "HAPPY"})
+                            if self.hal:
+                                self.hal.set_angles(90, 80)
+                            import core.sound_effects as sound_effects
+                            sound_effects.play_sound("wake_chime", async_play=True)
+                            self._start_listening_flow()
+                            continue
+
                     meter_counter += 1
                     if meter_counter >= 2:
                         meter_counter = 0
@@ -754,38 +891,8 @@ class HardwareAgent:
                     import core.sound_effects as sound_effects
                     sound_effects.play_sound("wake_chime", async_play=True)
 
-                    # 2. 切换为 LISTENING，开始动态录音
-                    self.state = self.STATE_LISTENING
-                    self.emit_event("status_change", {
-                        "status": self.STATE_LISTENING,
-                        "message": "🎙️ 正在倾听主人说话..."
-                    })
-
-                    clip_path = self.record_audio_clip()
-
-                    # 3. 提交 ASR 转写
-                    user_text = ""
-                    if clip_path and os.path.exists(clip_path):
-                        if self.asr_engine:
-                            self.emit_event("status_change", {
-                                "status": self.STATE_THINKING,
-                                "message": "🔍 百度智能云语音识别转写中..."
-                            })
-                            user_text = self.asr_engine.recognize(clip_path)
-
-                    if user_text:
-                        print(f"🎙️ [识别成功]: {user_text}", flush=True)
-                        threading.Thread(target=self.process_voice_intent, args=(user_text,), daemon=True).start()
-                    else:
-                        print("未检测到有效语音内容，恢复待机", flush=True)
-                        self.emit_event("status_change", {
-                            "status": self.STATE_IDLE,
-                            "message": "未能听清内容，已恢复待机监听"
-                        })
-                        self.emit_event("pose_sync", {"pan": 90, "tilt": 90, "emotion": "NORMAL"})
-                        self.state = self.STATE_IDLE
-                        if self.hal:
-                            self.hal.set_angles(90, 90)
+                    # 2. 启动标准倾听流 (录音 -> ASR -> ReAct 闭环)
+                    self._start_listening_flow()
 
             except Exception as e:
                 logger.warning(f"麦克风监听循环异常: {e}")

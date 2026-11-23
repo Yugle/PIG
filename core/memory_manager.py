@@ -22,7 +22,7 @@ class MemoryManager:
 
         # 长期记忆结构
         self.long_term_data = {
-            "bot_name": "小猪",
+            "bot_name": "PIG",
             "user_name": "主人",
             "facts": [],
             "interaction_count": 0,
@@ -42,7 +42,7 @@ class MemoryManager:
                     self.long_term_data.update(saved)
             except Exception as e:
                 print(f"⚠️ [Memory] 读取 memory.json 失败: {e}")
-        self.long_term_data.setdefault("bot_name", "小猪")
+        self.long_term_data.setdefault("bot_name", "PIG")
         self.long_term_data.setdefault("user_name", "主人")
 
     def save(self):
@@ -58,7 +58,7 @@ class MemoryManager:
         """清空短期与长期记忆"""
         self.short_term_history = []
         self.long_term_data = {
-            "bot_name": "小猪",
+            "bot_name": "PIG",
             "user_name": "主人",
             "facts": [],
             "interaction_count": 0,
@@ -73,7 +73,7 @@ class MemoryManager:
         """显式修改机器人自身的名字/昵称"""
         name = (name or "").strip()
         if name and name not in ["你", "我", "什么", "谁", "无", "null", "none"]:
-            old_name = self.long_term_data.get("bot_name", "小猪")
+            old_name = self.long_term_data.get("bot_name", "PIG")
             self.long_term_data["bot_name"] = name
             self.save()
             return f"太好啦！我的名字已正式更改为【{name}】！以后我就叫【{name}】啦～"
@@ -90,8 +90,8 @@ class MemoryManager:
         return "无效的称呼，未能修改。"
 
     def _extract_facts(self, text: str):
-        """自动轻量提取主人的核心画像事实与伴侣自身命名 (无需额外消耗 LLM Token)"""
-        # 0. 匹配机器人自身的名字/昵称 (如“你叫小猪”、“以后叫你PIG”、“给你起名叫小猪”)
+        """自动轻量提取主人的核心画像事实与机器人自身命名 (无需额外消耗 LLM Token)"""
+        # 0. 匹配机器人自身的名字/昵称 (如“你叫 PIG”、“以后叫你阿强”、“给你起名叫小搭”)
         bot_name_match = re.search(r"(?:你叫|你的名字是|以后你的名字叫|以后叫你|给你起名叫|给你取名叫)\s*([a-zA-Z0-9\u4e00-\u9fa5]{2,10})", text)
         if bot_name_match:
             cand = bot_name_match.group(1).strip()
@@ -103,7 +103,7 @@ class MemoryManager:
         name_match = re.search(r"(?:我叫|我是(?!不是|想|觉得|说|在|要|看)|叫我|名字是|名字改成|改成|改名叫|换成|称呼我为|以后叫我)\s*([a-zA-Z\u4e00-\u9fa5]{2,10})", text)
         if name_match:
             cand = name_match.group(1).strip()
-            if cand not in ["小猪", "机器人", "搭子", "什么", "主人", "可以", "怎么"]:
+            if cand not in ["PIG", "机器人", "搭子", "什么", "主人", "可以", "怎么"]:
                 self.long_term_data["user_name"] = cand
                 self.save()
 
@@ -170,7 +170,7 @@ class MemoryManager:
 
     def build_prompt_with_memory(self, base_system_prompt: str, user_text: str = "") -> str:
         """将检索后的最相关长期记忆档案注入到系统提示词中"""
-        bot_name = self.long_term_data.get("bot_name", "小猪")
+        bot_name = self.long_term_data.get("bot_name", "PIG")
         user_name = self.long_term_data.get("user_name", "主人")
         intimacy = self.long_term_data.get("intimacy_level", 1)
         count = self.long_term_data.get("interaction_count", 0)
@@ -180,7 +180,7 @@ class MemoryManager:
 
         memory_section = f"""
 
-【伴侣身份与主人档案】
+【PIG 身份与主人档案】
 - 你的名字：【{bot_name}】 (主人问你叫什么名字或称呼你时，必须以此名字自称，如“我是{bot_name}”)
 - 主人称呼：【{user_name}】 (日常对话请自然亲切地称呼主人)
 - 亲密指数：Lv.{intimacy} (总互动已达 {count} 次)

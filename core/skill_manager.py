@@ -1,5 +1,5 @@
 """
-桌面具身 AI 伴侣 - 统一技能与插件中枢 (skill_manager.py)
+PIG 机器人 - 统一技能与插件中枢 (skill_manager.py)
 专为树莓派 3 (低内存/低算力) 量身打造的统一智能体技能体系：
 1. 原生核心技能 (Built-in Skills)：
    - 倒计时 (Timer)、时间闹钟 (Alarm)、日程提醒 (Reminder) 的秒级调度与事件抢占。
@@ -61,7 +61,7 @@ def run(symbol="BTC"):
         "parameters": {"item_name": {"type": "string", "description": "补充事项，如 '叶黄素', '温开水'", "default": "温开水"}},
         "default_behavior": {"emotion": "HAPPY", "action": "NOD"},
         "code_template": """def run(item_name="温开水"):
-    return f"已为你记录健康打卡：成功补充【{item_name}】一份！多喝水、多护眼，小猪会一直守护主人的健康活力！"
+    return f"已为你记录健康打卡：成功补充【{item_name}】一份！多喝水、多护眼，PIG 会一直守护主人的健康活力！"
 """
     },
     "dad_jokes": {
@@ -391,10 +391,10 @@ class SkillManager:
                 return False
         return False
 
-    # ------------------ 伴侣自进化现场编写 (LLM Self-Evolution) ------------------
+    # ------------------ PIG 自进化现场编写 (LLM Self-Evolution) ------------------
     def create_custom_skill(self, skill_id: str, name: str, description: str, code: str, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        方案3：伴侣自我编码自进化，现场动态编写并热加载一个全新的 Python 技能
+        方案3：PIG 自我编码自进化，现场动态编写并热加载一个全新的 Python 技能
         包含 AST 语法安全性校验与标准双文件契约封装
         """
         import re
@@ -424,9 +424,9 @@ class SkillManager:
             "id": clean_sid,
             "name": name or clean_sid,
             "version": "1.0.0",
-            "author": "AI Self-Evolved (伴侣自进化)",
+            "author": "AI Self-Evolved (PIG 自进化)",
             "category": "自创本能",
-            "description": description or f"由桌面伴侣自主进化的专属技能：{name}",
+            "description": description or f"由桌面PIG 自主进化的专属技能：{name}",
             "parameters": parameters or {},
             "default_behavior": {"emotion": "HAPPY", "action": "NOD"},
             "source": "self_evolved",
@@ -444,7 +444,7 @@ class SkillManager:
             self.load_installed_plugins()
             return {
                 "status": "ok",
-                "message": f"🎉 伴侣自进化成功！专属新技能【{meta['name']} ({clean_sid})】已现场编写并成功安装至 skills/{clean_sid}/！无需重启，即可立刻调用执行！"
+                "message": f"🎉 PIG 自进化成功！专属新技能【{meta['name']} ({clean_sid})】已现场编写并成功安装至 skills/{clean_sid}/！无需重启，即可立刻调用执行！"
             }
         except Exception as e:
             return {"status": "error", "message": f"持久化技能文件失败: {e}"}
@@ -489,8 +489,8 @@ class SkillManager:
             lines.append(f"- {sid}({param_str}): {desc}")
 
         lines.append(
-            "\n💡 【内置伴侣进化指令】:"
-            "\n- set_bot_name(name): 当主人给你（机器人自身）起名或改名（如“你叫小猪”、“以后你的名字叫PIG”、“给你起名叫小猪”）时调用，更新机器人自身名字。"
+            "\n💡 【内置 PIG 进化指令】:"
+            "\n- set_bot_name(name): 当主人给你（机器人自身）起名或改名（如“你叫 PIG”、“以后你的名字叫阿强”、“给你起名叫小搭”）时调用，更新机器人自身名字。"
             "\n- set_user_name(name): 当主人要求更名对主人的称呼（如“我叫张三”、“以后叫我阿珍”、“把我的名字改成胖虎”）时调用，更新长期档案。"
             "\n- create_skill(skill_id, name, description, code, parameters): 当主人要求你“新整一个技能/自创新功能/写新插件”时调用，你可自主生成 Python 代码 (必须包含 def run(**kwargs): 函数) 编写全新热加载技能！"
             "\n- install_skill(skill_id) / uninstall_skill(skill_id): 安装或卸载技能商店插件。"
@@ -501,7 +501,7 @@ class SkillManager:
 
     # ---------------- 闹钟与日程提醒 (Alarms & Timers) ----------------
     def register_trigger_callback(self, cb: Callable[[Dict[str, Any]], None]):
-        """注册闹钟/提醒触发时的具身抢占回调函数"""
+        """注册闹钟/提醒触发时的抢占回调函数"""
         with self.lock:
             self.trigger_callbacks.append(cb)
 

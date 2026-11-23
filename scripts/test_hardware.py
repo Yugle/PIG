@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-桌面具身 AI 伴侣机器人 - 硬件上电体检与外设接线自测工具 (test_hardware.py)
+PIG 机器人 - 硬件上电体检与外设接线自测工具 (test_hardware.py)
 用于在树莓派真实机上电后，一键诊断：
 1. pigpio 守护进程通信状态
 2. SG90 双自由度云台舵机旋转测试 (Pin 18 / 13)
@@ -160,9 +160,28 @@ def test_microphone_input():
         print(f"👉 修复方法: 检查 USB 麦克风是否插紧，运行 {YELLOW}arecord -l{RESET} 查看是否列出麦克风硬件")
         return False
 
+def test_touch_sensor(touch_pin=17):
+    print_header(f"5. 测试 TTP223 电容触摸传感器 (摸头杀 SIG: Pin 11 / GPIO {touch_pin})")
+    try:
+        import pigpio
+        pi = pigpio.pi()
+        if not pi.connected:
+            print(f"{YELLOW}[WARN] pigpio 守护进程未启动，跳过硬件引脚测试{RESET}")
+            return False
+        pi.set_mode(touch_pin, pigpio.INPUT)
+        pi.set_pull_up_down(touch_pin, pigpio.PUD_DOWN)
+        val = pi.read(touch_pin)
+        print(f"👆 GPIO {touch_pin} 摸头传感器引脚配置完成，当前电平状态: {'[HIGH/触摸中]' if val else '[LOW/未触摸]'}")
+        print(f"{GREEN}[PASS] TTP223 摸头传感器引脚与中断就绪！{RESET}")
+        pi.stop()
+        return True
+    except Exception as e:
+        print(f"{YELLOW}[NOTICE] 触摸传感器测试跳过: {e}{RESET}")
+        return False
+
 def main():
     print(f"\n{CYAN}============================================================{RESET}")
-    print(f"{GREEN}🤖 桌面具身 AI 伴侣 - 树莓派 3 硬件体检自测程序{RESET}")
+    print(f"{GREEN}🤖 PIG 机器人 - 树莓派 3 硬件体检自测程序{RESET}")
     print(f"{CYAN}============================================================{RESET}")
 
     results = {}
@@ -170,6 +189,7 @@ def main():
     results["ST7789 2.4寸屏幕"] = test_st7789_screen()
     results["声卡扬声器输出"] = test_audio_output()
     results["USB 麦克风录音"] = test_microphone_input()
+    results["TTP223 摸头传感器"] = test_touch_sensor()
 
     print_header("体检自测诊断汇总报告")
     for item, status in results.items():

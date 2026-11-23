@@ -1,5 +1,5 @@
 """
-桌面具身 AI 伴侣机器人 - 主动关怀守护中枢 (Proactive Care Engine)
+PIG 机器人 - 主动关怀守护中枢 (Proactive Care Engine)
 专为树莓派低算力架构设计：
 1. 0% 本地模型运算，轻量状态机与时间窗口自检。
 2. 晨间初见 (Morning Greeting): 结合昨日记忆反思（如身体不适、失眠、重要行程）进行针对性问候。
@@ -127,7 +127,7 @@ class ProactiveCareManager:
 
     def _clean_reflection_text(self, ref_care: str) -> str:
         """
-        清洗反思指令中的元指令（如'明天主动询问'、'保持温暖关心的语气'等），转化为自然亲切的第一人称伴侣对话
+        清洗反思指令中的元指令（如'明天主动询问'、'保持温暖关心的语气'等），转化为自然亲切的第一人称PIG 对话
         """
         if not ref_care:
             return ""

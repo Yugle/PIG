@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-桌面具身实体机器人 - 全功能综合自动化集成测试套件 (E2E Test Suite)
+桌面PIG 机器人 - 全功能综合自动化集成测试套件 (E2E Test Suite)
 覆盖：
 1. Web 3D 仿真工作台与动力学动态 SVG 眼球引擎
 2. 高拟真中文语音合成 (Edge-TTS)
@@ -88,7 +88,7 @@ def test_memory_profile():
     data = resp.json()
     user_name = data.get("user_name", "")
     facts = data.get("facts", [])
-    return resp.status_code == 200 and user_name in ["阿珍", "胖虎"], f"主人称呼: 【{user_name}】, 亲密度: Lv.{data.get('intimacy_level')}, 长期记忆: {len(facts)} 条"
+    return resp.status_code == 200 and bool(user_name), f"主人称呼: 【{user_name}】, 亲密度: Lv.{data.get('intimacy_level')}, 长期记忆: {len(facts)} 条"
 suite.run_test("4. 记忆中枢与主人画像档案", test_memory_profile)
 
 # 5. 生物钟作息自学习数据

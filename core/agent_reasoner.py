@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-具身自主智能体认知与多轮推理中枢 (Embodied ReAct Agent Reasoner)
+PIG 自主智能体认知与多轮推理中枢 (Embodied ReAct Agent Reasoner)
 提供完整的 Reason + Act (思考 -> 动作 -> 观察 -> 下一步推理) 多轮认知闭环，
 彻底告别单轮大模型的假口嗨与虚假幻觉，实现跨步骤、跨工具的自主任务编排与执行。
 """

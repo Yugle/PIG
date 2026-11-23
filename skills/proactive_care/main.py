@@ -17,7 +17,7 @@ def execute(action="status", scene="morning", snooze_minutes=120, **kwargs):
         pcm.set_enabled(True)
         return {
             "status": "success",
-            "message": "❤️ 主动关怀守护已开启！小猪将在早晨醒来、久坐疲劳或深夜时主动送上贴心关怀与问候~",
+            "message": "❤️ 主动关怀守护已开启！PIG 将在早晨醒来、久坐疲劳或深夜时主动送上贴心关怀与问候~",
             "behavior": {"emotion": "HAPPY", "action": "NOD"}
         }
 
@@ -25,7 +25,7 @@ def execute(action="status", scene="morning", snooze_minutes=120, **kwargs):
         pcm.set_enabled(False)
         return {
             "status": "success",
-            "message": "🔕 主动关怀已关闭。小猪将保持安静，只在您呼唤唤醒词时进行应答。",
+            "message": "🔕 主动关怀已关闭。PIG 将保持安静，只在您呼唤唤醒词时进行应答。",
             "behavior": {"emotion": "NORMAL", "action": "NOD"}
         }
 
@@ -43,7 +43,7 @@ def execute(action="status", scene="morning", snooze_minutes=120, **kwargs):
         pcm.snooze(minutes=mins)
         return {
             "status": "success",
-            "message": f"🤫 收到！小猪已开启免打扰静音模式，接下来的 {mins} 分钟内绝不主动打扰您，请专注忙您的事情吧~",
+            "message": f"🤫 收到！PIG 已开启免打扰静音模式，接下来的 {mins} 分钟内绝不主动打扰您，请专注忙您的事情吧~",
             "behavior": {"emotion": "NORMAL", "action": "BOW"}
         }
 
@@ -51,7 +51,7 @@ def execute(action="status", scene="morning", snooze_minutes=120, **kwargs):
         pcm.unsnooze()
         return {
             "status": "success",
-            "message": "🔔 已为您解除免打扰，小猪恢复主动关怀守护！",
+            "message": "🔔 已为您解除免打扰，PIG 恢复主动关怀守护！",
             "behavior": {"emotion": "HAPPY", "action": "NOD"}
         }
 

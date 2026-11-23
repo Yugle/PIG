@@ -216,7 +216,7 @@
     "target_time_str": "2026-11-20 17:42:21",
     "display_str": "闹钟 [17:42]: 起床啦胖虎！",
     "repeat": "单次",
-    "completed": false,
+    "completed": true,
     "created_at": 1795167141.5215936
   },
   {
@@ -227,7 +227,62 @@
     "target_time_str": "2026-11-21 08:00:00",
     "display_str": "闹钟 [08:00]: 胖虎起床啦！",
     "repeat": "none",
-    "completed": false,
+    "completed": true,
     "created_at": 1795167222.3911517
+  },
+  {
+    "id": "alarm_dab8f0",
+    "type": "alarm",
+    "content": "起床啦胖虎",
+    "target_time": 1795219200.0,
+    "target_time_str": "2026-11-21 08:00:00",
+    "display_str": "闹钟 [08:00]: 起床啦胖虎",
+    "repeat": "on",
+    "completed": true,
+    "created_at": 1795168622.8919468
+  },
+  {
+    "id": "alarm_a96ba6",
+    "type": "alarm",
+    "content": "起床闹钟",
+    "target_time": 1795219200.0,
+    "target_time_str": "2026-11-21 08:00:00",
+    "display_str": "闹钟 [08:00]: 起床闹钟",
+    "repeat": "once",
+    "completed": true,
+    "created_at": 1795168690.889516
+  },
+  {
+    "id": "timer_8638e4",
+    "type": "timer",
+    "content": "关火",
+    "target_time": 1795169694.137414,
+    "target_time_str": "2026-11-20 18:14:54",
+    "display_str": "0分10秒倒计时: 关火",
+    "repeat": "none",
+    "completed": true,
+    "created_at": 1795169684.1384716
+  },
+  {
+    "id": "alarm_f40a34",
+    "type": "alarm",
+    "content": "起床闹钟",
+    "target_time": 1795219200.0,
+    "target_time_str": "2026-11-21 08:00:00",
+    "display_str": "闹钟 [08:00]: 起床闹钟",
+    "repeat": "once",
+    "completed": true,
+    "created_at": 1795170159.5744727
+  },
+  {
+    "id": "timer_063847",
+    "type": "timer",
+    "content": "测试泡茶提醒",
+    "target_time": 1795420555.2995603,
+    "target_time_str": "2026-11-23 15:55:55",
+    "display_str": "5分0秒倒计时: 测试泡茶提醒",
+    "repeat": "none",
+    "completed": true,
+    "created_at": 1795420255.2996438
   }
 ]

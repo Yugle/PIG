@@ -31,6 +31,7 @@ class SimulationRobotHAL(BaseRobotHAL):
     def __init__(self, model_path="scene.xml", headless=False, urdf_path=None, **kwargs):
         self.cur_pan = 90.0
         self.cur_tilt = 90.0
+        self.touch_listeners = []
         self.headless = headless or not bool(os.environ.get("DISPLAY"))
         self.has_mujoco = False
         self.model = None
@@ -99,20 +100,42 @@ class SimulationRobotHAL(BaseRobotHAL):
 
     def capture_image(self) -> bytes:
         if cv2 is not None:
+            now = time.time()
+            # 仿真环境下避免高频轮询不存在的宿主机 /dev/video0
+            if getattr(self, "_cam_unavailable", False) and (now - getattr(self, "_last_cam_check", 0) < 10.0):
+                return b""
             try:
+                self._last_cam_check = now
                 if not hasattr(self, "_cam") or self._cam is None or not self._cam.isOpened():
                     self._cam = cv2.VideoCapture(0)
                 if self._cam is not None and self._cam.isOpened():
+                    self._cam_unavailable = False
                     ret, frame = self._cam.read()
                     if ret and frame is not None:
                         success, buf = cv2.imencode(".jpg", frame)
                         if success:
                             return buf.tobytes()
+                else:
+                    self._cam_unavailable = True
             except Exception as e:
                 self._cam = None
+                self._cam_unavailable = True
 
         # 若无物理摄像头则返回空字节
         return b""
+
+    def add_touch_listener(self, callback):
+        """注册仿真摸头事件回调"""
+        if callback not in self.touch_listeners:
+            self.touch_listeners.append(callback)
+
+    def trigger_touch(self):
+        """仿真触发摸头事件"""
+        for cb in list(self.touch_listeners):
+            try:
+                cb()
+            except Exception as e:
+                print(f"⚠️ [HAL-Sim] 触摸回调执行异常: {e}")
 
     def close(self):
         if hasattr(self, "_cam") and self._cam is not None:

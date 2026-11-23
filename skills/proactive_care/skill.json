@@ -3,7 +3,7 @@
   "name": "主动关怀守护",
   "version": "1.0.0",
   "author": "Antigravity Lab",
-  "category": "伴侣情感",
+  "category": "情感关怀",
   "description": "控制桌面的主动关怀守护功能。支持开启、关闭、一键静音防打扰、查询状态或立即测试晨间初见、久坐疲劳与深夜伴睡关怀。",
   "parameters": {
     "action": {
