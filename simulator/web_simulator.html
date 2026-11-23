@@ -1785,8 +1785,8 @@
         }
       } else if (menuState.mode === "MENU_MAIN") {
         const mainLen = (menuState.main_menu_items && menuState.main_menu_items.length) || 4;
-        if (button === "K1") menuState.cursor = Math.max(0, menuState.cursor - 1);
-        else if (button === "K2") menuState.cursor = Math.min(mainLen - 1, menuState.cursor + 1);
+        if (button === "K1") menuState.cursor = (menuState.cursor - 1 + mainLen) % mainLen;
+        else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % mainLen;
         else if (button === "K4") menuState.mode = "FACE";
         else if (button === "K3") {
           if (menuState.cursor === 0) {
@@ -1821,8 +1821,8 @@
         if (button === "K4" || button === "K3") menuState.mode = "MENU_MAIN";
       } else if (menuState.mode === "TOGGLES") {
         const togLen = (menuState.toggle_items && menuState.toggle_items.length) || 3;
-        if (button === "K1") menuState.cursor = Math.max(0, menuState.cursor - 1);
-        else if (button === "K2") menuState.cursor = Math.min(togLen - 1, menuState.cursor + 1);
+        if (button === "K1") menuState.cursor = (menuState.cursor - 1 + togLen) % togLen;
+        else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % togLen;
         else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 2; }
         else if (button === "K3") {
           if (menuState.cursor === 0) menuState.is_mic_muted = !menuState.is_mic_muted;
@@ -1830,9 +1830,9 @@
           else if (menuState.cursor === 2) menuState.servo_sleeping = !menuState.servo_sleeping;
         }
       } else if (menuState.mode === "SYSTEM") {
-        const sysLen = (menuState.system_items && menuState.system_items.length) || 5;
-        if (button === "K1") menuState.cursor = Math.max(0, menuState.cursor - 1);
-        else if (button === "K2") menuState.cursor = Math.min(sysLen - 1, menuState.cursor + 1);
+        const sysLen = (menuState.system_items && menuState.system_items.length) || 6;
+        if (button === "K1") menuState.cursor = (menuState.cursor - 1 + sysLen) % sysLen;
+        else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % sysLen;
         else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 3; }
         else if (button === "K3") {
           const cur = (menuState.system_items && menuState.system_items[menuState.cursor]) || {};
@@ -2230,61 +2230,109 @@
         ctx.fillText("[▲▼] 移动    [OK] 切换    [ESC] 返回", 24, 306);
 
       } else if (menuState.mode === "SYSTEM") {
-        ctx.fillStyle = "#94949b";
-        ctx.font = "bold 11px monospace";
-        ctx.fillText("04 / SYSTEM", 16, 24);
-        ctx.fillStyle = "#686870";
-        ctx.fillText("CONFIG", 192, 24);
-
         const sysItems = menuState.system_items || [
+          { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定" },
+          { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗" },
           { id: "version", name: "系统固件版本", val: menuState.version || "v2.4.0" },
           { id: "update", name: "检查系统更新", val: menuState.update_status || "已是最新版本" },
           { id: "restart", name: "重启机器人服务", val: "平滑重载" },
           { id: "shutdown", name: "树莓派安全关机", val: "系统断电" }
         ];
 
-        let cy = 48;
-        sysItems.forEach((it, idx) => {
-          const isSel = (idx === menuState.cursor);
+        const total = sysItems.length;
+        const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
+
+        // 顶部标题与当前索引数字标牌 (例如 05/06)
+        ctx.fillStyle = "#94949b";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText("04 / SYSTEM", 16, 24);
+        ctx.fillStyle = "#ff6700";
+        ctx.font = "bold 11px monospace";
+        const countTxt = `${String(curIdx + 1).padStart(2, '0')}/${String(total).padStart(2, '0')}`;
+        ctx.fillText(countTxt, 186, 24);
+
+        // 可视窗口滚动计算 (一屏显示 4 项，保证光标在可视区内，边界自动平滑卷动)
+        const maxVisible = 4;
+        let startIdx = 0;
+        if (total > maxVisible) {
+          if (curIdx < 2) {
+            startIdx = 0;
+          } else if (curIdx >= total - 2) {
+            startIdx = total - maxVisible;
+          } else {
+            startIdx = curIdx - 1;
+          }
+          startIdx = Math.max(0, Math.min(startIdx, total - maxVisible));
+        }
+
+        const visibleItems = sysItems.slice(startIdx, startIdx + maxVisible);
+        let cy = 44;
+        const cardH = 50;
+        const cardGap = 6;
+        const cardW = (total > maxVisible) ? 204 : 216; // 右侧预留 12px 放置工业细轨滚动条
+
+        visibleItems.forEach((it, vIdx) => {
+          const realIdx = startIdx + vIdx;
+          const isSel = (realIdx === curIdx);
+
           if (isSel) {
             ctx.fillStyle = "#ffffff";
-            roundRect(ctx, 12, cy, 216, 48, 8, true);
+            roundRect(ctx, 12, cy, cardW, cardH, 6, true);
             ctx.fillStyle = "#000000";
             ctx.font = "bold 13px sans-serif";
-            ctx.fillText(`0${idx + 1}  ${it.name}`, 22, cy + 20);
+            ctx.fillText(`${String(realIdx + 1).padStart(2, '0')}  ${it.name}`, 22, cy + 20);
             ctx.fillStyle = "#55555c";
             ctx.font = "11px monospace";
             ctx.fillText(String(it.val), 22, cy + 38);
             ctx.fillStyle = "#000000";
             ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", 212, cy + 28);
+            ctx.fillText("›", cardW, cy + 28);
           } else {
             ctx.fillStyle = "#121215";
             ctx.strokeStyle = "#222226";
             ctx.lineWidth = 1;
-            roundRect(ctx, 12, cy, 216, 48, 8, true);
+            roundRect(ctx, 12, cy, cardW, cardH, 6, true);
             ctx.stroke();
             ctx.fillStyle = "#d1d1d6";
             ctx.font = "bold 13px sans-serif";
-            ctx.fillText(`0${idx + 1}  ${it.name}`, 22, cy + 20);
+            ctx.fillText(`${String(realIdx + 1).padStart(2, '0')}  ${it.name}`, 22, cy + 20);
             ctx.fillStyle = "#787880";
             ctx.font = "11px monospace";
             ctx.fillText(String(it.val), 22, cy + 38);
             ctx.fillStyle = "#4a4a50";
             ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", 212, cy + 28);
+            ctx.fillText("›", cardW, cy + 28);
           }
-          cy += 56;
+          cy += (cardH + cardGap);
         });
 
+        // 极简工业细轨滚动条 (仅在条目超出可视范围时显示)
+        if (total > maxVisible) {
+          const trackX = 224;
+          const trackY = 44;
+          const trackH = maxVisible * (cardH + cardGap) - cardGap; // 4 * 56 - 6 = 218
+          // 轨道槽
+          ctx.fillStyle = "#1c1c20";
+          roundRect(ctx, trackX, trackY, 4, trackH, 2, true);
+          // 滑块 (按比例缩放 + 动态计算位置)
+          const thumbH = Math.max(28, Math.round(trackH * (maxVisible / total)));
+          const maxThumbScroll = trackH - thumbH;
+          const thumbY = trackY + Math.round((startIdx / (total - maxVisible)) * maxThumbScroll);
+          ctx.fillStyle = "#ff6700";
+          roundRect(ctx, trackX, thumbY, 4, thumbH, 2, true);
+        }
+
+        // 底部防遮挡实色保护底栏 (确保绝对不会被任何菜单项遮挡重叠)
+        ctx.fillStyle = "#0a0a0c";
+        ctx.fillRect(0, 280, 240, 40);
         ctx.strokeStyle = "#222226";
         ctx.beginPath();
-        ctx.moveTo(16, 288);
-        ctx.lineTo(224, 288);
+        ctx.moveTo(16, 284);
+        ctx.lineTo(224, 284);
         ctx.stroke();
         ctx.fillStyle = "#66666e";
         ctx.font = "10px sans-serif";
-        ctx.fillText("[▲▼] 选择    [OK] 执行    [ESC] 返回", 24, 306);
+        ctx.fillText("[▲▼] 选择    [OK] 执行    [ESC] 返回", 24, 304);
       }
     }
 
