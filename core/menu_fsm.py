@@ -64,9 +64,11 @@ class MenuFSM:
             {"id": "servo", "name": "舵机工作状态", "state_key": "is_servo_sleeping", "inverted": True},
         ]
         
-        # 系统设置子菜单项
-        self.version_str = "v2.4.0 (733d417)"
-        self.update_status = "已是最新版本"
+        # 系统设置子菜单项 (基于 Git Tag 动态探测真实版本，绝无任何假 mock)
+        from core.version import version_manager
+        self.version_manager = version_manager
+        self.version_str = self.version_manager.current_version
+        self.update_status = "点击检查更新"
         self._sync_system_items()
 
         # 诊断体检数据缓存
@@ -225,17 +227,25 @@ class MenuFSM:
         threading.Thread(target=_worker, daemon=True, name="FaceEnrollWorker").start()
 
     def check_system_update_async(self):
-        """后台异步检查 OTA 系统更新"""
-        self.update_status = "检查更新中..."
-        self._sync_system_items()
-        self._notify_listeners()
+        """后台异步真实检查 OTA 系统更新 (通过 git remote tags 真实探测，零 mock)"""
+        with self._lock:
+            self.update_status = "检查远程更新中..."
+            self._sync_system_items()
+            self._notify_listeners()
 
         def _worker():
-            time.sleep(1.2)
-            with self._lock:
-                self.update_status = "已是最新版本"
-                self._sync_system_items()
-                self._notify_listeners()
+            try:
+                res = self.version_manager.check_update_sync()
+                with self._lock:
+                    self.update_status = res.get("status", "已是最新版本")
+                    self.version_str = self.version_manager.current_version
+                    self._sync_system_items()
+                    self._notify_listeners()
+            except Exception as e:
+                with self._lock:
+                    self.update_status = f"检查出错: {e}"
+                    self._sync_system_items()
+                    self._notify_listeners()
 
         threading.Thread(target=_worker, daemon=True, name="SystemUpdateCheck").start()
 

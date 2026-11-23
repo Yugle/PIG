@@ -1,0 +1,21 @@
+{
+  "id": "moyu_almanac",
+  "name": "工位打工人赛博摸鱼黄历",
+  "version": "1.0.0",
+  "author": "Moyu Master",
+  "category": "娱乐互动",
+  "description": "职场打工人专属运势：今日宜摸鱼、宜带薪喝水，忌提需求、忌临下班发版本。",
+  "parameters": {
+    "job_role": {
+      "type": "string",
+      "description": "岗位角色，如 程序员, 产品经理, 设计师, 打工人",
+      "default": "程序员"
+    }
+  },
+  "default_behavior": {
+    "emotion": "WINK",
+    "action": "SHAKE"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/moyu_almanac/main.py"
+}

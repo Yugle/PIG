@@ -1,0 +1,21 @@
+{
+  "id": "health_tea",
+  "name": "工位打工人四时养生茶饮指南",
+  "version": "1.0.0",
+  "author": "Health Hub",
+  "category": "身心健康",
+  "description": "针对久坐屏幕用眼过度、口干舌燥或熬夜疲惫，精准推荐四季花草茶与冲泡贴士。",
+  "parameters": {
+    "symptom": {
+      "type": "string",
+      "description": "身体调理需求，如 护眼防疲劳, 熬夜去火, 润喉利咽, 健脾除湿",
+      "default": "护眼防疲劳"
+    }
+  },
+  "default_behavior": {
+    "emotion": "HAPPY",
+    "action": "NOD"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/health_tea/main.py"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "dad_jokes",
+  "name": "每日爆笑冷笑话",
+  "version": "1.0.0",
+  "author": "Comedy Club",
+  "category": "娱乐互动",
+  "description": "随机点播精选谐音梗、程序员幽默或脱口秀笑话，驱散一天的工作疲惫。",
+  "parameters": {},
+  "default_behavior": {
+    "emotion": "HAPPY",
+    "action": "SHAKE"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/dad_jokes/main.py"
+}

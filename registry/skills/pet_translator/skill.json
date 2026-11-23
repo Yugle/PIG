@@ -1,0 +1,26 @@
+{
+  "id": "pet_translator",
+  "name": "萌宠心声喵汪趣味翻译器",
+  "version": "1.0.0",
+  "author": "Pet Whisperer",
+  "category": "娱乐互动",
+  "description": "依据猫咪或狗狗的肢体动作与叫声，趣味翻译爱宠的内心情绪与心声。",
+  "parameters": {
+    "pet": {
+      "type": "string",
+      "description": "猫咪 或 狗狗",
+      "default": "猫咪"
+    },
+    "action_type": {
+      "type": "string",
+      "description": "行为，如 咕噜咕噜, 喵喵直叫, 蹭裤腿, 摇尾巴",
+      "default": "蹭裤腿"
+    }
+  },
+  "default_behavior": {
+    "emotion": "LOVE",
+    "action": "NOD"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/pet_translator/main.py"
+}

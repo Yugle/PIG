@@ -1,0 +1,21 @@
+{
+  "id": "github_trending",
+  "name": "GitHub 今日开源 AI 热榜雷达",
+  "version": "1.0.0",
+  "author": "Octocat Fans",
+  "category": "数码极客",
+  "description": "实时抓取全网开发者正在关注的星标 AI 框架、开源大模型与热门开发者工具。",
+  "parameters": {
+    "topic": {
+      "type": "string",
+      "description": "ai, agent, python, rust",
+      "default": "ai"
+    }
+  },
+  "default_behavior": {
+    "emotion": "THINKING",
+    "action": "LOOK_UP"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/github_trending/main.py"
+}

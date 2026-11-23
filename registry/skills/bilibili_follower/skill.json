@@ -1,0 +1,21 @@
+{
+  "id": "bilibili_follower",
+  "name": "B站UP主粉丝数与播放监控",
+  "version": "1.0.0",
+  "author": "Bili Geek",
+  "category": "数码极客",
+  "description": "根据 UP 主 UID 实时播报最新粉丝增长数与获赞数据。",
+  "parameters": {
+    "mid": {
+      "type": "string",
+      "description": "UP主数字UID",
+      "default": "546195"
+    }
+  },
+  "default_behavior": {
+    "emotion": "HAPPY",
+    "action": "NOD"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/bilibili_follower/main.py"
+}

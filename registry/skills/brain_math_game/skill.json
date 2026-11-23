@@ -1,0 +1,21 @@
+{
+  "id": "brain_math_game",
+  "name": "24点益智心算挑战赛",
+  "version": "1.0.0",
+  "author": "Math Wizard",
+  "category": "益智对战",
+  "description": "随机抽取 4 个扑克牌数字，考考主人和机器人的心算反应力，寓教于乐。",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "出题 或 答案",
+      "default": "出题"
+    }
+  },
+  "default_behavior": {
+    "emotion": "THINKING",
+    "action": "NOD"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/brain_math_game/main.py"
+}

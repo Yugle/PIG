@@ -1667,8 +1667,8 @@
       face_tracking: true,
       servo_sleeping: false,
       local_ip: location.hostname || "127.0.0.1",
-      version: "v2.4.0 (733d417)",
-      update_status: "已是最新版本",
+      version: "--",
+      update_status: "点击检查更新",
       qr_base64: "",
       main_menu_items: [
         { num: "01", title: "无线与配网", desc: "AP热点配网 / 查IP / 手机设置" },
@@ -1679,8 +1679,8 @@
       system_items: [
         { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定" },
         { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗" },
-        { id: "version", name: "系统固件版本", val: "v2.4.0" },
-        { id: "update", name: "检查系统更新", val: "已是最新版本" },
+        { id: "version", name: "系统固件版本", val: "--" },
+        { id: "update", name: "检查系统更新", val: "点击检查更新" },
         { id: "restart", name: "重启机器人服务", val: "平滑重载" },
         { id: "shutdown", name: "树莓派安全关机", val: "系统断电" }
       ],
@@ -2255,8 +2255,8 @@
         const sysItems = menuState.system_items || [
           { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定" },
           { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗" },
-          { id: "version", name: "系统固件版本", val: menuState.version || "v2.4.0" },
-          { id: "update", name: "检查系统更新", val: menuState.update_status || "已是最新版本" },
+          { id: "version", name: "系统固件版本", val: menuState.version || "--" },
+          { id: "update", name: "检查系统更新", val: menuState.update_status || "点击检查更新" },
           { id: "restart", name: "重启机器人服务", val: "平滑重载" },
           { id: "shutdown", name: "树莓派安全关机", val: "系统断电" }
         ];
@@ -5197,9 +5197,11 @@
       renderSkillsView();
     }
 
-    async function loadSkillStoreCards() {
+    async function loadSkillStoreCards(forceRefresh = false) {
       try {
-        const resp = await fetch("/api/skills/store");
+        const url = forceRefresh ? "/api/skills/store?refresh=1" : "/api/skills/store";
+        if (forceRefresh) showToast("正在从 Gitee 开源社区同步最新技能列表...");
+        const resp = await fetch(url);
         if (resp.ok) {
           cachedSkillsData = await resp.json();
           const insCount = (cachedSkillsData.installed || []).length;
@@ -5210,9 +5212,11 @@
           if (tComm) tComm.innerText = `(${commCount})`;
 
           renderSkillsView();
+          if (forceRefresh) showToast(`同步完成，开源社区共 ${commCount} 项技能`);
         }
       } catch (e) {
         console.error("加载技能数据失败:", e);
+        if (forceRefresh) showToast("同步失败，请检查网络");
       }
     }
 
@@ -5253,6 +5257,19 @@
       }
 
       if (items.length === 0) {
+        if (currentSkillTab === "community" && !currentSkillSearch && currentSkillCategory === "all") {
+          container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; color:var(--text-sub); padding:40px 20px; font-size:0.88rem;">
+            <div style="font-size:2rem; margin-bottom:12px;">🌐</div>
+            <div style="font-weight:600; color:var(--text-main); margin-bottom:8px;">Gitee 在线开源社区暂无技能，或未能连通远程仓库</div>
+            <div style="font-size:0.75rem; color:var(--text-sub); font-family:monospace; margin-bottom:16px; word-break:break-all;">
+              https://gitee.com/yugle159357/pig/raw/main/registry/skills_registry.json
+            </div>
+            <button onclick="loadSkillStoreCards(true)" class="btn" style="padding:6px 16px; font-size:0.8rem; border-color:var(--cyan); color:var(--cyan); background:rgba(0, 229, 255, 0.1); cursor:pointer;">
+              🔄 强制从 Gitee 重新拉取
+            </button>
+          </div>`;
+          return;
+        }
         container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; color:var(--text-sub); padding:40px 0; font-size:0.85rem;">
           🔍 没有找到匹配的技能项目
         </div>`;
@@ -5634,9 +5651,14 @@
           </button>
         </div>
 
-        <!-- 实时搜索输入框 -->
-        <div style="position:relative; width:260px;" id="skillSearchWrapper">
-          <input type="text" id="skillSearchInput" placeholder="🔍 搜索技能、描述或开发者..." oninput="onSkillSearchInput()" style="width:100%; box-sizing:border-box; background:#0d1117; border:1px solid var(--border-color); border-radius:8px; padding:6px 10px; color:var(--text-main); font-size:0.78rem;">
+        <!-- 实时搜索输入框与刷新按钮 -->
+        <div style="display:flex; align-items:center; gap:8px;" id="skillSearchWrapper">
+          <div style="position:relative; width:230px;">
+            <input type="text" id="skillSearchInput" placeholder="🔍 搜索技能、描述或开发者..." oninput="onSkillSearchInput()" style="width:100%; box-sizing:border-box; background:#0d1117; border:1px solid var(--border-color); border-radius:8px; padding:6px 10px; color:var(--text-main); font-size:0.78rem;">
+          </div>
+          <button onclick="loadSkillStoreCards(true)" class="btn" title="强制从 Gitee 开源社区重新同步" style="font-size:0.78rem; padding:6px 10px; border-color:var(--border-color); color:var(--text-sub); display:flex; align-items:center; gap:4px; cursor:pointer;">
+            <span>🔄</span><span>同步</span>
+          </button>
         </div>
       </div>
 

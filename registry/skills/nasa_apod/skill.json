@@ -1,0 +1,21 @@
+{
+  "id": "nasa_apod",
+  "name": "NASA 每日天文一图与深空奥秘",
+  "version": "1.0.0",
+  "author": "Cosmic Voyager",
+  "category": "科普探索",
+  "description": "播报天文摄影大奖、深空星系、黑洞探索与太空探测的硬核宇宙浪漫。",
+  "parameters": {
+    "category": {
+      "type": "string",
+      "description": "今日天文一图, 系外行星, 詹姆斯韦伯, 火星探测",
+      "default": "今日天文一图"
+    }
+  },
+  "default_behavior": {
+    "emotion": "CONFUSED",
+    "action": "LOOK_UP"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/nasa_apod/main.py"
+}

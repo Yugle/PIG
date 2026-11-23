@@ -1,0 +1,21 @@
+{
+  "id": "desk_stretching",
+  "name": "工位肩颈拉伸操带练",
+  "version": "1.0.0",
+  "author": "Desk Fitness",
+  "category": "身心健康",
+  "description": "语音口令带练工位肩颈放松拉伸，联动小猪舵机上下点头、左右歪头做出同步动作示范！",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "拉伸动作：颈部侧拉, 仰头放松, 耸肩回环",
+      "default": "颈部侧拉"
+    }
+  },
+  "default_behavior": {
+    "emotion": "HAPPY",
+    "action": "LOOK_UP"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/desk_stretching/main.py"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "poetry_duel",
+  "name": "古诗词接龙与飞花令",
+  "version": "1.0.0",
+  "author": "Poetry Club",
+  "category": "文化互动",
+  "description": "经典飞花令诗词对决，支持“月”、“花”、“春”、“风”、“江”等经典意象对诗。",
+  "parameters": {
+    "keyword": {
+      "type": "string",
+      "description": "令字，如 月, 花, 春, 风, 江",
+      "default": "月"
+    }
+  },
+  "default_behavior": {
+    "emotion": "HAPPY",
+    "action": "NOD"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/poetry_duel/main.py"
+}

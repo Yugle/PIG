@@ -1,0 +1,21 @@
+{
+  "id": "med_tracker",
+  "name": "每日服药与补水打卡",
+  "version": "1.0.0",
+  "author": "Vitality Hub",
+  "category": "身心健康",
+  "description": "记录每日服药与饮水打卡，守护主人健康活力。",
+  "parameters": {
+    "item_name": {
+      "type": "string",
+      "description": "叶黄素, 温开水",
+      "default": "温开水"
+    }
+  },
+  "default_behavior": {
+    "emotion": "HAPPY",
+    "action": "NOD"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/med_tracker/main.py"
+}

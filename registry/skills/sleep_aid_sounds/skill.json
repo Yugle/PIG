@@ -1,0 +1,21 @@
+{
+  "id": "sleep_aid_sounds",
+  "name": "白噪音助眠与工位冥想",
+  "version": "1.0.0",
+  "author": "Zen Meditation",
+  "category": "身心健康",
+  "description": "播放窗外暴雨、山涧溪流、冬日篝火等大自然治愈白噪音引导，伴随闭眼呼吸微动舒缓身心。",
+  "parameters": {
+    "scene": {
+      "type": "string",
+      "description": "窗外暴雨, 山涧溪流, 冬日篝火, 深夜海浪",
+      "default": "窗外暴雨"
+    }
+  },
+  "default_behavior": {
+    "emotion": "SLEEPY",
+    "action": "NOD"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/sleep_aid_sounds/main.py"
+}

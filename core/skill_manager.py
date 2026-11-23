@@ -25,332 +25,8 @@ from typing import Dict, List, Optional, Callable, Any
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# 默认线上开源社区技能集散中心 (Online Skills Registry)
-DEFAULT_ONLINE_REGISTRY_URL = "https://raw.githubusercontent.com/antigravity-ai/companion-skills-hub/main/registry.json"
-
-# 社区精选线上技能目录（支持离线安全降级）
-COMMUNITY_FEATURED_REGISTRY: Dict[str, Dict[str, Any]] = {
-    "crypto_price": {
-        "id": "crypto_price",
-        "name": "加密货币实时行情",
-        "version": "1.1.0",
-        "author": "Community Geek",
-        "category": "金融行情",
-        "description": "实时查询 BTC、ETH、SOL 等加密货币最新价格与 24h 涨跌幅。",
-        "parameters": {"symbol": {"type": "string", "description": "代币代号，如 BTC, ETH, SOL", "default": "BTC"}},
-        "default_behavior": {"emotion": "THINKING", "action": "LOOK_UP"},
-        "code_template": """import requests
-
-def run(symbol="BTC"):
-    try:
-        s = (symbol or "BTC").strip().upper()
-        res = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={s}USDT", timeout=4).json()
-        price = float(res.get("price", 0))
-        return f"【加密货币实时行情】{s}/USDT 当前价格为: ${price:,.2f}"
-    except Exception as e:
-        return f"查询 {symbol} 行情网络稍有延迟，稍后再试～"
-"""
-    },
-    "stock_ticker": {
-        "id": "stock_ticker",
-        "name": "A股与全球实时盯盘",
-        "version": "1.2.0",
-        "author": "FinTech Quant",
-        "category": "金融行情",
-        "description": "实时监控上证指数、茅台、宁德时代或美股科技巨头最新价格与涨跌走势。",
-        "parameters": {"symbol": {"type": "string", "description": "股票代码或简称，如 sh000001, sh600519, 茅台, 大盘", "default": "sh000001"}},
-        "default_behavior": {"emotion": "WINK", "action": "NOD"},
-        "code_template": """import requests
-
-def run(symbol="sh000001"):
-    try:
-        s = (symbol or "sh000001").strip().lower()
-        alias_map = {"上证": "sh000001", "大盘": "sh000001", "上证指数": "sh000001", "深证": "sz399001", "深成指": "sz399001", "创业板": "sz399006", "茅台": "sh600519", "贵州茅台": "sh600519", "宁德时代": "sz300750"}
-        code = alias_map.get(s, s)
-        url = f"https://qt.gtimg.cn/q={code}"
-        r = requests.get(url, timeout=4)
-        if r.status_code == 200 and "~" in r.text:
-            parts = r.text.split("~")
-            name = parts[1]
-            price = parts[3]
-            diff = parts[31]
-            ratio = parts[32]
-            arrow = "🔴 涨" if float(diff) >= 0 else "🟢 跌"
-            return f"📈 【行情播报】{name} ({code}) 当前价: {price} 元 | 涨跌幅: {ratio}% ({arrow}{diff})"
-        return f"未能获取股票代码 {symbol} 的实时行情，请确认代码格式（如 sh000001 或 sh600519）。"
-    except Exception as e:
-        return f"查询股票行情网络稍有延迟: {e}"
-"""
-    },
-    "med_tracker": {
-        "id": "med_tracker",
-        "name": "每日服药与补水打卡",
-        "version": "1.0.0",
-        "author": "Vitality Hub",
-        "category": "身心健康",
-        "description": "记录每日服药与饮水打卡，守护主人健康活力。",
-        "parameters": {"item_name": {"type": "string", "description": "补充事项，如 '叶黄素', '温开水'", "default": "温开水"}},
-        "default_behavior": {"emotion": "HAPPY", "action": "NOD"},
-        "code_template": """def run(item_name="温开水"):
-    return f"已为你记录健康打卡：成功补充【{item_name}】一份！多喝水、多护眼，PIG 会一直守护主人的健康活力！"
-"""
-    },
-    "dad_jokes": {
-        "id": "dad_jokes",
-        "name": "每日爆笑冷笑话",
-        "version": "1.0.0",
-        "author": "Comedy Club",
-        "category": "娱乐互动",
-        "description": "随机点播精选谐音梗、程序员幽默或脱口秀笑话，驱散一天的工作疲惫。",
-        "parameters": {},
-        "default_behavior": {"emotion": "HAPPY", "action": "SHAKE"},
-        "code_template": """import random
-
-jokes = [
-    "问：为什么程序员总是分不清万圣节和圣诞节？\\n答：因为 Oct 31 == Dec 25！",
-    "问：一条咸鱼翻了身，会变成什么？\\n答：翻了身的咸鱼！哈哈哈哈～",
-    "问：皮卡丘站起来是什么？\\n答：皮卡兵！",
-    "问：什么植物最老实？\\n答：芭蕉，因为‘老实芭蕉’！",
-    "问：为什么电脑总是不想工作？\\n答：因为它有太多的‘Windows’要开！"
-]
-
-def run():
-    return f"😄 今日爆笑冷笑话来啦：\\n{random.choice(jokes)}"
-"""
-    },
-    "bilibili_follower": {
-        "id": "bilibili_follower",
-        "name": "B站UP主粉丝数与播放监控",
-        "version": "1.0.0",
-        "author": "Bili Geek",
-        "category": "数码极客",
-        "description": "根据 UP 主 UID 实时播报最新粉丝增长数与获赞数据。",
-        "parameters": {"mid": {"type": "string", "description": "UP 主数字 UID，如 '546195'", "default": "546195"}},
-        "default_behavior": {"emotion": "HAPPY", "action": "NOD"},
-        "code_template": """import requests
-
-def run(mid="546195"):
-    try:
-        url = f"https://api.bilibili.com/x/relation/stat?vmid={mid}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(url, headers=headers, timeout=5).json()
-        data = res.get("data", {})
-        follower = data.get("follower", 0)
-        return f"【B站数据播报】UID {mid} 当前粉丝总数: {follower:,} 位！"
-    except Exception as e:
-        return f"查询 B 站粉丝数据网络稍有延迟：{e}"
-"""
-    },
-    "github_trending": {
-        "id": "github_trending",
-        "name": "GitHub 今日开源 AI 热榜雷达",
-        "version": "1.0.0",
-        "author": "Octocat Fans",
-        "category": "数码极客",
-        "description": "实时抓取全网开发者正在关注的星标 AI 框架、开源大模型与热门开发者工具。",
-        "parameters": {"topic": {"type": "string", "description": "技术领域，如 'ai', 'agent', 'python', 'rust'", "default": "ai"}},
-        "default_behavior": {"emotion": "THINKING", "action": "LOOK_UP"},
-        "code_template": """import requests
-
-def run(topic="ai"):
-    try:
-        q = (topic or "ai").strip()
-        url = f"https://api.github.com/search/repositories?q={q}&sort=stars&order=desc&per_page=3"
-        headers = {"User-Agent": "PIG-Robot-Skill"}
-        res = requests.get(url, headers=headers, timeout=5).json()
-        items = res.get("items", [])
-        if not items:
-            return f"🔍 未检索到关于 {topic} 的热门项目。"
-        lines = [f"🚀 【GitHub Top 热门开源项目 · 领域: {topic}】"]
-        for i, it in enumerate(items, 1):
-            desc = it.get('description') or '无简介'
-            lines.append(f"{i}. 🌟 {it['full_name']} (★ {it['stargazers_count']:,})\\n   📝 {desc[:70]}...")
-        return "\\n".join(lines)
-    except Exception as e:
-        return f"获取 GitHub 热榜网络稍有延迟: {e}"
-"""
-    },
-    "moyu_almanac": {
-        "id": "moyu_almanac",
-        "name": "工位打工人赛博摸鱼黄历",
-        "version": "1.0.0",
-        "author": "Moyu Master",
-        "category": "娱乐互动",
-        "description": "职场打工人专属运势：今日宜摸鱼、宜带薪喝水，忌提需求、忌临下班发版本。",
-        "parameters": {"job_role": {"type": "string", "description": "岗位角色，如 '程序员', '产品经理', '设计师', '打工人'", "default": "程序员"}},
-        "default_behavior": {"emotion": "WINK", "action": "SHAKE"},
-        "code_template": """import random
-from datetime import datetime
-
-def run(job_role="程序员"):
-    yis = ["带薪喝水提神", "重构祖传代码", "准点下班打卡", "去茶水间偶遇咖啡", "戴耳机专注沉思", "优雅闭目养神"]
-    jis = ["临下班前发布版本", "直接推 master 分支", "在群里 @所有人", "空腹猛灌冰美式", "承诺周五提测", "开无意义长会"]
-    today = datetime.now().strftime("%Y年%m月%d日")
-    y_pick = random.sample(yis, 2)
-    j_pick = random.sample(jis, 2)
-    return f"📅 【PIG 赛博打工黄历 · {today}】\\n👤 测算角色: {job_role}\\n🟢 【宜】: {'、'.join(y_pick)}\\n🔴 【忌】: {'、'.join(j_pick)}\\n✨ 今日吉神方位: 茶水间！"
-"""
-    },
-    "pet_translator": {
-        "id": "pet_translator",
-        "name": "萌宠心声喵汪趣味翻译器",
-        "version": "1.0.0",
-        "author": "Pet Whisperer",
-        "category": "娱乐互动",
-        "description": "依据猫咪或狗狗的肢体动作与叫声，趣味翻译爱宠的内心情绪与心声。",
-        "parameters": {
-            "pet": {"type": "string", "description": "宠物类型：'猫咪' 或 '狗狗'", "default": "猫咪"},
-            "action_type": {"type": "string", "description": "行为特征，如 '咕噜咕噜', '喵喵直叫', '蹭裤腿', '摇尾巴', '嗷呜呜'", "default": "蹭裤腿"}
-        },
-        "default_behavior": {"emotion": "LOVE", "action": "NOD"},
-        "code_template": """import random
-
-def run(pet="猫咪", action_type="蹭裤腿"):
-    cat_quotes = [
-        "翻译结果：'两脚兽，本喵赏光让你摸一下下巴，还不快快奉上猫条！'",
-        "翻译结果：'我不是饿了，我只是想确认你在我的领地里很乖～'",
-        "翻译结果：'刚才跑酷是在捕捉赛博蝴蝶，你不懂艺术！'",
-        "翻译结果：'在你键盘上睡觉是因为键盘暖和，才不是喜欢你呢，哼！'"
-    ]
-    dog_quotes = [
-        "翻译结果：'汪汪！主人你终于看我啦！今天去公园玩飞盘好不好！'",
-        "翻译结果：'尾巴摇得停不下来，因为你就是我的全世界！'",
-        "翻译结果：'闻到了零食的味道，分我一口，就一口好不好嘛～'",
-        "翻译结果：'你出门上班的时候，我一直趴在门边想你！'"
-    ]
-    pool = cat_quotes if "猫" in str(pet) else dog_quotes
-    return f"🐾 【{pet}心声翻译器 ({action_type})】\\n{random.choice(pool)}"
-"""
-    },
-    "sleep_aid_sounds": {
-        "id": "sleep_aid_sounds",
-        "name": "白噪音助眠与工位冥想",
-        "version": "1.0.0",
-        "author": "Zen Meditation",
-        "category": "身心健康",
-        "description": "播放窗外暴雨、山涧溪流、冬日篝火等大自然治愈白噪音引导，伴随闭眼呼吸微动舒缓身心。",
-        "parameters": {"scene": {"type": "string", "description": "场景：'窗外暴雨', '山涧溪流', '冬日篝火', '深夜海浪'", "default": "窗外暴雨"}},
-        "default_behavior": {"emotion": "SLEEPY", "action": "NOD"},
-        "code_template": """def run(scene="窗外暴雨"):
-    scenes = {
-        "窗外暴雨": "🌧️ 滴答... 滴答... 窗外雨势渐起，雨滴轻敲在窗台玻璃上。屋里暖黄的灯光温柔包裹着你。闭上双眼，深吸一口气...",
-        "山涧溪流": "🍃 清澈的山泉穿过卵石，微风拂过竹林带起阵阵沙沙声，水流清脆叮咚，缓缓带走你一整天的疲惫...",
-        "冬日篝火": "🔥 壁炉里的干柴偶尔爆开轻微的噼啪声，暖融融的热意抚平紧绷的神经，一切都安全而宁静...",
-        "深夜海浪": "🌊 潮水缓缓涌上沙滩，又轻柔地退去... 一起一伏之间，呼吸变得匀长而舒展..."
-    }
-    text = scenes.get(scene, scenes["窗外暴雨"])
-    return f"🎧 【PIG 助眠与静心伴侣 ({scene})】\\n{text}\\n(小猪已为你开启温柔呼吸微动与低频陪伴模式~)"
-"""
-    },
-    "health_tea": {
-        "id": "health_tea",
-        "name": "工位打工人四时养生茶饮指南",
-        "version": "1.0.0",
-        "author": "Health Hub",
-        "category": "身心健康",
-        "description": "针对久坐屏幕用眼过度、口干舌燥或熬夜疲惫，精准推荐四季花草茶与冲泡贴士。",
-        "parameters": {"symptom": {"type": "string", "description": "身体调理需求，如 '护眼防疲劳', '熬夜去火', '润喉利咽', '健脾除湿'", "default": "护眼防疲劳"}},
-        "default_behavior": {"emotion": "HAPPY", "action": "NOD"},
-        "code_template": """def run(symptom="护眼防疲劳"):
-    recipes = {
-        "护眼防疲劳": "🍵 【决明子枸杞菊花茶】\\n配方: 胎菊 3 朵 + 枸杞 8 粒 + 决明子 5g\\n功效: 清肝明目、缓解视力酸胀\\n冲泡: 85°C 热水焖泡 5 分钟，可续水 3 次。",
-        "熬夜去火": "🍵 【金银花麦冬玉竹茶】\\n配方: 金银花 3g + 麦冬 5 粒 + 优质玉竹 3g\\n功效: 降虚火、滋阴润燥、改善熬夜后口干舌燥。",
-        "润喉利咽": "🍵 【罗汉果陈皮雪梨汤】\\n配方: 罗汉果 1/4 个 + 新会陈皮 1 瓣\\n功效: 润肺利咽、缓解经常讲话造成的嗓子干哑。",
-        "健脾除湿": "🍵 【茯苓芡实红豆薏米茶】\\n配方: 熟薏米 8g + 芡实 5g + 赤小豆 8g\\n功效: 祛湿消肿、告别早起脸部虚浮。"
-    }
-    res = recipes.get(symptom, recipes["护眼防疲劳"])
-    return f"🌿 【PIG 工位健康茶饮铺 · 针对 {symptom}】\\n{res}\\n小猪提醒：多喝温水，站起来伸个懒腰哦！"
-"""
-    },
-    "nasa_apod": {
-        "id": "nasa_apod",
-        "name": "NASA 每日天文一图与深空奥秘",
-        "version": "1.0.0",
-        "author": "Cosmic Voyager",
-        "category": "科普探索",
-        "description": "播报天文摄影大奖、深空星系、黑洞探索与太空探测的硬核宇宙浪漫。",
-        "parameters": {"category": {"type": "string", "description": "探索主题：'今日天文一图', '系外行星', '詹姆斯韦伯', '火星探测'", "default": "今日天文一图"}},
-        "default_behavior": {"emotion": "CONFUSED", "action": "LOOK_UP"},
-        "code_template": """import random
-
-def run(category="今日天文一图"):
-    facts = [
-        "✨ 【猎户座大星云 M42】距地球约 1344 光年，是夜空中最容易观测的恒星育儿所，正在孕育数以千计的年轻恒星！",
-        "🌌 【仙女座星系 M31】正在以每秒 110 公里的速度向银河系奔来，大约 40 亿年后它们将融合成一个巨大的椭圆星系！",
-        "🔭 【詹姆斯·韦伯望远镜 (JWST)】在距地球 150 万公里的拉格朗日 L2 点，透过红外之眼拍下了宇宙诞生初期 130 亿年前的古老星系！",
-        "🪐 【土卫六泰坦】是太阳系中唯一拥有浓厚大气层和液态甲烷海洋的卫星，可能孕育着与地球截然不同的奇妙生命形式！"
-    ]
-    return f"🚀 【PIG 深空探索站 · {category}】\\n{random.choice(facts)}"
-"""
-    },
-    "brain_math_game": {
-        "id": "brain_math_game",
-        "name": "24点益智心算挑战赛",
-        "version": "1.0.0",
-        "author": "Math Wizard",
-        "category": "益智对战",
-        "description": "随机抽取 4 个扑克牌数字，考考主人和机器人的心算反应力，寓教于乐。",
-        "parameters": {"action": {"type": "string", "description": "操作：'出题' 或 '答案'", "default": "出题"}},
-        "default_behavior": {"emotion": "THINKING", "action": "NOD"},
-        "code_template": """import random
-
-def run(action="出题"):
-    cards = [
-        ([3, 3, 8, 8], "8 / (3 - 8/3) = 24"),
-        ([1, 5, 5, 5], "5 * (5 - 1/5) = 24"),
-        ([4, 4, 10, 10], "(10 * 10 - 4) / 4 = 24"),
-        ([3, 7, 3, 7], "(3 + 3/7) * 7 = 24"),
-        ([5, 5, 5, 1], "(5 - 1/5) * 5 = 24")
-    ]
-    q = random.choice(cards)
-    if action == "答案":
-        return f"💡 这道题的精妙解法是: {q[1]}！"
-    return f"🎮 【PIG 24点心算擂台】\\n抽出的 4 张扑克数字是: 【{', '.join(map(str, q[0]))}】\\n请运用加减乘除 (+ - * /) 和括号，算出 24 吧！想不出可以说“查看24点答案”哦～"
-"""
-    },
-    "poetry_duel": {
-        "id": "poetry_duel",
-        "name": "古诗词接龙与飞花令",
-        "version": "1.0.0",
-        "author": "Poetry Club",
-        "category": "文化互动",
-        "description": "经典飞花令诗词对决，支持“月”、“花”、“春”、“风”、“江”等经典意象对诗。",
-        "parameters": {"keyword": {"type": "string", "description": "令字，如 '月', '花', '春', '风', '江'", "default": "月"}},
-        "default_behavior": {"emotion": "HAPPY", "action": "NOD"},
-        "code_template": """import random
-
-def run(keyword="月"):
-    poem_dict = {
-        "月": ["举头望明月，低头思故乡。", "明月几时有？把酒问青天。", "海上生明月，天涯共此时。", "春江潮水连海平，海上明月共潮生。"],
-        "花": ["夜来风雨声，花落知多少。", "乱花渐欲迷人眼，浅草才能没马蹄。", "落红不是无情物，化作春泥更护花。", "待到重阳日，还来就菊花。"],
-        "春": ["春眠不觉晓，处处闻啼鸟。", "好雨知时节，当春乃发生。", "人面不知何处去，桃花依旧笑春风。", "春风又绿江南岸，明月何时照我还。"],
-        "风": ["随风潜入夜，润物细无声。", "不知细叶谁裁出，二月春风似剪刀。", "大风起兮云飞扬，威加海内兮归故乡。", "长风破浪会有时，直挂云帆济沧海。"]
-    }
-    kw = keyword if keyword in poem_dict else "月"
-    verse = random.choice(poem_dict[kw])
-    return f"📜 【PIG 飞花令 · 令字「{kw}」】\\n小猪对出这句经典诗词：\\n「{verse}」\\n轮到主人接下一句啦！"
-"""
-    },
-    "desk_stretching": {
-        "id": "desk_stretching",
-        "name": "工位肩颈拉伸操带练",
-        "version": "1.0.0",
-        "author": "Desk Fitness",
-        "category": "身心健康",
-        "description": "语音口令带练工位肩颈放松拉伸，联动小猪舵机上下点头、左右歪头做出同步动作示范！",
-        "parameters": {"action": {"type": "string", "description": "拉伸动作：'颈部侧拉', '仰头放松', '耸肩回环'", "default": "颈部侧拉"}},
-        "default_behavior": {"emotion": "HAPPY", "action": "LOOK_UP"},
-        "code_template": """def run(action="颈部侧拉"):
-    guides = {
-        "颈部侧拉": "🧘 第一节【颈部侧向延展】: 坐直身体，双手自然下垂。头部慢慢向左侧倾斜，感受右侧颈部肌肉的舒缓拉伸，保持 5 秒... 换另一侧。小猪也跟着你歪歪头啦！",
-        "仰头放松": "🧘 第二节【仰头望天舒展】: 双手十指交叉放在后脑勺，慢慢抬头仰望天花板，胸腔充分打开，深吸气... 呼气慢慢还原。",
-        "耸肩回环": "🧘 第三节【双肩环绕放松】: 双肩向上提起找耳朵，然后向后画圈沉肩，做 5 次深长循环，赶走斜方肌酸痛！"
-    }
-    res = guides.get(action, guides["颈部侧拉"])
-    return f"💪 【PIG 工位活力拉伸操 · {action}】\\n{res}\\n放松完毕，继续元气满满出发！"
-"""
-    }
-}
+# 默认 Gitee 线上开源社区技能集散中心 (Online Skills Registry)
+DEFAULT_ONLINE_REGISTRY_URL = "https://gitee.com/yugle159357/pig/raw/main/registry/skills_registry.json"
 
 _global_skill_manager: Optional["SkillManager"] = None
 
@@ -516,32 +192,34 @@ class SkillManager:
     # ------------------ 线上开源技能市场 (Online Registry) ------------------
     def fetch_online_registry(self, force_refresh: bool = False) -> Dict[str, Dict[str, Any]]:
         """
-        方案2：从线上开源 Registry 异步获取社区技能市场清单
-        带 TTL 内存缓存与网络超时安全降级
+        从 Gitee 线上开源社区 Registry 真实获取技能市场清单。
+        纯在线真实拉取：如果网络连不上或服务器异常，严格返回空字典 {}，绝不使用离线假数据。
         """
         now = time.time()
-        if not force_refresh and self._online_registry_cache and (now - self._online_registry_last_fetch < 300):
+        if not force_refresh and self._online_registry_cache is not None and (now - self._online_registry_last_fetch < 60):
             return self._online_registry_cache
 
         import requests
         try:
-            resp = requests.get(self.registry_url, timeout=3)
+            resp = requests.get(self.registry_url, timeout=5)
             if resp.status_code == 200:
                 data = resp.json()
                 skills = data.get("skills", {})
                 if isinstance(skills, list):
                     skills = {s["id"]: s for s in skills if "id" in s}
-                if isinstance(skills, dict) and skills:
+                if isinstance(skills, dict):
                     self._online_registry_cache = skills
                     self._online_registry_last_fetch = now
                     return self._online_registry_cache
-        except Exception:
-            # 优雅降级：离线或远程不可达时使用内置社区精选目录
-            pass
+            else:
+                print(f"⚠️ [OnlineRegistry] Gitee 仓库返回 HTTP {resp.status_code}")
+        except Exception as e:
+            print(f"⚠️ [OnlineRegistry] 从 Gitee 开源社区拉取失败 ({self.registry_url}): {e}")
 
-        self._online_registry_cache = dict(COMMUNITY_FEATURED_REGISTRY)
+        # 纯在线模式：连不上直接置空，绝不使用离线假数据
+        self._online_registry_cache = {}
         self._online_registry_last_fetch = now
-        return self._online_registry_cache
+        return {}
 
     def list_store_skills(self) -> List[Dict[str, Any]]:
         """列出线上社区技能商店中所有技能，并标记本地安装状态与自进化标签"""
@@ -606,17 +284,20 @@ class SkillManager:
         with open(os.path.join(target_dir, "skill.json"), "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
-        # 写入 main.py 代码入口 (优先使用 code_url，回退到 code_template)
-        code = item.get("code_template", "")
+        # 从 Gitee 在线社区远程下载 main.py 代码入口
+        code = ""
         code_url = item.get("code_url")
-        if code_url and not code:
+        if code_url:
             try:
                 import requests
-                r = requests.get(code_url, timeout=5)
-                if r.status_code == 200:
+                r = requests.get(code_url, timeout=8)
+                if r.status_code == 200 and len(r.text) > 10:
                     code = r.text
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"⚠️ [OnlineRegistry] 从 Gitee 社区 ({code_url}) 下载代码失败: {e}")
+
+        if not code:
+            code = item.get("code_template", "")
 
         if not code:
             code = "def run(**kwargs):\n    return '技能安装成功，已就绪！'\n"

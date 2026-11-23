@@ -543,8 +543,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "ok", "emotions": emotions}, ensure_ascii=False).encode("utf-8"))
             return
 
-        # 获取技能商店列表与已安装技能
-        if self.path == "/api/skills/store":
+        # 获取技能商店列表与已安装技能 (支持 ?refresh=1 强制从 Gitee 重新拉取)
+        if self.path.startswith("/api/skills/store"):
+            if "refresh=1" in self.path:
+                skill_mgr.fetch_online_registry(force_refresh=True)
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
@@ -933,13 +935,35 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             }, ensure_ascii=False).encode("utf-8"))
             return
 
-        # 检查系统更新
+        # 检查系统更新 (真实查询 Git Remote Tags，零 mock)
         if self.path == "/api/system/update_check":
-            menu_fsm.check_system_update_async()
+            from core.version import version_manager
+            res = version_manager.check_update_sync()
+            menu_fsm.update_status = res.get("status", "已是最新版本")
+            menu_fsm._sync_system_items()
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "已是最新版本", "version": menu_fsm.version_str}, ensure_ascii=False).encode("utf-8"))
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 执行 OTA 固件更新
+        if self.path == "/api/system/update_perform":
+            from core.version import version_manager
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            body = json.loads(post_data.decode("utf-8")) if post_data else {}
+            target_tag = body.get("tag")
+            res = version_manager.perform_ota_update(target_tag)
+            menu_fsm.version_str = version_manager.current_version
+            menu_fsm.update_status = res.get("message", "更新完成")
+            menu_fsm._sync_system_items()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
             return
 
         # 重启机器人服务

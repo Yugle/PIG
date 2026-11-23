@@ -1,0 +1,21 @@
+{
+  "id": "stock_ticker",
+  "name": "A股与全球实时盯盘",
+  "version": "1.2.0",
+  "author": "FinTech Quant",
+  "category": "金融行情",
+  "description": "实时监控上证指数、茅台、宁德时代或美股科技巨头最新价格与涨跌走势。",
+  "parameters": {
+    "symbol": {
+      "type": "string",
+      "description": "股票代码或简称，如 sh000001, sh600519, 茅台, 大盘",
+      "default": "sh000001"
+    }
+  },
+  "default_behavior": {
+    "emotion": "WINK",
+    "action": "NOD"
+  },
+  "source": "gitee_community",
+  "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/stock_ticker/main.py"
+}
