@@ -449,7 +449,7 @@ class SkillManager:
         except Exception as e:
             return {"status": "error", "message": f"持久化技能文件失败: {e}"}
 
-    def execute_skill(self, skill_id: str, timeout_seconds: float = 6.0, **params) -> str:
+    def execute_skill(self, skill_id: str, timeout_seconds: float = 12.0, **params) -> str:
         """调用并执行一个已安装的插件技能（带超时熔断保护，防止挂起）"""
         skill_id = skill_id.strip().lower()
         plugin = self.installed_plugins.get(skill_id)

@@ -1132,6 +1132,7 @@
           <span id="chatStatusPill" style="font-size:0.72rem; white-space:nowrap; flex-shrink:0; background:rgba(46, 160, 67, 0.15); color:#7ee787; border:1px solid #238636; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center;">就绪 (Online)</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+          <button class="btn" id="chatHeaderCamBtn" style="padding: 2px 8px; font-size: 0.74rem; white-space:nowrap;" onclick="toggleWebcamGaze()" title="开启/关闭电脑摄像头视觉注视与多模态眼眸">📷 摄像头: 关</button>
           <button class="btn" id="chatFullscreenBtn" style="padding: 2px 8px; font-size: 0.74rem; white-space:nowrap;" onclick="toggleChatFullscreen()" title="全屏独立专注对话 (快捷键: Esc 退出)">⛶ 全屏</button>
           <button class="btn" style="padding: 2px 8px; font-size: 0.74rem; white-space:nowrap;" onclick="clearChatLogs()" title="清空对话记录">清空消息</button>
         </div>
@@ -2352,6 +2353,13 @@
         this.onAllFinished = null;
         this.streamEnded = false;
         this.pendingCount = 0;
+
+        // 核心：严格保序调度机制 (Sequenced FIFO Queue)
+        // 彻底杜绝异步 decodeAudioData 因不同切片长度耗时不同造成的 B-A-C 乱序播放！
+        this.expectedSeq = 1;
+        this.chunkMap = new Map();
+        this.fallbackQueue = [];
+        this.isFallbackPlaying = false;
       }
 
       _getAudioContext() {
@@ -2371,6 +2379,10 @@
         this.stop();
         this.streamEnded = false;
         this.pendingCount = 0;
+        this.expectedSeq = 1;
+        this.chunkMap.clear();
+        this.fallbackQueue = [];
+        this.isFallbackPlaying = false;
         if (this.audioCtx) {
           this.nextStartTime = this.audioCtx.currentTime;
         } else {
@@ -2388,80 +2400,159 @@
         this.activeSources = [];
         this.isPlaying = false;
         this.pendingCount = 0;
+        this.expectedSeq = 1;
+        this.chunkMap.clear();
+        this.fallbackQueue = [];
+        this.isFallbackPlaying = false;
         if (this.audioCtx) {
           this.nextStartTime = this.audioCtx.currentTime;
         }
       }
 
-      async enqueue(base64Audio, text, seq) {
+      enqueue(base64Audio, text, seq) {
         if (!base64Audio) return;
+        const validSeq = (typeof seq === "number" && seq > 0) ? seq : (this.chunkMap.size + this.expectedSeq);
+        this.pendingCount++;
+
+        const chunkItem = {
+          seq: validSeq,
+          text: text,
+          audioBuffer: null,
+          base64Audio: base64Audio,
+          status: "pending"
+        };
+        this.chunkMap.set(validSeq, chunkItem);
+
         const ctx = this._getAudioContext();
         if (!ctx) {
-          this._fallbackEnqueue(base64Audio, text, seq);
+          this._enqueueFallback(chunkItem);
           return;
         }
 
-        this.pendingCount++;
+        // 并行硬件解码，但解码完成后必须交由严格保序调度器逐个排队
         try {
-          // 1. 将 base64 转为 ArrayBuffer 并提前解码
           const binary = atob(base64Audio);
           const bytes = new Uint8Array(binary.length);
           for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
-          // 2. 硬件级 PCM 解码为 AudioBuffer
-          const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
-
-          // 3. 毫秒级无缝衔接调度 (Sample-accurate gapless scheduling)
-          const now = ctx.currentTime;
-          // 若队列前无正在播放的切片，从当前时间略微缓冲 30ms 开始；若前序切片还在播放，严格在上一段末尾无缝拼接！
-          const startTime = Math.max(now + 0.03, this.nextStartTime);
-          const durSec = audioBuffer.duration;
-          this.nextStartTime = startTime + durSec;
-
-          const source = ctx.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(ctx.destination);
-          this.activeSources.push(source);
-          this.isPlaying = true;
-
-          // 触发肢体与动效协同
-          const delayMs = Math.max(0, (startTime - now) * 1000);
-          setTimeout(() => {
-            if (this.onChunkStart) {
-              this.onChunkStart(text, durSec * 1000, seq);
-            }
-          }, delayMs);
-
-          source.onended = () => {
-            this.pendingCount--;
-            const idx = this.activeSources.indexOf(source);
-            if (idx !== -1) this.activeSources.splice(idx, 1);
-            if (this.pendingCount <= 0) {
-              this.isPlaying = false;
-              if (this.streamEnded && this.onAllFinished) {
-                this.onAllFinished();
-              }
-            }
-          };
-
-          source.start(startTime);
-
-        } catch (err) {
-          console.warn("WebAudio 解码失败，平滑降级至 HTMLAudio:", err);
-          this._fallbackEnqueue(base64Audio, text, seq);
+          ctx.decodeAudioData(bytes.buffer.slice(0)).then(audioBuffer => {
+            chunkItem.audioBuffer = audioBuffer;
+            chunkItem.status = "decoded";
+            this._drainInOrder();
+          }).catch(err => {
+            console.warn(`[StreamingAudio] 切片 seq:${validSeq} 解码失败:`, err);
+            chunkItem.status = "failed";
+            this._drainInOrder();
+          });
+        } catch (e) {
+          chunkItem.status = "failed";
+          this._drainInOrder();
         }
       }
 
-      _fallbackEnqueue(base64Audio, text, seq) {
-        const audio = new Audio("data:audio/mp3;base64," + base64Audio);
-        audio.play().catch(e => console.warn("Fallback play error:", e));
+      // 严格保序调度流水线：必须等待当前 expectedSeq 解码完毕，才能规划播放时间并推进下一段！
+      _drainInOrder() {
+        const ctx = this._getAudioContext();
+        if (!ctx) return;
+
+        while (this.chunkMap.has(this.expectedSeq)) {
+          const item = this.chunkMap.get(this.expectedSeq);
+          if (item.status === "pending") {
+            // 当前序号还在后台解码中，必须严格等待！绝不超前调度后续序号！
+            break;
+          }
+
+          this.chunkMap.delete(this.expectedSeq);
+          this.expectedSeq++;
+
+          if (item.status === "decoded" && item.audioBuffer) {
+            this._scheduleAudioBuffer(ctx, item.audioBuffer, item.text, item.seq);
+          } else {
+            this.pendingCount--;
+            this._checkFinished();
+          }
+        }
+      }
+
+      _scheduleAudioBuffer(ctx, audioBuffer, text, seq) {
+        const now = ctx.currentTime;
+        // 毫秒级无缝衔接调度 (Sample-accurate gapless scheduling)
+        const startTime = Math.max(now + 0.03, this.nextStartTime);
+        const durSec = audioBuffer.duration;
+        this.nextStartTime = startTime + durSec;
+
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        this.activeSources.push(source);
+        this.isPlaying = true;
+
+        // 精确同步当前句的肢体与微表情时序
+        const delayMs = Math.max(0, (startTime - now) * 1000);
+        setTimeout(() => {
+          if (this.onChunkStart) {
+            this.onChunkStart(text, durSec * 1000, seq);
+          }
+        }, delayMs);
+
+        source.onended = () => {
+          this.pendingCount--;
+          const idx = this.activeSources.indexOf(source);
+          if (idx !== -1) this.activeSources.splice(idx, 1);
+          this._checkFinished();
+        };
+
+        source.start(startTime);
+      }
+
+      _enqueueFallback(chunkItem) {
+        this.fallbackQueue.push(chunkItem);
+        this.fallbackQueue.sort((a, b) => a.seq - b.seq);
+        this._playNextFallback();
+      }
+
+      _playNextFallback() {
+        if (this.isFallbackPlaying || this.fallbackQueue.length === 0) return;
+        const item = this.fallbackQueue.shift();
+        this.isFallbackPlaying = true;
+        this.isPlaying = true;
+
+        if (this.onChunkStart) {
+          this.onChunkStart(item.text, 2000, item.seq);
+        }
+
+        const audio = new Audio("data:audio/mp3;base64," + item.base64Audio);
+        const onEnd = () => {
+          this.pendingCount--;
+          this.isFallbackPlaying = false;
+          this._checkFinished();
+          this._playNextFallback();
+        };
+        audio.onended = onEnd;
+        audio.onerror = onEnd;
+        audio.play().catch(onEnd);
+      }
+
+      _checkFinished() {
+        if (this.pendingCount <= 0 && this.chunkMap.size === 0) {
+          this.isPlaying = false;
+          if (this.streamEnded && this.onAllFinished) {
+            this.onAllFinished();
+          }
+        }
       }
 
       markStreamDone() {
         this.streamEnded = true;
-        if (!this.isPlaying && this.pendingCount <= 0) {
-          if (this.onAllFinished) this.onAllFinished();
+        // 若流已闭合且当前待播序号跳跃，顺延至最小存在的序号推进
+        if (this.chunkMap.size > 0 && !this.chunkMap.has(this.expectedSeq)) {
+          const keys = Array.from(this.chunkMap.keys()).sort((a, b) => a - b);
+          if (keys.length > 0 && keys[0] > this.expectedSeq) {
+            this.expectedSeq = keys[0];
+          }
         }
+        this._drainInOrder();
+        this._checkFinished();
       }
     }
 

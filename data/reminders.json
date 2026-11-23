@@ -284,5 +284,16 @@
     "repeat": "none",
     "completed": true,
     "created_at": 1795420255.2996438
+  },
+  {
+    "id": "timer_90807a",
+    "type": "timer",
+    "content": "测试泡茶提醒",
+    "target_time": 1795422178.948125,
+    "target_time_str": "2026-11-23 16:22:58",
+    "display_str": "5分0秒倒计时: 测试泡茶提醒",
+    "repeat": "none",
+    "completed": true,
+    "created_at": 1795421878.9482205
   }
 ]

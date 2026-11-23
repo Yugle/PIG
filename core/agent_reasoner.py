@@ -302,12 +302,16 @@ class AgentReasoner:
         # 写入持久化长短期记忆
         memory_manager.record_turn(user_text, final_reply)
 
-        return {
+        has_visual_qa = any(s.get("action") == "visual_qa" for s in steps_log) or (last_observation and "【小猪视觉观察】" in str(last_observation))
+        ret = {
             "reply": final_reply,
             "behaviors": final_behaviors,
             "steps": steps_log,
             "final_skill_res": last_observation
         }
+        if has_visual_qa:
+            ret["visual_snapshot"] = f"/api/vision/snapshot?t={int(time.time() * 1000)}"
+        return ret
 
     def run_react_loop_stream(
         self,
@@ -530,11 +534,16 @@ class AgentReasoner:
 
         memory_manager.record_turn(user_text, final_reply)
 
-        yield {
+        has_visual_qa = any(s.get("action") == "visual_qa" for s in steps_log) or (last_observation and "【小猪视觉观察】" in str(last_observation))
+        done_payload = {
             "type": "done",
             "reply": final_reply,
             "behaviors": final_behaviors,
             "steps": steps_log,
             "final_skill_res": last_observation
         }
+        if has_visual_qa:
+            done_payload["visual_snapshot"] = f"/api/vision/snapshot?t={int(time.time() * 1000)}"
+
+        yield done_payload
 

@@ -126,6 +126,28 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(404, "HTML simulator page not found")
                 return
 
+        # 视觉抓拍快照静态访问接口 (供对话框实时查看小猪眼前捕获的真实现实瞬间)
+        if self.path.startswith("/api/vision/snapshot") or self.path.startswith("/api/vision/latest_snapshot"):
+            snap_path = "/tmp/pig_visual_qa_snapshot.jpg"
+            if not os.path.exists(snap_path):
+                snap_path = "/tmp/pig_latest_frame.jpg"
+            if os.path.exists(snap_path):
+                try:
+                    with open(snap_path, "rb") as f:
+                        img_bytes = f.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/jpeg")
+                    self.send_header("Content-Length", str(len(img_bytes)))
+                    self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                    self.end_headers()
+                    self.wfile.write(img_bytes)
+                    return
+                except Exception as e:
+                    self.send_error(500, str(e))
+                    return
+            self.send_error(404, "No visual snapshot available")
+            return
+
         # 实时数字孪生虚实同步长连接 (Server-Sent Events)
         if self.path == "/api/agent/events":
             self.send_response(200)
@@ -1086,6 +1108,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     reply_data["behaviors"] = react_out["behaviors"]
                     reply_data["skill_result"] = react_out.get("final_skill_res")
                     reply_data["steps"] = react_out.get("steps", [])
+                    if react_out.get("visual_snapshot"):
+                        reply_data["visual_snapshot"] = react_out["visual_snapshot"]
+                    elif any(s.get("action") == "visual_qa" for s in reply_data["steps"]):
+                        reply_data["visual_snapshot"] = f"/api/vision/snapshot?t={int(time.time()*1000)}"
                     if reply_data["behaviors"] and hardware_agent and hasattr(hardware_agent, "mark_action_playing"):
                         hardware_agent.mark_action_playing(3.0)
                 except Exception as e:

@@ -8,6 +8,7 @@
 import os
 import sys
 import json
+import time
 import base64
 import requests
 
@@ -25,8 +26,8 @@ def _load_config():
     return {}
 
 
-def _capture_frame_bytes() -> bytes:
-    """按优先级从不同链路获取当前摄像头一帧 JPEG 字节流"""
+def _capture_frame_bytes() -> tuple[bytes, str]:
+    """按优先级从不同链路获取当前摄像头一帧 JPEG 字节流，返回 (img_bytes, err_msg)"""
     # 0. 优先检查主模块内存中的实时画面帧 (_latest_webcam_frame 或 get_latest_vision_frame)
     main_mod = sys.modules.get("__main__")
     if main_mod:
@@ -34,20 +35,25 @@ def _capture_frame_bytes() -> bytes:
             try:
                 frame = main_mod.get_latest_vision_frame()
                 if frame and len(frame) > 100:
-                    return frame
+                    return frame, ""
             except Exception:
                 pass
         if hasattr(main_mod, "_latest_webcam_frame") and main_mod._latest_webcam_frame:
-            return main_mod._latest_webcam_frame
+            return main_mod._latest_webcam_frame, ""
 
     # 1. 检查仿真端或实时帧桥接文件 (/tmp/pig_latest_frame.jpg)
     tmp_path = "/tmp/pig_latest_frame.jpg"
     if os.path.exists(tmp_path):
         try:
+            mtime = os.path.getmtime(tmp_path)
+            age = time.time() - mtime
+            # 若帧文件超过 15 秒未更新，且不是真机 USB 摄像头，提示画面静止
+            if age > 15.0 and not (os.path.exists("/dev/video0") or os.environ.get("PIG_IS_RPI")):
+                return b"", "未能捕获到最新画面：摄像头画面已超过15秒未更新（已暂停/关闭）。请在页面上方或对话框右上角点击开启【📷 摄像头】后再试哦～"
             with open(tmp_path, "rb") as f:
                 content = f.read()
                 if len(content) > 100:
-                    return content
+                    return content, ""
         except Exception:
             pass
 
@@ -58,7 +64,7 @@ def _capture_frame_bytes() -> bytes:
         if agent and agent.hal:
             frame = agent.hal.capture_image()
             if frame and len(frame) > 100:
-                return frame
+                return frame, ""
     except Exception:
         pass
 
@@ -74,11 +80,11 @@ def _capture_frame_bytes() -> bytes:
             if ret and mat is not None:
                 success, buf = cv2.imencode(".jpg", mat)
                 if success:
-                    return buf.tobytes()
+                    return buf.tobytes(), ""
     except Exception:
         pass
 
-    return b""
+    return b"", "未能捕获到画面：若在 Web 仿真工作台，请点击开启【📷 电脑摄像头】；若在真机，请确认免驱 USB 摄像头已插好。"
 
 
 def run(question="请仔细观察这张照片，告诉我你看到了什么？", **kwargs):
@@ -99,9 +105,16 @@ def run(question="请仔细观察这张照片，告诉我你看到了什么？",
         return "未能启用多模态视觉问答：系统中未配置小米 MiMo API 凭据。"
 
     # 1. 抓取摄像头画面
-    img_bytes = _capture_frame_bytes()
+    img_bytes, err_msg = _capture_frame_bytes()
     if not img_bytes:
-        return "未能捕获到画面：若在 Web 仿真工作台，请在上方开启【📷 电脑摄像头追踪】；若在真机，请确认免驱 USB 摄像头已插好。"
+        return err_msg or "未能捕获到画面：若在 Web 仿真工作台，请开启【📷 电脑摄像头】；若在真机，请确认免驱 USB 摄像头已插好。"
+
+    # 将本次送检大模型的抓拍瞬间同步持久化至快照文件，供前端对话视窗查看
+    try:
+        with open("/tmp/pig_visual_qa_snapshot.jpg", "wb") as f:
+            f.write(img_bytes)
+    except Exception:
+        pass
 
     # 2. 构造 OpenAI 兼容格式的多模态请求
     b64_img = base64.b64encode(img_bytes).decode("utf-8")

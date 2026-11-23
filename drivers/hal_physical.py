@@ -67,6 +67,30 @@ class PhysicalRobotHAL(BaseRobotHAL):
             except Exception as e:
                 print(f"⚠️ [HAL-Physical] 摸头传感器初始化跳过: {e}")
 
+        # 初始化 4 独立按键 (K1~K4): 低电平触发标准逻辑 (内部弱上拉)
+        # K1: GPIO 23 (音量+ / 菜单上), K2: GPIO 24 (音量- / 菜单下)
+        # K3: GPIO 27 (确认 / 手动唤醒), K4: GPIO 4 (静音闭麦 / 长按关机)
+        self.button_pins = {
+            "K1": 23,
+            "K2": 24,
+            "K3": 27,
+            "K4": 4
+        }
+        self.button_listeners = []
+        self._btn_cb_handles = []
+        self._btn_down_times = {}
+
+        for b_name, b_pin in self.button_pins.items():
+            try:
+                self.pi.set_mode(b_pin, pigpio.INPUT)
+                self.pi.set_pull_up_down(b_pin, pigpio.PUD_UP)
+                self.pi.set_glitch_filter(b_pin, 30000)  # 30ms 硬件硬件消抖
+                cb = self.pi.callback(b_pin, pigpio.EITHER_EDGE, lambda g, l, t, name=b_name: self._on_gpio_button(name, l, t))
+                self._btn_cb_handles.append(cb)
+                print(f"🔘 [HAL-Physical] 独立按键 {b_name} 就绪 (GPIO {b_pin})")
+            except Exception as e:
+                print(f"⚠️ [HAL-Physical] 按键 {b_name} (GPIO {b_pin}) 初始化跳过: {e}")
+
         # 初始化 ST7789 2.4 寸 SPI 彩屏 (240x320)
         self.screen = None
         if spi is not None and st7789 is not None:
@@ -99,6 +123,31 @@ class PhysicalRobotHAL(BaseRobotHAL):
                 cb()
             except Exception as e:
                 print(f"⚠️ [HAL-Physical] 触摸回调执行异常: {e}")
+
+    def _on_gpio_button(self, name: str, level: int, tick: int):
+        """处理 4 独立按键电平跳变 (低电平按下，高电平释放)"""
+        now = time.time()
+        if level == 0:  # 下降沿按下
+            self._btn_down_times[name] = now
+        elif level == 1:  # 上升沿松开
+            down_t = self._btn_down_times.pop(name, None)
+            if down_t:
+                press_dur = now - down_t
+                event_type = "long_press" if press_dur >= 2.5 else "click"
+                self.trigger_button(name, event_type)
+
+    def add_button_listener(self, callback):
+        """注册独立按键事件回调"""
+        if callback not in self.button_listeners:
+            self.button_listeners.append(callback)
+
+    def trigger_button(self, button_name: str, event_type: str = "click"):
+        """触发按键事件广播"""
+        for cb in list(self.button_listeners):
+            try:
+                cb(button_name, event_type)
+            except Exception as e:
+                print(f"⚠️ [HAL-Physical] 按键回调执行异常: {e}")
 
     def _angle_to_pulse(self, angle: float) -> int:
         """
