@@ -23,22 +23,26 @@
    * 硬件链路端到端自检诊断工具 (`scripts/test_hardware.py`)
    * 音频输入设备 (麦克风) 排坑排查
 8. [核心工程代码与目录架构](#八核心工程代码与目录架构)
-   * 项目模块分层架构与目录树
-   * 配置文件 (`config.json`)
-   * 硬件驱动层 (`drivers/hal_physical.py` & `drivers/hal_simulation.py`)
-   * 12 款拟真眼部微表情系统 (`drivers/eye_renderer.py`)
-   * 程序化非语言萌趣音效库 (`core/sound_effects.py`)
-   * 人脸视觉注视追踪中枢 (`core/face_tracker.py`)
-   * 闲置自主生命体征状态机 (`core/idle_fsm.py`)
-   * 百度语音识别与动态 VAD 切音 (`drivers/asr_engine.py`)
-   * 语音合成与音画同步引擎 (`drivers/tts_engine.py`)
-   * 双层认知与持久化记忆中枢 (`core/memory_manager.py`)
-   * 轻量技能与动作自进化中枢 (`core/skill_manager.py`)
-   * 元认知自进化与海马体反思中枢 (`core/evolution_engine.py`)
-   * PIG 多模态交互主中枢 (`main_agent.py`)
-   * 3D WebGL 浏览器仿真系统 (`simulator/web_simulator.html` & `web_sim_server.py`)
-   * 局域网远程代播服务 (`services/remote_server.py`)
-   * OTA 自动化静默升级 (`services/ota_updater.py`)
+   * 1. 项目模块分层架构与目录树
+   * 2. 全局配置文件 (`config.json`)
+   * 3. 硬件驱动层 (`drivers/hal_physical.py` & `drivers/hal_simulation.py`)
+   * 4. 12 款拟真眼部微表情系统 (`drivers/eye_renderer.py`)
+   * 5. 程序化非语言萌趣音效库 (`core/sound_effects.py`)
+   * 6. 人脸视觉注视追踪中枢 (`core/face_tracker.py`)
+   * 7. 闲置自主生命体征状态机 (`core/idle_fsm.py`)
+   * 8. 语音识别与动态 VAD 切音 (`drivers/asr_engine.py`)
+   * 9. 语音合成与音画同步引擎 (`drivers/tts_engine.py`)
+   * 10. 双层认知与持久化记忆中枢 (`core/memory_manager.py`)
+   * 11. 轻量技能与动作自进化中枢 (`core/skill_manager.py`)
+   * 12. 元认知自进化与海马体反思中枢 (`core/evolution_engine.py`)
+   * 13. PIG 多模态交互主中枢 (`main_agent.py`)
+   * 14. 3D WebGL 浏览器仿真系统 (`simulator/web_simulator.html` & `web_sim_server.py`)
+   * 15. 局域网远程代播服务 (`services/remote_server.py`)
+   * 16. OTA 自动化静默升级与版本管理 (`core/version.py`)
+   * 17. 飞书官方 WebSocket 双向网关与多 Session 交互 (`skills/feishu_bot/`)
+   * 18. 2.4 寸屏幕端 GUI 交互系统与 4 键操作指南 (`core/menu_fsm.py`)
+   * 19. 米家 IoT 智能家居直连与屏幕二维码授权 (`skills/xiaomi_iot/`)
+   * 20. 手机无线配网门户与参数设置中心 (`simulator/settings.html`)
 9. [系统守护与保活部署 (systemd)](#九系统守护与保活部署-systemd)
 10. [核心架构设计与开发准则 (`docs/ARCHITECTURE_GUIDELINES.md`)](docs/ARCHITECTURE_GUIDELINES.md)
 11. [全景系统架构与电气连线拓扑 (`docs/SYSTEM_ARCHITECTURE.md`)](docs/SYSTEM_ARCHITECTURE.md)
@@ -586,33 +590,54 @@ ctl.!default {
 ```text
 pig/
 ├── main_agent.py          # PIG 多模态主程序 (语音唤醒/感知/决策/执行闭环)
-├── web_sim_server.py      # 3D 仿真 Web 服务器与可视化控制台 (端口 8090)
-├── config.json            # 核心配置 (API Key, 舵机引脚, 外设参数)
+├── web_sim_server.py      # 3D 仿真 Web 服务器、无线控制台与双向网关 (端口 8090)
+├── config.json            # 核心全局配置 (大模型/ASR/TTS/飞书/舵机校准/米家)
+├── VERSION                # 语义化版本标识文件 (SemVer: v0.1.0)
 ├── requirements.txt       # Python 依赖清单
 ├── core/                  # 认知与智能决策中枢
+│   ├── menu_fsm.py        # 2.4寸 LCD 屏幕 4 键多级 GUI 状态机与硬件/系统菜单
+│   ├── version.py         # 真实 Git Tag / SemVer 版本管理与 OTA 升级检测
+│   ├── wifi_manager.py    # 树莓派 AP 热点与 STA 无线配网管理器
 │   ├── memory_manager.py  # 双层记忆中枢 (短期上下文 + 长期持久化画像)
 │   ├── skill_manager.py   # 技能与动作进化管理器 (闹钟/倒计时/自定义动作)
 │   ├── evolution_engine.py# 元认知进化中枢 (生物钟追踪 + 夜间反思整理 + 晨间关怀)
 │   ├── idle_fsm.py        # 自主生命体征状态机 (微动/呼吸/走神/发呆)
-│   ├── face_tracker.py    # 视觉注视追踪 (人脸检测与视线跟随)
-│   └── sound_effects.py   # 程序化非语言情绪音效库
+│   ├── face_tracker.py    # 视觉注视追踪 (人脸检测与九宫格/连续视线跟随)
+│   ├── proactive_care.py  # 主动健康关怀与防疲劳提醒
+│   ├── sound_effects.py   # 程序化非语言情绪音效库
+│   └── svg_animator.py    # 矢量 SVG 表情动态渲染引擎
 ├── drivers/               # 硬件驱动与抽象层 (HAL)
-│   ├── hal_base.py        # 统一硬件抽象基类
+│   ├── hal_base.py        # 统一硬件抽象基类 (动态舵机微调/反向/限位/消抖卸力)
 │   ├── hal_physical.py    # 树莓派 3B 物理机驱动 (pigpio + ST7789 SPI + OpenCV)
-│   ├── hal_simulation.py  # PC 端仿真驱动 (MuJoCo 物理引擎)
+│   ├── hal_simulation.py  # PC 端仿真驱动 (Three.js / MuJoCo 物理引擎)
 │   ├── eye_renderer.py    # 12 款拟真卡通大眼表情渲染器
-│   ├── asr_engine.py      # 百度高精语音识别与能量 VAD 引擎
-│   └── tts_engine.py      # Edge-TTS 高拟真语音合成与音画同步引擎
+│   ├── asr_engine.py      # 百度 / MiMo 高精语音识别与能量 VAD 引擎
+│   └── tts_engine.py      # MiMo / Edge-TTS 高拟真语音合成与音画同步引擎
+├── skills/                # 模块化微技能插件系统
+│   ├── feishu_bot/        # 飞书官方 WebSocket 双向长连接网关与富文本卡片
+│   │   ├── feishu_client.py # 基于 lark-oapi 的免公网 IP 双向长连接与多会话路由
+│   │   └── main.py        # 飞书技能调度入口
+│   ├── xiaomi_iot/        # 米家 IoT 智能家居直连与屏幕二维码授权
+│   │   ├── xiaomi_qr_auth.py # 米家 App 扫码免验证码授权与局域网 Token 同步
+│   │   ├── miot_spec.py   # MIoT 标准物模型协议解析器
+│   │   └── main.py        # 智能家居控制入口 (灯具/插座/空调等)
+│   ├── proactive_care/    # 主动关怀技能插件
+│   ├── reminder/          # 闹钟与日程备忘技能
+│   └── weather/           # 实时天气与生活指数技能
 ├── data/                  # 持久化存储与学习沉淀 (原子级写防掉电损坏)
 │   ├── memory.json        # 长期记忆 (用户画像、性格偏好、亲密度)
 │   ├── reminders.json     # 定时器、闹钟与日程提醒列表
 │   ├── evolved_actions.json # 机器人自主学会的新动作序列
-│   └── circadian_profile.json # 作息生物钟统计 (睡眠/清醒/精力低谷时段)
-├── simulator/             # 仿真与 3D 渲染资产
-│   ├── web_simulator.html # Three.js 3D 交互式模拟器 (全功能眼球/舵机/对话)
+│   ├── circadian_profile.json # 作息生物钟统计 (睡眠/清醒/精力低谷时段)
+│   ├── master_face.json   # 主人人脸特征向量向量库
+│   ├── xiaomi_config.json # 米家设备拓扑与局域网 Token 缓存
+│   └── miot_specs/        # 各类智能家电物模型缓存库
+├── simulator/             # 仿真、控制台与 3D 渲染资产
+│   ├── web_simulator.html # Three.js 3D 交互式模拟器 (数字孪生/眼球/舵机/对话)
+│   ├── settings.html      # 手机无线配网门户与参数设置中心 (响应式 WebGUI)
 │   ├── robot.urdf         # URDF 运动学拓扑模型
 │   └── scene.xml          # MuJoCo 仿真物理场景
-├── services/              # 辅助服务
+├── services/              # 辅助守护服务
 │   ├── remote_server.py   # 局域网 HTTP API 交互与远程控制服务
 │   └── ota_updater.py     # Git 静默 OTA 自动更新
 └── scripts/               # 运维与诊断脚本
@@ -626,27 +651,45 @@ pig/
 ```json
 {
   "api_key": "YOUR_LLM_API_KEY",
-  "base_url": "https://token.sensenova.cn/v1",
-  "llm_model": "sensenova-6.8-flash-lite",
-  "asr_provider": "baidu",
-  "baidu_api_key": "YOUR_BAIDU_API_KEY",
-  "baidu_secret_key": "YOUR_BAIDU_SECRET_KEY",
-  "tts_mode": "edge",
-  "custom_voice_id": "",
-  "custom_tts_api_key": "",
+  "base_url": "https://api.xiaomimimo.com/v1",
+  "llm_model": "mimo-v2.6-flash",
+  "asr_provider": "mimo",
+  "tts_mode": "mimo",
+  "mimo_voice": "冰糖",
   "pan_pin": 18,
   "tilt_pin": 13,
+  "servo": {
+    "pan_trim": 0.0,
+    "tilt_trim": 0.0,
+    "pan_invert": false,
+    "tilt_invert": false,
+    "pan_min": 15.0,
+    "pan_max": 165.0,
+    "tilt_min": 55.0,
+    "tilt_max": 125.0,
+    "auto_detach_delay": 0.8
+  },
+  "feishu": {
+    "app_id": "cli_ab8ea0daf2f95ce3",
+    "app_secret": "YOUR_FEISHU_APP_SECRET",
+    "webhook_url": "",
+    "target_open_id": "ou_5127bd3f946600ce9cb4082997e54b76",
+    "forward_alarms": true,
+    "forward_evolution": true
+  },
   "wakeword_model": "hey_jarvis",
   "wakeword_threshold": 0.5,
-  "max_reply_length": 150,
-  "face_tracking": false,
+  "max_reply_length": 200,
+  "face_tracking": true,
+  "gaze_tracking_mode": "9grid",
+  "proactive_care": true,
   "non_verbal_audio": true,
   "idle_fsm": true,
   "simulation": false
 }
 ```
 
-### 2. 真实物理机驱动与仿真驱动 (`hal_physical.py` & `hal_simulation.py`)
+### 3. 硬件驱动层 (`drivers/hal_physical.py` & `drivers/hal_simulation.py`)
 物理驱动直接通过 `pigpio` 进行硬件级 DMA PWM 脉冲生成，确保 SG90 舵机零抖动；仿真驱动则无缝桥接 MuJoCo 物理引擎或无头状态。
 
 ```python
@@ -716,7 +759,7 @@ class PhysicalRobotHAL(BaseRobotHAL):
         self.pi.stop()
 ```
 
-### 3. 12 款拟真眼部微表情系统 (`eye_renderer.py`)
+### 4. 12 款拟真眼部微表情系统 (`drivers/eye_renderer.py`)
 系统支持 12 种高灵动微表情，通过 PIL 矢量动态绘制到 $240 \times 320$ 缓冲，支持视线坐标偏移 (`look_x`, `look_y`)：
 
 | 表情标识 | 视觉特征 | 适用交互情境 |
@@ -765,7 +808,7 @@ class EyeRenderer:
         return img
 ```
 
-### 4. 程序化非语言萌趣音效库 (`sound_effects.py`)
+### 5. 程序化非语言萌趣音效库 (`core/sound_effects.py`)
 无需任何外部音频素材依赖，基于纯数学正弦波调制与标准库 `wave` 模块，程序化高保真合成 5 款经典生命体征音效：
 - `happy_chirp.wav`: 480Hz→780Hz 双音连环跳跃鸣响（元气轻快，如 R2-D2 / 瓦力兴奋声）。
 - `confused_boop.wav`: 500Hz 下降滑音至 320Hz（困惑反问，配合挑眉表情）。
@@ -794,7 +837,7 @@ class SoundEffectManager:
         subprocess.run(["aplay", "-q", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 ```
 
-### 5. 人脸视觉注视追踪中枢 (`face_tracker.py`)
+### 6. 人脸视觉注视追踪中枢 (`core/face_tracker.py`)
 基于极轻量 ONNX YuNet 模型 (`models/face_detection_yunet_2023mar.onnx`，仅 228KB)，专为树莓派 3B CPU 深度优化，推理时延低于 10ms：
 - **两级视线-头部解耦追踪架构**:
   - **微小偏移 (< 45px)**: 仅驱动眼球瞳孔平滑偏移 (`look_x`, `look_y`)，用眼神注视主人，避免舵机无谓转动与齿轮磨损。
@@ -827,7 +870,7 @@ class FaceTracker:
         return {"face_detected": False}
 ```
 
-### 6. 闲置自主生命体征状态机 (`idle_fsm.py`)
+### 7. 闲置自主生命体征状态机 (`core/idle_fsm.py`)
 彻底消除无交互时机器人“仿佛断电死机”的呆滞感，构建四级生物拟态状态机：
 1. **正弦波呼吸律动 (`IDLE`)**: 舵机在基准角度以 $T=4.0s$ 周期进行 $\pm1.2^\circ$ 正弦波微幅浮动，眼球随机触发自发眨眼与微扫视。
 2. **无聊换姿势 (`BORED`)**: 连续闲置 60 秒无交互，机器人自动微倾头部或伸展打哈欠。
@@ -852,7 +895,7 @@ class IdleFSM:
             return {"pan": 90, "tilt": 90 + sine_tilt, "emotion": "NORMAL"}
 ```
 
-### 7. 百度语音识别与动态 VAD 切音 (`asr_engine.py`)
+### 8. 语音识别与动态 VAD 切音 (`drivers/asr_engine.py`)
 针对低功耗嵌入式端，内置 **动态能量阈值检测 (Voice Activity Detection)** 与 **百度智能云 ASR** 引擎：
 - **动态切音**: 检测人声能量突增开始录音，连续静音 1.2 秒自动断句上传，彻底淘汰死板固定 4 秒录音。
 - **Token 智能缓存**: 内存缓存 30 天有效期的 Access Token，杜绝每轮鉴权的网络往返延迟。
@@ -894,7 +937,7 @@ class BaiduASR:
         return ""
 ```
 
-### 8. 语音合成与音画同步引擎 (`tts_engine.py`)
+### 9. 语音合成与音画同步引擎 (`drivers/tts_engine.py`)
 彻底解决传统机器人 **“动作早已做完、语音还在喋喋不休”** 的不同步通病：
 1. **音频时长精准感知**: 语音合成后立即探测精确时长（通过 `ffprobe` 或 `pygame.mixer.Sound.get_length`）。
 2. **多动作时间轴自适应拉伸**: 将大模型输出的动作列表分配至音频整个时间轴。
@@ -934,7 +977,7 @@ class TTSEngine:
         return pygame.mixer.music.get_busy()
 ```
 
-### 9. 双层认知与持久化记忆中枢 (`memory_manager.py`)
+### 10. 双层认知与持久化记忆中枢 (`core/memory_manager.py`)
 赋予机器人长期认主与个性化陪伴能力，包含两级存储：
 - **短期工作记忆 (Short-Term Memory)**: 基于滑动窗口维护最近 6~10 轮对话完整上下文，保证连贯多轮追问。
 - **长期事实记忆 (Long-Term Memory)**: 本地持久化 `memory.json`，存储主人称谓、事实偏好（食物/职业/习惯等）、交互总次数与亲密等级。
@@ -980,7 +1023,7 @@ class MemoryManager:
             self.short_term_history = self.short_term_history[-self.max_history_turns * 2:]
 ```
 
-### 10. 轻量技能与动作自进化中枢 (`skill_manager.py`)
+### 11. 轻量技能与动作自进化中枢 (`core/skill_manager.py`)
 专为低算力、低内存设备（如树莓派 3，512MB~1GB 内存）量身定制，实现日常实用技能与元认知自进化：
 - **零算力负担架构**: 内存常驻占用 < 1MB，CPU 占用 < 0.1%（后台以严格 1.0 秒节拍轻量比对时间戳）。
 - **原子持久化保障**: 采用临时文件写入 + `os.replace` 原子替换，即便树莓派突发意外掉电拔插头，`reminders.json` 与 `evolved_actions.json` 也绝对不会发生数据截断或文件损坏。
@@ -1011,7 +1054,7 @@ class SkillManager:
             return self.evolve_action(args.get("name"), args.get("keyframes"), args.get("description"))
 ```
 
-### 11. 元认知自进化与海马体反思中枢 (`evolution_engine.py`)
+### 12. 元认知自进化与海马体反思中枢 (`core/evolution_engine.py`)
 赋予机器人长期自我学习主人生活规律与深度情感沉淀的仿生机制：
 - **生物钟作息自学习 (Circadian Tracker)**:
   - 自动打点每日互动时间分布（`circadian_profile.json`），精准归纳主人通常的早起时间、午后犯困时间与深夜睡前时间；
@@ -1034,7 +1077,7 @@ class EvolutionEngine:
         # ...
 ```
 
-### 12. PIG 多模态交互主中枢 (`main_agent.py`)
+### 13. PIG 多模态交互主中枢 (`main_agent.py`)
 整合感知、认知中枢、P0~P3 生体灵动中枢、Skill 技能调用、元认知自进化、大模型推理与音画同步执行的完整事件主循环：
 
 ```python
@@ -1049,7 +1092,7 @@ python3 main_agent.py
 - **高弹性 5 级 JSON 解析容错**: 彻底解决 SenseNova / DeepSeek 等大模型偶发输出 Markdown 代码块、思考推理过程或纯文本时的解析崩溃，保证 100% 稳定生成连续动作链。
 - **音视频时钟对齐**: 边讲话边根据真实音频时长自适应拉伸肢体动作与面部表情。
 
-### 13. 3D WebGL 浏览器仿真系统 (`web_simulator.html` & `web_sim_server.py`)
+### 14. 3D WebGL 浏览器仿真系统 (`simulator/web_simulator.html` & `web_sim_server.py`)
 无需任何物理硬件，直接在 PC 浏览器中进行全交互仿真：
 1. **启动仿真服务器**:
    ```bash
@@ -1067,7 +1110,7 @@ python3 main_agent.py
    - **高拟真 Edge-TTS 广播**: 后端下发语音，前端网页高保真播放，并实现毫秒级动作同步。
    - **记忆看板**: 实时展示主人档案、偏好事实集、亲密等级与对话轮次。
 
-### 14. 局域网远程代播服务 (`remote_server.py`)
+### 15. 局域网远程代播服务 (`services/remote_server.py`)
 ```python
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks
@@ -1111,33 +1154,150 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-### 15. OTA 自动化静默升级 (`ota_updater.py`)
+### 16. OTA 自动化静默升级与版本管理 (`core/version.py` & `services/ota_updater.py`)
+
+系统引入了严格的语义化版本控制体系 (SemVer: `Major.Minor.Patch`) 与端到端自动化 OTA 升级管线，坚决杜绝任何虚假硬编码 mock 数据：
+
+1. **真实 Git Tag 语义化版本探测 (`core/version.py`)**:
+   * 优先调用 `git describe --tags --abbrev=0` 读取本地最新 Git Release Tag（如 `v0.1.0`）；
+   * 若本地未打 Tag，读取根目录 `VERSION` 文件；若均无则提取当前 Git 短提交哈希构造开发态版本（如 `dev-7e573b9`）；
+   * 后台异步通过 `git ls-remote --tags origin` 检索远端仓库最新发布标签，基于三元组版本号 `(major, minor, patch)` 进行严格比对。
+
+2. **静默拉取与服务平滑自愈 (`services/ota_updater.py`)**:
+   ```python
+   # services/ota_updater.py 核心升级逻辑
+   import os, subprocess
+
+   def auto_upgrade(repo_dir="/home/pi/desktop_robot"):
+       os.chdir(repo_dir)
+       print("📡 检查远端代码仓库更新...")
+       subprocess.run(["git", "fetch", "origin", "main"], check=True)
+
+       loc = subprocess.check_output(["git", "rev-parse", "HEAD"]).strip()
+       rem = subprocess.check_output(["git", "rev-parse", "origin/main"]).strip()
+
+       if loc != rem:
+           print("📦 发现新版本代码，执行拉取...")
+           subprocess.run(["git", "pull", "origin", "main"], check=True)
+           if os.path.exists("requirements.txt"):
+               subprocess.run(["pip3", "install", "-r", "requirements.txt", "--quiet"])
+
+           print("🔁 重启 systemd 主服务...")
+           subprocess.run(["sudo", "systemctl", "restart", "robot.service"])
+           return True
+       return False
+   ```
+
+---
+
+### 17. 飞书官方 WebSocket 双向网关与多 Session 交互 (`skills/feishu_bot/`)
+
+系统原生集成了飞书开放平台企业自建应用与群自定义机器人双通道网关，为机器人提供零门槛远程交互与主动关怀触达能力：
+
+1. **免公网 IP / 零内网穿透架构**:
+   * 基于飞书官方 Python SDK `lark-oapi` 建立 WebSocket 双向长连接客户端；
+   * 树莓派仅需出网权限，无需固定公网 IP、动态域名 (DDNS) 或任何穿透代理服务；
+   * 内置长连接状态自检、心跳保活与毫秒级断线指数退避重连机制。
+
+2. **多通道独立会话隔离 (Multi-Session Isolation)**:
+   * 飞书私聊、群聊会话与机器人物理本体（麦克风/屏幕）采用严格隔离的 `session_id` 维护多轮对话记忆，避免远程交互污染本地物理交互画像；
+   * 支持在飞书聊天框中直接向机器人发送自然语言指令（控制舵机转头、查询健康状态、设置闹钟备忘等）。
+
+3. **异常报警卡片与深夜进化日记推送**:
+   * **设备异常即时报警**: 当机器人捕获到外设离线、网络中断、舵机卡死或系统过热时，秒级下发红色高警示富文本卡片至管理员私聊或运维群；
+   * **深夜自进化日记卡片**: 每天夜间海马体反思完成后，自动构建精致的墨绿色主题飞书交互式卡片，推送当日累计互动轮次、亲密度升降、主人作息画像变化、新动作进化徽章与今日情感总结。
+
 ```python
-import os
-import subprocess
+# skills/feishu_bot/feishu_client.py 核心长连接与卡片下发
+from lark_oapi.ws import Client as WsClient
+from lark_oapi.event.callback.model.p2_im_message_receive_v1 import P2ImMessageReceiveV1
 
-def auto_upgrade(repo_dir="/home/pi/desktop_robot"):
-    os.chdir(repo_dir)
-    print("📡 检查远端代码仓库更新...")
-    subprocess.run(["git", "fetch", "origin", "main"], check=True)
-
-    loc = subprocess.check_output(["git", "rev-parse", "HEAD"]).strip()
-    rem = subprocess.check_output(["git", "rev-parse", "origin/main"]).strip()
-
-    if loc != rem:
-        print("📦 发现新版本代码，执行拉取...")
-        subprocess.run(["git", "pull", "origin", "main"], check=True)
-        if os.path.exists("requirements.txt"):
-            subprocess.run(["pip3", "install", "-r", "requirements.txt", "--quiet"])
-
-        print("🔁 重启 systemd 主服务...")
-        subprocess.run(["sudo", "systemctl", "restart", "robot.service"])
-        return True
-    return False
-
-if __name__ == "__main__":
-    auto_upgrade()
+class FeishuClient:
+    def start_websocket(self, on_message_callback):
+        """免公网 IP 建立双向 WebSocket 长连接监听"""
+        event_handler = MessageReceiveHandler(on_message_callback)
+        self._ws_client = WsClient(
+            app_id=self.app_id,
+            app_secret=self.app_secret,
+            event_handler=event_handler
+        )
+        self._ws_client.start()
 ```
+
+---
+
+### 18. 2.4 寸屏幕端 GUI 交互系统与 4 键操作指南 (`core/menu_fsm.py`)
+
+机器人在物理硬件端搭载 $240 \times 320$ 彩色液晶屏幕，并配置 4 颗实体微动按键，构建了完整的离线分层状态机交互系统：
+
+1. **4 颗物理实体按键定义与映射**:
+   * `KEY1` (GPIO 21): **UP (上翻)** - 菜单光标上移 / 参数增值
+   * `KEY2` (GPIO 20): **DOWN (下翻)** - 菜单光标下移 / 参数减值
+   * `KEY3` (GPIO 16): **OK (确认/选择)** - 确认进入子菜单 / 触发动作 / 开关切换
+   * `KEY4` (GPIO 26): **BACK (返回/主页)** - 返回上一级菜单 / 返回主屏幕表情
+
+2. **多级菜单状态机功能矩阵**:
+   * **主屏幕 (Dashboard / Face)**: 默认呈现拟真卡通大眼微表情；轻按任意键展开顶部悬浮状态栏（显示本机 WiFi IP、CPU 核心温度、电量/音量与当前固件版本号）；
+   * **`01 / CHAT` (对话看板)**: 实时滚屏查看最近一轮语音交互的人声转写文本与大模型回复内容；
+   * **`02 / STATUS` (系统状态)**: 实时展示 CPU 占用率、RAM 内存水位、芯片核心温度、大模型网络延迟 (ms) 与系统开机运行时间；
+   * **`03 / HARDWARE` (8 项核心硬件控制)**:
+     1. `舵机居中归位`: 立即平滑将水平与俯仰舵机复位至 90° 机械校准零位；
+     2. `舵机动作自检`: 左右 60°~120° 摇头 + 上下 75°~90° 点头完整运动学巡检；
+     3. `舵机休眠防抖`: 空闲超时后自动注销 PWM 脉冲，彻底消除 SG90 舵机高频微颤与发热磨损；
+     4. `麦克风收音`: 一键静音 / 恢复硬件拾音监听；
+     5. `人脸视线跟随`: 开启/关闭视觉人脸检测与眼神追踪；
+     6. `视线算法模式`: 切换“九宫格灵动视线”或“连续物理轴追踪”；
+     7. `主动关怀搭话`: 开启/关闭久坐关怀与作息生物钟自发搭话；
+     8. `萌宠情绪拟声`: 开启/关闭程序化非语言正弦波萌趣音效；
+   * **`04 / SYSTEM` (10 项系统设置与物联功能)**:
+     1. `录入主人面容`: 屏幕倒计时 3 秒拍照采样，提取 128 维特征向量持久化至 `master_face.json`；
+     2. `重置主人面容`: 一键格式化人脸特征库；
+     3. `米家扫码绑定`: 屏幕原生弹出米家二维码，手机米家 App 扫码即可完成局域网凭据同步；
+     4. `发音音色切换`: 循环切换 MiMo 高拟真发音人（冰糖 / 糖豆 / 晨曦 / 暖阳）；
+     5. `系统播报音量`: 循环调节 20% ~ 100% 播放音量；
+     6. `屏幕息屏时间`: 循环设定 15秒 / 30秒 / 60秒 / 常亮不熄屏；
+     7. `系统固件版本`: 显示当前真实语义化版本号（如 `v0.1.0`）；
+     8. `检查系统更新`: 实时联网向远程 Git 仓库比对版本并反馈；
+     9. `重启机器人服务`: 触发 systemd 软重启守护进程；
+     10. `树莓派安全关机`: 安全卸载外设驱动并执行 `sudo poweroff` 安全断电。
+
+3. **视口滚动与动效设计**:
+   * **4-Card 可视视口 (Scroll Viewport)**: 统一保持 4 卡片黄金视口高度，搭配右侧动态比例滑块指示条；
+   * **首尾循环光标 (Cyclic Wrap-around)**: 在首项按 UP 自动跳转末项，末项按 DOWN 自动回到首项，操作极度行云流水。
+
+---
+
+### 19. 米家 IoT 智能家居直连与屏幕二维码授权 (`skills/xiaomi_iot/`)
+
+针对智能家居控制，机器人打通了米家生态链路，并实现了无需输入验证码的原生屏幕扫码授权机制：
+
+1. **2.4 寸屏幕二维码扫码直连 (`skills/xiaomi_iot/xiaomi_qr_auth.py`)**:
+   * 触发绑定后，系统向小米云端安全通道申请临时扫码凭证，动态生成并在机器人 2.4 寸屏幕上渲染 $200 \times 200$ 二维码；
+   * 用户打开手机“米家 App”扫描机器人屏幕上的二维码即刻完成认证，完美避开网页端繁琐的短信验证码或验证码拦截问题。
+
+2. **局域网 Token 自动提取与物模型控制 (`skills/xiaomi_iot/miot_spec.py`)**:
+   * 扫码成功后，后台自动拉取用户家庭拓扑下所有智能设备的局域网 IP 与通信 Token，持久化保存于 `data/xiaomi_config.json`；
+   * 基于标准 MIoT Spec 物模型协议，支持灯具开关与亮度调节、插座通断、空调温控、电水壶状态查询等全套常用控制。
+
+---
+
+### 20. 手机无线配网门户与参数设置中心 (`simulator/settings.html`)
+
+在局域网内任意手机或电脑浏览器中访问 `http://<树莓派IP>:8090/simulator/settings.html`，即可打开美观、专业的暗黑机甲风无线配置后台：
+
+1. **响应式 UI 与按键防折行排版**:
+   * 针对主流移动端竖屏与桌面宽屏自适应重排；
+   * 优化按钮文本流式布局与弹窗卡片，消灭文字折行与样式溢出。
+
+2. **八大功能分区面板**:
+   * `00 / WIFI PROVISIONING`: 实时扫描周围 WiFi 热点，支持一键配网；
+   * `01 / MI HOME ECOSYSTEM`: 扫码授权状态监控、拓扑设备刷新与重置；
+   * `01 / MODEL & API TOKEN`: 配置大模型 API Key、Base URL、Model 名称与语音合成发音人；
+   * `02 / PERSONA & IDENTITY`: 设定主人称谓、亲密等级与个性偏好；
+   * `03 / HARDWARE SWITCHES`: 视觉注视跟随、音效、自主闲置状态机与主动搭话总开关；
+   * `04 / SERVO CALIBRATION`: Pan / Tilt 水平与俯仰微调偏角（Trim）、轴向反转（Invert）、物理限位与防抖自动卸力延时设置；
+   * `05 / SYSTEM DIAGNOSTICS`: 物理机/仿真驱动状态、本机 IP、网络延迟、核心温度与真实 Git Tag 固件版本号查询；
+   * `06 / FEISHU BOT & REMOTE NOTIFICATIONS`: 飞书 App ID / App Secret / Webhook 地址配置、WebSocket 长连接状态实时双向绑定、多会话通道监控、一键触发测试告警卡片与深夜进化日记推送。
 
 ---
 
