@@ -7,6 +7,10 @@ PIG 机器人 - 人脸视觉注视与头部追踪中枢 (Gaze & Face Tracker)
 """
 
 import os
+import json
+import time
+from datetime import datetime
+from typing import Dict, Any, Optional
 try:
     import cv2
 except ImportError:
@@ -15,6 +19,8 @@ import numpy as np
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "face_detection_yunet_2023mar.onnx")
+RECOGNIZER_MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "face_recognition_sface_2021dec.onnx")
+MASTER_FACE_FILE = os.path.join(PROJECT_ROOT, "data", "master_face.json")
 
 class FaceTracker:
     def __init__(self, enabled: bool = False, input_size=(320, 240)):
@@ -23,6 +29,16 @@ class FaceTracker:
         self.detector = None
         self.cascade_detector = None
         self._init_detector()
+
+        # SFace 离线人脸识别与认主中枢 (128-d 特征向量)
+        self.recognizer = None
+        self._init_recognizer()
+        self.master_embedding: Optional[np.ndarray] = self._load_master_face()
+        self.last_identity = "MASTER" if self.master_embedding is not None else "UNREGISTERED"
+        self.last_similarity = 0.0
+        self.last_recognition_time = 0.0
+        self.last_raw_face_row = None
+        self.last_frame_resized = None
 
         # 视线平滑低通滤波器 (EMA) 与防抖机制
         self.smooth_offset_x = 0.0
@@ -37,6 +53,59 @@ class FaceTracker:
         self.last_target_tilt = 90.0
         self.last_look_x = 0
         self.last_look_y = 0
+
+    def _init_recognizer(self):
+        if cv2 is None:
+            return
+        if os.path.exists(RECOGNIZER_MODEL_PATH) and hasattr(cv2, "FaceRecognizerSF"):
+            try:
+                self.recognizer = cv2.FaceRecognizerSF.create(RECOGNIZER_MODEL_PATH, "")
+                print("👁️ [FaceTracker] OpenCV SFace 离线人脸识别引擎已就绪 (128-d 认主)")
+            except Exception as e:
+                print(f"⚠️ [FaceTracker] 初始化 SFace 异常: {e}")
+
+    def _load_master_face(self) -> Optional[np.ndarray]:
+        if os.path.exists(MASTER_FACE_FILE):
+            try:
+                with open(MASTER_FACE_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    emb = data.get("embedding")
+                    if emb and len(emb) == 128:
+                        return np.array(emb, dtype=np.float32).reshape(1, 128)
+            except Exception as e:
+                print(f"⚠️ [FaceTracker] 读取主人人脸特征库异常: {e}")
+        return None
+
+    def register_master_face(self, frame=None) -> Dict[str, Any]:
+        """将当前画面中的人脸特征录入为唯一的【主人特征向量】"""
+        if self.recognizer is None or cv2 is None:
+            return {"success": False, "msg": "SFace 人脸识别引擎未就绪"}
+
+        target_frame = frame if frame is not None else getattr(self, "last_frame_resized", None)
+        target_face = getattr(self, "last_raw_face_row", None)
+        if target_frame is None or target_face is None:
+            return {"success": False, "msg": "未在镜头中检测到人脸，请正对摄像头"}
+
+        try:
+            if target_frame.shape[1] != self.input_size[0] or target_frame.shape[0] != self.input_size[1]:
+                target_frame = cv2.resize(target_frame, self.input_size)
+            aligned = self.recognizer.alignCrop(target_frame, target_face)
+            feat = self.recognizer.feature(aligned)  # shape: (1, 128)
+            self.master_embedding = feat
+
+            master_data = {
+                "registered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "embedding": feat.flatten().tolist()
+            }
+            with open(MASTER_FACE_FILE, "w", encoding="utf-8") as f:
+                json.dump(master_data, f, indent=2)
+
+            self.last_identity = "MASTER"
+            self.last_similarity = 1.0
+            print("👑 [FaceTracker] 主人人脸 128-d 特征向量录入成功！已持久化至 data/master_face.json")
+            return {"success": True, "msg": "主人面容录入成功！PIG 已经记住你了~"}
+        except Exception as e:
+            return {"success": False, "msg": f"录入失败: {e}"}
 
     def _init_detector(self):
         if cv2 is None:
@@ -94,6 +163,29 @@ class FaceTracker:
                 _, faces = self.detector.detect(frame_resized)
                 if faces is not None and len(faces) > 0:
                     face = faces[0]
+                    self.last_raw_face_row = face.copy()
+                    self.last_frame_resized = frame_resized.copy()
+
+                    # 离线人脸认主识别 (抽样执行：每 3.0 秒或首次检测到人脸时提取 128-d 向量比对，绝不增加每帧负担)
+                    now_ts = time.time()
+                    if self.recognizer is not None and (now_ts - self.last_recognition_time > 3.0):
+                        self.last_recognition_time = now_ts
+                        try:
+                            aligned = self.recognizer.alignCrop(frame_resized, face)
+                            feat = self.recognizer.feature(aligned)
+                            if self.master_embedding is not None:
+                                sim = float(self.recognizer.match(feat, self.master_embedding, cv2.FaceRecognizerSF_FR_COSINE))
+                                self.last_similarity = round(max(0.0, sim), 2)
+                                if sim >= 0.38:
+                                    self.last_identity = "MASTER"
+                                else:
+                                    self.last_identity = "GUEST"
+                            else:
+                                self.last_identity = "UNREGISTERED"
+                                self.last_similarity = 0.0
+                        except Exception:
+                            pass
+
                     box = face[0:4]
                     self.last_box = {
                         "x": int(box[0]),

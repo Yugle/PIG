@@ -46,6 +46,25 @@ class EvolutionEngine:
             }
         })
 
+        # 4. 五维性格雷达图与专属暗号记忆 (Personality Matrix & Slang Memes)
+        self.personality_file = os.path.join(storage_dir, "personality_profile.json")
+        self.personality_data = self._load_json(self.personality_file, {
+            "radar": {
+                "lively": 72,        # 活泼度 (0~100)
+                "clingy": 64,        # 粘人度 (0~100)
+                "sharp_tongued": 22, # 傲娇/毒舌度 (0~100)
+                "empathy": 88,       # 温柔共情度 (0~100)
+                "curiosity": 78      # 探索好奇心 (0~100)
+            },
+            "intimacy_level": 2,     # 亲密度等级 (1~10)
+            "intimacy_exp": 35,      # 当前经验 (满 100 升级)
+            "persona_tag": "元气治愈系桌宠",
+            "private_memes": ["开润", "泰裤辣", "芜湖"],
+            "drift_history": [
+                {"time": datetime.now().strftime("%Y-%m-%d %H:%M"), "event": "诞生初始性格", "note": "元气温柔陪伴型"}
+            ]
+        })
+
     def _load_json(self, path: str, default: Any) -> Any:
         if os.path.exists(path):
             try:
@@ -217,15 +236,135 @@ class EvolutionEngine:
             return {"status": "error", "msg": str(e)}
 
     # ==========================================
-    # 3. 增强系统提示词 (Prompt Augmentation)
+    # 3. 五维性格养成与默契自进化 (Personality Drift & Private Memes)
+    # ==========================================
+    def get_personality(self) -> Dict[str, Any]:
+        """获取当前五维性格属性与亲密度状态"""
+        return dict(self.personality_data)
+
+    def drift_personality(self, event_type: str, delta: Dict[str, int], note: str = "") -> Dict[str, Any]:
+        """
+        根据日常交互动态微调五维属性与亲密度经验
+        :param event_type: 事件类型 (如 praise, banter, heart_to_heart, routine)
+        :param delta: 各维度变化值 (如 {"lively": +2, "clingy": +1})
+        :param note: 演化备注
+        """
+        radar = self.personality_data["radar"]
+        for k, v in delta.items():
+            if k in radar:
+                radar[k] = max(10, min(95, radar[k] + v))
+
+        # 增加亲密度经验
+        self.personality_data["intimacy_exp"] = self.personality_data.get("intimacy_exp", 0) + 5
+        level = self.personality_data.get("intimacy_level", 1)
+        if self.personality_data["intimacy_exp"] >= 100:
+            self.personality_data["intimacy_level"] = min(10, level + 1)
+            self.personality_data["intimacy_exp"] -= 100
+
+        # 根据五维最高两项动态计算当前的性格标签
+        sorted_traits = sorted(radar.items(), key=lambda x: x[1], reverse=True)
+        t1, t2 = sorted_traits[0][0], sorted_traits[1][0]
+        tag_map = {
+            ("empathy", "clingy"): "温柔治愈小棉袄",
+            ("clingy", "empathy"): "暖心粘人小甜猪",
+            ("lively", "clingy"): "元气活泼小粘人",
+            ("clingy", "lively"): "爱撒娇元气桌宠",
+            ("sharp_tongued", "lively"): "傲娇调皮机灵鬼",
+            ("lively", "sharp_tongued"): "毒舌幽默乐天派",
+            ("empathy", "curiosity"): "深情敏锐探索家",
+            ("curiosity", "empathy"): "好奇温柔小智囊",
+            ("curiosity", "lively"): "好动机灵小探险家"
+        }
+        self.personality_data["persona_tag"] = tag_map.get((t1, t2), "元气治愈系桌宠")
+
+        # 记录演化日志 (保留最近 20 条)
+        history = self.personality_data.setdefault("drift_history", [])
+        history.append({
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "event": event_type,
+            "note": note or f"属性微调: {delta}"
+        })
+        if len(history) > 20:
+            self.personality_data["drift_history"] = history[-20:]
+
+        self._atomic_save(self.personality_file, self.personality_data)
+        return self.personality_data
+
+    def learn_private_meme(self, word: str) -> bool:
+        """吸收主仆专属黑话暗号或口头禅"""
+        clean_word = (word or "").strip()
+        if not clean_word or len(clean_word) < 2 or len(clean_word) > 10:
+            return False
+        memes = self.personality_data.setdefault("private_memes", [])
+        if clean_word not in memes:
+            memes.append(clean_word)
+            if len(memes) > 10:
+                self.personality_data["private_memes"] = memes[-10:]
+            self._atomic_save(self.personality_file, self.personality_data)
+            print(f"✨ [EvolutionEngine] 吸收新黑话/口头禅: 【{clean_word}】")
+            return True
+        return False
+
+    def quiet_explore_action(self) -> Optional[Dict[str, Any]]:
+        """
+        低调自主探索动作（趁主人不在闲暇时探索新姿态，静默入库，不张扬炫耀）
+        """
+        if not self.skills or not hasattr(self.skills, "evolve_action"):
+            return None
+        existing = self.skills.list_evolved_actions()
+        # 预设几个拟人低调优雅小动作
+        quiet_candidates = [
+            ("CAT_STRETCH", "萌猫伸懒腰", [
+                {"pan": 90, "tilt": 105, "emotion": "HAPPY", "delay": 500},
+                {"pan": 90, "tilt": 75, "emotion": "HAPPY", "delay": 600},
+                {"pan": 90, "tilt": 90, "emotion": "NORMAL", "delay": 400}
+            ]),
+            ("CURIOUS_TILT", "好奇歪头观察", [
+                {"pan": 75, "tilt": 82, "emotion": "CONFUSED", "delay": 700},
+                {"pan": 90, "tilt": 90, "emotion": "WINK", "delay": 500}
+            ]),
+            ("GENTLE_NOD", "轻柔赞许点头", [
+                {"pan": 90, "tilt": 80, "emotion": "HAPPY", "delay": 350},
+                {"pan": 90, "tilt": 95, "emotion": "HAPPY", "delay": 350},
+                {"pan": 90, "tilt": 90, "emotion": "NORMAL", "delay": 300}
+            ])
+        ]
+        for name, desc, kfs in quiet_candidates:
+            if name not in existing:
+                self.skills.evolve_action(name, kfs, desc)
+                print(f"🌱 [EvolutionEngine] 闲暇自主自创低调动作: 【{name}】({desc}) -> 静默入库已就绪")
+                return {"name": name, "desc": desc}
+        return None
+
+    # ==========================================
+    # 4. 增强系统提示词 (Prompt Augmentation)
     # ==========================================
     def augment_prompt_with_evolution(self, base_prompt: str) -> str:
-        """为大模型动态注入：生物钟画像、晨间问候模式、近期反思成果"""
+        """为大模型动态注入：五维性格特征、亲密度、生物钟画像、晨间问候、近期反思与专属黑话"""
         now = datetime.now()
         habits = self.circadian_data.get("learned_habits", {})
         ref = self.memory.long_term_data.get("daily_reflection", {}) if self.memory else {}
+        p_data = self.personality_data.get("radar", {})
+        memes = self.personality_data.get("private_memes", [])
+        tag = self.personality_data.get("persona_tag", "元气治愈系桌宠")
+        intimacy_lvl = self.personality_data.get("intimacy_level", 1)
 
         evolution_notes = []
+
+        # 1. 注入当前演化出的五维性格与语气导向
+        evolution_notes.append(
+            f"- 当前养成性格：【{tag}】(亲密度 Lv.{intimacy_lvl}，共情温柔:{p_data.get('empathy',85)}，活泼:{p_data.get('lively',70)}，粘人:{p_data.get('clingy',60)}，傲娇/微毒舌:{p_data.get('sharp_tongued',20)}，好奇心:{p_data.get('curiosity',75)})。"
+        )
+        if p_data.get("sharp_tongued", 20) > 35:
+            evolution_notes.append("- 带有微量傲娇与调皮小幽默，偶尔可以机灵吐槽，但骨子里依旧全心陪伴主人。")
+        if p_data.get("clingy", 60) > 65:
+            evolution_notes.append("- 展现出对主人的高度信任与依恋，说话亲昵可爱，喜欢和主人互动。")
+
+        # 2. 注入专属默契黑话
+        if memes:
+            evolution_notes.append(f"- 你们之间的私域默契口头禅/暗号包含：{', '.join(memes)}，在日常对话中可适时低调自然使用，增加主仆默契。")
+
+        # 3. 注入生物钟与夜间反思
         if habits:
             evolution_notes.append(
                 f"- 自主归纳主人作息：通常 {habits.get('wake_hour', 9)}点起床活动，{habits.get('slump_hour', 14)}点易疲劳犯困，{habits.get('sleep_hour', 23)}点睡前。"
@@ -235,11 +374,8 @@ class EvolutionEngine:
             evolution_notes.append(f"- 近期夜间反思摘要：{ref.get('summary')}")
             if ref.get("next_day_care"):
                 evolution_notes.append(f"- 重点关怀提示：{ref.get('next_day_care')}")
-            if ref.get("persona_adaptation"):
-                evolution_notes.append(f"- 性格自我进化导向：{ref.get('persona_adaptation')}")
 
         if self.check_morning_briefing_opportunity():
-            # 获取今天未完成的闹钟日程
             rem_str = "今日暂无闹钟"
             if self.skills:
                 active_rems = self.skills.list_active_reminders()
@@ -252,7 +388,7 @@ class EvolutionEngine:
         if not evolution_notes:
             return base_prompt
 
-        section = "\n【🌱 PIG 自主进化元认知看板】\n" + "\n".join(evolution_notes) + "\n"
+        section = "\n【🌱 PIG 自主进化与性格元认知看板】\n" + "\n".join(evolution_notes) + "\n"
         return base_prompt + section
 
 

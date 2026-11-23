@@ -2514,6 +2514,19 @@
                       targetTilt = data.target_tilt;
                     }
                   }
+
+                  // 3. 更新人脸认主身份标识
+                  const idBadge = document.getElementById("faceIdText");
+                  if (idBadge && data.identity) {
+                    if (data.identity === "MASTER") {
+                      const simPct = Math.round((data.similarity || 0.85) * 100);
+                      idBadge.innerHTML = `<span style="color:#ffb020; font-weight:600;">👑 主人 (${simPct}%)</span>`;
+                    } else if (data.identity === "GUEST") {
+                      idBadge.innerHTML = `<span style="color:#58a6ff;">👤 访客</span>`;
+                    } else {
+                      idBadge.innerHTML = `<span style="color:#8b949e;">未认主</span>`;
+                    }
+                  }
                 } else {
                   statusText.innerText = isHigherPriority ? "🎬 动作执行中 (注视让位)" : "🔍 寻找主人人脸中...";
                   statusText.style.color = isHigherPriority ? "#f59e0b" : "var(--text-sub)";
@@ -2568,6 +2581,41 @@
         lookOffset.y = 0;
         updateAngles(90, 90);
         drawEyes(currentEmotion);
+      }
+    }
+
+    // 📸 一键录入当前摄像头人脸为唯一主人
+    async function registerMasterFace() {
+      recordUserAction();
+      if (!webcamGazeEnabled || !offscreenCanvas) {
+        alert("请先开启电脑摄像头追踪，正对镜头后再点击【📸 认主】！");
+        return;
+      }
+      const btn = event ? event.target : null;
+      if (btn) btn.innerText = "⏳ 录入中...";
+      try {
+        const video = document.getElementById("webcamVideo");
+        offscreenCtx.drawImage(video, 0, 0, 480, 360);
+        const snapDataUrl = offscreenCanvas.toDataURL("image/jpeg", 0.8);
+        const resp = await fetch("/api/vision/register_master_face", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: snapDataUrl })
+        });
+        const res = await resp.json();
+        if (res.success) {
+          playChirp("wake_chime");
+          setEmotion("LOVE");
+          const idBadge = document.getElementById("faceIdText");
+          if (idBadge) idBadge.innerHTML = `<span style="color:#ffb020; font-weight:600;">👑 主人 (100%)</span>`;
+          alert("🎉 " + res.msg);
+        } else {
+          alert("⚠️ " + res.msg);
+        }
+      } catch (e) {
+        alert("网络异常: " + e);
+      } finally {
+        if (btn) btn.innerText = "📸 认主";
       }
     }
 
@@ -3746,6 +3794,112 @@
         btn.disabled = false;
       }
     }
+
+    // ==========================================
+    // 2.8.1 🌱 五维性格雷达图与专属暗号管理
+    // ==========================================
+    function renderPersonalityRadar(radarData) {
+      const canvas = document.getElementById("personalityRadarCanvas");
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const cx = w / 2;
+      const cy = h / 2 - 3;
+      const r = 42;
+
+      const traits = [
+        { key: "lively", label: "活泼" },
+        { key: "clingy", label: "粘人" },
+        { key: "sharp_tongued", label: "傲娇" },
+        { key: "empathy", label: "温柔" },
+        { key: "curiosity", label: "好奇" }
+      ];
+      const num = traits.length;
+      const angleStep = (Math.PI * 2) / num;
+
+      // 1. 背景五边形网格
+      ctx.strokeStyle = "rgba(48, 54, 61, 0.85)";
+      ctx.lineWidth = 1;
+      for (let level = 1; level <= 3; level++) {
+        const curR = (r * level) / 3;
+        ctx.beginPath();
+        for (let i = 0; i < num; i++) {
+          const angle = i * angleStep - Math.PI / 2;
+          const x = cx + Math.cos(angle) * curR;
+          const y = cy + Math.sin(angle) * curR;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      // 2. 轴线与文字标签
+      ctx.font = "9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      for (let i = 0; i < num; i++) {
+        const angle = i * angleStep - Math.PI / 2;
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+        const lx = cx + Math.cos(angle) * (r + 15);
+        const ly = cy + Math.sin(angle) * (r + 13);
+        const val = (radarData && radarData[traits[i].key] !== undefined) ? radarData[traits[i].key] : 70;
+        ctx.fillStyle = "#8b949e";
+        ctx.fillText(`${traits[i].label} ${val}`, lx, ly);
+      }
+
+      // 3. 当前性格填充多边形
+      ctx.beginPath();
+      for (let i = 0; i < num; i++) {
+        const angle = i * angleStep - Math.PI / 2;
+        const val = (radarData && radarData[traits[i].key] !== undefined) ? radarData[traits[i].key] : 70;
+        const curR = (r * Math.max(15, Math.min(100, val))) / 100;
+        const x = cx + Math.cos(angle) * curR;
+        const y = cy + Math.sin(angle) * curR;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "rgba(0, 229, 255, 0.25)";
+      ctx.fill();
+      ctx.strokeStyle = "#00e5ff";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    async function refreshPersonality() {
+      try {
+        const res = await fetch("/api/evolution/personality");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.radar) renderPersonalityRadar(data.radar);
+          const tagElem = document.getElementById("personaTagText");
+          if (tagElem && data.persona_tag) tagElem.innerText = `✨ ${data.persona_tag}`;
+          const lvlElem = document.getElementById("intimacyLvlText");
+          if (lvlElem && data.intimacy_level) lvlElem.innerText = `Lv.${data.intimacy_level} 亲密`;
+          const expText = document.getElementById("intimacyExpText");
+          if (expText && data.intimacy_exp !== undefined) expText.innerText = `${data.intimacy_exp}/100 EXP`;
+          const expBar = document.getElementById("intimacyExpBar");
+          if (expBar && data.intimacy_exp !== undefined) expBar.style.width = `${Math.min(100, data.intimacy_exp)}%`;
+          const memesList = document.getElementById("privateMemesList");
+          if (memesList && data.private_memes) {
+            memesList.innerHTML = data.private_memes.map(m => `<span style="font-size:0.62rem; color:#7ee787; background:rgba(126,231,135,0.12); padding:1px 5px; border-radius:3px;">${m}</span>`).join("");
+          }
+        }
+      } catch (e) {}
+    }
+
+    setInterval(refreshPersonality, 6000);
+    refreshPersonality();
 
     setInterval(fetchCircadianAndReflection, 5000);
     fetchCircadianAndReflection();

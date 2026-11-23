@@ -201,6 +201,15 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(response_data, ensure_ascii=False).encode("utf-8"))
             return
 
+        # 五维性格与亲密度状态查询 API
+        if self.path == "/api/evolution/personality":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            p_data = evolution_engine.get_personality() if evolution_engine else {}
+            self.wfile.write(json.dumps(p_data, ensure_ascii=False).encode("utf-8"))
+            return
+
         # 菜单状态查询 API
         if self.path == "/api/menu/state":
             self.send_response(200)
@@ -922,6 +931,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     res["target_pan"] = round(float(tp), 1)
                     res["target_tilt"] = round(float(tt), 1)
                     res["sector"] = getattr(face_tracker, "cur_sector", "CENTER")
+                    res["identity"] = getattr(face_tracker, "last_identity", "UNREGISTERED")
+                    res["similarity"] = getattr(face_tracker, "last_similarity", 0.0)
 
                     if face_tracker.last_box:
                         res["box"] = {
@@ -944,6 +955,49 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(json.dumps(res, default=_safe_json_serialize).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        # 📸 录入当前人脸为唯一主人 (SFace 128-d Feature Embedding)
+        if self.path == "/api/vision/register_master_face":
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                post_data = self.rfile.read(content_length) if content_length > 0 else b"{}"
+                req_json = json.loads(post_data.decode("utf-8")) if post_data else {}
+                img_data = req_json.get("image", "")
+                frame = None
+                if img_data:
+                    if "," in img_data:
+                        img_data = img_data.split(",", 1)[1]
+                    img_bytes = base64.b64decode(img_data)
+                    import cv2, numpy as np
+                    nparr = np.frombuffer(img_bytes, np.uint8)
+                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+                reg_res = face_tracker.register_master_face(frame)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps(reg_res, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        # 🌱 五维性格微调与交互演化驱动
+        if self.path == "/api/evolution/drift":
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                post_data = self.rfile.read(content_length)
+                req_json = json.loads(post_data.decode("utf-8")) if post_data else {}
+                evt = req_json.get("event", "interaction")
+                delta = req_json.get("delta", {})
+                note = req_json.get("note", "")
+                res = evolution_engine.drift_personality(evt, delta, note) if evolution_engine else {}
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
             except Exception as e:
                 self.send_error(500, str(e))
             return
@@ -1124,6 +1178,27 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             except Exception:
                 user_text = ""
 
+            # 🌱 动态性格与亲密度演化驱动 (根据用户对话情感自然演进)
+            if evolution_engine and user_text:
+                try:
+                    delta = {"curiosity": 1}
+                    note = "日常语音交互"
+                    if any(w in user_text for w in ["真棒", "喜欢", "可爱", "厉害", "谢谢", "好乖", "爱你", "亲亲"]):
+                        delta = {"lively": 2, "clingy": 2}
+                        note = "收到主人的夸奖与鼓励"
+                    elif any(w in user_text for w in ["累", "难过", "困", "生病", "烦", "痛", "不开心", "失眠"]):
+                        delta = {"empathy": 3, "clingy": 1}
+                        note = "主人倾诉疲惫与低落心事"
+                    elif any(w in user_text for w in ["笨", "傻", "调皮", "别装", "切", "哈哈", "逗你", "搞快点"]):
+                        delta = {"sharp_tongued": 2, "lively": 1}
+                        note = "主仆互怼调侃"
+                    evolution_engine.drift_personality("chat", delta, note)
+                    for slang in ["开润", "芭比Q", "泰裤辣", "芜湖", "绝绝子", "起飞", "奥利给", "破防", "冲鸭"]:
+                        if slang in user_text:
+                            evolution_engine.learn_private_meme(slang)
+                except Exception:
+                    pass
+
             cfg = load_config()
             api_key = cfg.get("api_key", "")
             base_url = cfg.get("base_url", "https://api.xiaomimimo.com/v1").rstrip("/")
@@ -1245,6 +1320,27 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 user_text = req_json.get("text", "")
             except Exception:
                 user_text = ""
+
+            # 🌱 动态性格与亲密度演化驱动 (根据用户对话情感自然演进)
+            if evolution_engine and user_text:
+                try:
+                    delta = {"curiosity": 1}
+                    note = "日常语音交互"
+                    if any(w in user_text for w in ["真棒", "喜欢", "可爱", "厉害", "谢谢", "好乖", "爱你", "亲亲"]):
+                        delta = {"lively": 2, "clingy": 2}
+                        note = "收到主人的夸奖与鼓励"
+                    elif any(w in user_text for w in ["累", "难过", "困", "生病", "烦", "痛", "不开心", "失眠"]):
+                        delta = {"empathy": 3, "clingy": 1}
+                        note = "主人倾诉疲惫与低落心事"
+                    elif any(w in user_text for w in ["笨", "傻", "调皮", "别装", "切", "哈哈", "逗你", "搞快点"]):
+                        delta = {"sharp_tongued": 2, "lively": 1}
+                        note = "主仆互怼调侃"
+                    evolution_engine.drift_personality("chat", delta, note)
+                    for slang in ["开润", "芭比Q", "泰裤辣", "芜湖", "绝绝子", "起飞", "奥利给", "破防", "冲鸭"]:
+                        if slang in user_text:
+                            evolution_engine.learn_private_meme(slang)
+                except Exception:
+                    pass
 
             cfg = load_config()
             api_key = cfg.get("api_key", "")

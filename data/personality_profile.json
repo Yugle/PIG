@@ -1,0 +1,30 @@
+{
+  "radar": {
+    "lively": 75,
+    "clingy": 66,
+    "sharp_tongued": 22,
+    "empathy": 88,
+    "curiosity": 78
+  },
+  "intimacy_level": 2,
+  "intimacy_exp": 40,
+  "persona_tag": "深情敏锐探索家",
+  "private_memes": [
+    "开润",
+    "泰裤辣",
+    "芜湖",
+    "起飞咯"
+  ],
+  "drift_history": [
+    {
+      "time": "2026-11-23 17:29",
+      "event": "诞生初始性格",
+      "note": "元气温柔陪伴型"
+    },
+    {
+      "time": "2026-11-23 17:29",
+      "event": "test_praise",
+      "note": "测试夸奖"
+    }
+  ]
+}
