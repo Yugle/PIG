@@ -41,44 +41,147 @@
    * OTA 自动化静默升级 (`services/ota_updater.py`)
 9. [系统守护与保活部署 (systemd)](#九系统守护与保活部署-systemd)
 10. [核心架构设计与开发准则 (`docs/ARCHITECTURE_GUIDELINES.md`)](docs/ARCHITECTURE_GUIDELINES.md)
+11. [全景系统架构与电气连线拓扑 (`docs/SYSTEM_ARCHITECTURE.md`)](docs/SYSTEM_ARCHITECTURE.md)
 
 ---
 
 ## 一、全局架构与数据流
 
+> 完整系统架构设计与电气拓扑白皮书详见：[docs/SYSTEM_ARCHITECTURE.md](docs/SYSTEM_ARCHITECTURE.md)
+
+### 1. 软硬件分层全景架构 (Full-Stack Architecture)
+
+```mermaid
+flowchart TD
+    %% ======================= 顶层：用户交互界面 =======================
+    subgraph UI_Layer ["0. 交互界面与数字孪生层 (Interaction & Digital Twin)"]
+        Physical["🖥️ 实体机器人桌面交互<br/>(2.4寸表情屏 + 2-DOF 转头 + 语音交互 + 摸头杀)"]
+        WebSim["🌐 Web 3D 仿真工作台 (localhost:8090)<br/>(Three.js 机械骨骼 + 240x320 动态眼球 + Web Audio 0ms 缝隙流式播放)"]
+    end
+
+    %% ======================= 第一层：认知大脑与智能中枢 =======================
+    subgraph Brain_Layer ["1. 具身认知大脑层 (Cognitive Brain & Reasoning)"]
+        LLM["🧠 认知大模型引擎 (Xiaomi MiMo-v2.6-Flash / 本地模型)"]
+        Reasoner["⚡ ReAct 极速推理中枢 (AgentReasoner)<br/>• 动作指令：单轮投机执行直出 (FastPath ~1.2s)<br/>• 查询指令：首轮垫话 + 观测真实汇报<br/>• 严格防幻觉铁律 (真实 Observation 约束)"]
+        PromptBuilder["📝 自适应提示词引擎 (PromptBuilder)<br/>• 指令型：15~35 字极简利落<br/>• 内容型 (笑话/故事)：80~200 字完整展开"]
+        Memory["🧠 海马体长期记忆 (MemoryManager)<br/>• 用户档案/画像 • 机器人名字 (小猪)<br/>• 生物钟昼夜节律 profile • 向量化记忆提取"]
+    end
+
+    %% ======================= 第二层：技能插件生态 =======================
+    subgraph Skill_Layer ["2. 动态技能生态层 (Skill Plugins Engine)"]
+        SkillMgr["🧩 统一技能调度中枢 (SkillManager)<br/>• 动态别名纠偏路由 • 闹钟/倒计时调度器 • 热加载技能商店"]
+        IoT["🏠 xiaomi_iot<br/>(米家生态：台灯/水壶/摄像机/饮水机)"]
+        ActionSkill["💃 evolve_action / play_action<br/>(自创动作学习 & 表演)"]
+        ReminderSkill["⏰ reminder<br/>(自然语言闹钟/定时器)"]
+        OtherSkills["🌦️ weather / news / pomodoro / care<br/>(天气/新闻/番茄钟/主动关怀)"]
+    end
+
+    %% ======================= 第三层：流式全双工语音管线 =======================
+    subgraph Audio_Layer ["3. 流式全双工语音管线 (Streaming Audio Pipeline)"]
+        VAD["🎙️ 拾音与端点检测 (WakeWord 'Hey Jarvis' + WebRTC VAD)"]
+        SSE["📡 SSE 实时事件流 (/api/chat/stream)<br/>• thought 实时思维流 • delta 文本流 • behaviors 动作序列"]
+        TTS["🗣️ Edge-TTS 高精流式切片引擎<br/>• 标点智能断句 (≥16字大断句，≥22字逗号)<br/>• Web Audio API (AudioContext 无缝物理拼接)"]
+    end
+
+    %% ======================= 第四层：硬件抽象与外设驱动 =======================
+    subgraph HAL_Layer ["4. 统一硬件抽象层 (HAL - Hardware Abstraction)"]
+        HAL_Sim["🖥️ HAL-Simulation (虚拟孪生驱动)<br/>(WebGL Head / Canvas Eyes / Virtual Audio)"]
+        HAL_Real["🔌 HAL-Hardware (物理外设驱动)<br/>(RPi.GPIO / SPI fb / OpenCV V4L2 / ALSA)"]
+        MotionFSM["🤖 具身微动作状态机 (BehaviorFSM)<br/>• S曲线平滑加减速 • 昼夜生物钟 (发呆/打哈欠/伴睡)"]
+        EyeRenderer["👀 240x320 动态眼球渲染 (SvgAnimator)<br/>(HAPPY / LOVE / WINK / SLEEP / DIZZY / NORMAL)"]
+    end
+
+    %% ======================= 底层：物理硬件元器件 =======================
+    subgraph HW_Layer ["5. 物理硬件电气元器件 (Physical Components)"]
+        RPi["🍓 树莓派 3B / 3B+ / 4B 主控板"]
+        LCD["📺 2.4寸 ST7789 SPI 彩色显示屏 (8-Pin 焊针)"]
+        Cam["📷 免驱 USB 摄像头裸板 (720P 60° 无畸变)"]
+        Mic["🎤 免驱 USB 迷你直插麦克风"]
+        Speaker["🔊 Y57 USB 扩音喇叭 (数字声卡+功放+喇叭一线通)"]
+        Touch["👆 TTP223 电容触摸传感器 (摸头杀，隔壳感应)"]
+        Servos["🦾 二自由度云台 (SG90 9g 舵机 × 2: Pan/Tilt)"]
+    end
+
+    %% ======================= 连线关系 =======================
+    Physical <--> UI_Layer
+    WebSim <--> UI_Layer
+
+    UI_Layer <--> Audio_Layer
+    UI_Layer <--> Brain_Layer
+
+    Brain_Layer --> Reasoner
+    Reasoner <--> LLM
+    Reasoner --> PromptBuilder
+    Reasoner <--> Memory
+    Reasoner <--> SkillMgr
+
+    SkillMgr --> IoT
+    SkillMgr --> ActionSkill
+    SkillMgr --> ReminderSkill
+    SkillMgr --> OtherSkills
+
+    Audio_Layer --> VAD
+    Audio_Layer --> SSE
+    Audio_Layer --> TTS
+
+    Reasoner --> HAL_Layer
+    SkillMgr --> HAL_Layer
+
+    HAL_Layer --> HAL_Sim
+    HAL_Layer --> HAL_Real
+    HAL_Layer --> MotionFSM
+    HAL_Layer --> EyeRenderer
+
+    HAL_Sim --> WebSim
+    HAL_Real --> HW_Layer
+
+    RPi --- LCD
+    RPi --- Cam
+    RPi --- Mic
+    RPi --- Speaker
+    RPi --- Touch
+    RPi --- Servos
 ```
- ┌────────────────────────────────────────────────────────┐
- │                      感知与输入层                       │
- │  • 本地 USB 麦克风 ──> 动态能量 VAD 切音 / openWakeWord  │
- │  • 百度智能云 ASR ───> 极速高精普通话转写 (16kHz 16bit)  │
- │  • USB 免驱摄像头  ──> OpenCV/V4L2 场景快照抓拍        │
- │  • 局域网 HTTP API ──> FastAPI / Web 模拟器交互接口    │
- └──────────────────────────┬─────────────────────────────┘
-                            │
- ┌──────────────────────────v─────────────────────────────┐
- │            大脑中枢调度与认知层 (LLM + 记忆)            │
- │  • 双层记忆中枢 (MemoryManager):                       │
- │    - 短期记忆: 滑动窗口保留最近 6 轮对话上下文            │
- │    - 长期记忆: 持久化 memory.json (画像/偏好/亲密等级)    │
- │  • 云端大模型推理 (商汤日日新 SenseNova / DeepSeek 等)  │
- │  • 结构化契约输出 (多动作编排链):                      │
- │    { reply: "语音文本", behaviors: [                   │
- │        { emotion: "HAPPY", action: "NOD", ... },       │
- │        { emotion: "LOVE",  action: "TILT_HEAD", ... }  │
- │      ] }                                               │
- └──────────────────────────┬─────────────────────────────┘
-                            │
- ┌──────────────────────────v─────────────────────────────┐
- │                音画同步与硬件抽象执行层 (HAL)           │
- │  • Edge-TTS 高拟真云端合成 + 毫秒级精确音频时长测量     │
- │  • 视听时钟对齐: 动作节奏自适应拉伸 + 讲话时节奏微动     │
- │          ┌───────────────┴───────────────┐             │
- │          ▼                               ▼             │
- │  [物理真实机 (树莓派 3)]           [双模仿真环境]        │
- │  • pigpio PWM 舵机驱动             • 3D WebGL (端口8090) │
- │  • ST7789 2.4" SPI 屏 12 微表情    • MuJoCo 原生物理引擎 │
- │  • 3.5mm 音箱非阻塞播放           • 虚拟屏动态材质映射   │
- └────────────────────────────────────────────────────────┘
+
+### 2. 交互与执行调用时序 (Interaction Sequence)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 主人 (胖虎)
+    participant HW as 物理硬件 (麦克风/触控/眼球/舵机)
+    participant Pipeline as 流式交互管线 (Audio & SSE)
+    participant Brain as 具身大脑 (AgentReasoner & ReAct)
+    participant Skill as 技能中枢 (SkillManager)
+    participant IoT as 米家生态 (MiHome / MIoT)
+
+    %% 场景 1：触控抚摸
+    User->>HW: 手掌抚摸头顶 (摸头杀)
+    HW->>Pipeline: TTP223 触发高电平中断 (Pin 11)
+    Pipeline->>HW: 眼球瞬间切为 LOVE 表情 (弯月眨眼) + 发出呼噜轻鸣 (Purr SFX)
+    Pipeline->>HW: 舵机轻微歪头 15 度撒娇
+
+    %% 场景 2：语音指令查询与控制
+    User->>HW: “我米家都有什么设备？”
+    HW->>Pipeline: 麦克风录入音频流 -> VAD 端点切分
+    Pipeline->>Brain: 用户文本：“我米家都有什么设备？”
+    
+    Note over Brain: Round 1 推理：识别为查询类技能<br/>生成先行口头垫话 + 调度 xiaomi_iot
+    Brain-->>Pipeline: SSE push: type="thought" (具身大脑实时思考中...)
+    Brain-->>Pipeline: SSE push: type="sentence" ("好嘞胖虎，我来看看你米家都有啥设备～")
+    Pipeline->>HW: Y57 音箱 0.8s 极速朗读垫话（消除主人等待感）
+
+    par 异步查询真实设备
+        Brain->>Skill: dispatch(xiaomi_iot, device="all", action="查询设备列表")
+        Skill->>IoT: 读取 xiaomi_config.json 真实已绑定 7 台设备
+        IoT-->>Skill: 返回台灯、水壶、摄像机、饮水机、电视盒子等
+        Skill-->>Brain: Observation (真实设备清单数据就绪)
+    end
+
+    Note over Brain: Round 2 推理：严格基于 Observation 总结真实数据<br/>严禁脑补虚假设备！
+    Brain-->>Pipeline: SSE push: type="done" ("查好啦胖虎！你米家一共绑了7台设备...")
+    Pipeline->>HW: Y57 音箱 0ms 缝隙平滑无缝播报真实设备结果！
+    Pipeline->>HW: 舵机同步点头（NOD，两帧律动）
 ```
 
 ---
@@ -107,6 +210,98 @@
 舵机启动瞬间会产生 1A 左右的脉冲电流，为防止树莓派电压被拉低到 4.6V 以下导致神秘黑屏重启：
 * **方案 A (单线极简)：** 使用优质 **5V 3A** 树莓派电源，在舵机 5V 与 GND 供电端**并联一颗 1000μF 16V 电解电容**（吸收瞬间冲击峰值）；
 * **方案 B (物理隔离)：** 使用废旧手机充电头 (5V 2A) 专门给舵机红黑线供电，地线 (GND) 与树莓派共地。
+
+```mermaid
+graph TD
+    subgraph Power_System ["⚡ 电源拓扑 (安全单线/隔离方案)"]
+        WallPower["🔌 5V 3A / 3.5A 优质电源插头"]
+        PiPowerIn["🍓 树莓派 Type-C / Micro-USB 供电口"]
+        ServoPowerNode["⚡ 舵机独立电源节点 (Pin 2 / 或外接分线)"]
+        Capacitor["🔋 1000μF 16V 滤波大电解电容<br/>(吸收舵机急转瞬间 1A 冲击电流，防欠压重启)"]
+        SystemGND["⏚ 统一系统公共地 (Common GND)"]
+
+        WallPower --> PiPowerIn
+        PiPowerIn --> ServoPowerNode
+        ServoPowerNode --- Capacitor
+        Capacitor --- SystemGND
+    end
+
+    subgraph RaspberryPi_GPIO ["🍓 树莓派 40-Pin 物理引脚分配 (Pinout)"]
+        direction TB
+        Pin1["Pin 1: 3.3V PWR"]
+        Pin2["Pin 2: 5.0V PWR"]
+        Pin6["Pin 6: GND (地)"]
+        Pin9["Pin 9: GND (地)"]
+        Pin11["Pin 11: GPIO 17"]
+        Pin12["Pin 12: GPIO 18 (PWM0)"]
+        Pin15["Pin 15: GPIO 22"]
+        Pin19["Pin 19: GPIO 10 (MOSI)"]
+        Pin22["Pin 22: GPIO 25"]
+        Pin23["Pin 23: GPIO 11 (SCLK)"]
+        Pin24["Pin 24: GPIO 8 (CE0)"]
+        Pin33["Pin 33: GPIO 13 (PWM1)"]
+        USB_A["USB 端口 1"]
+        USB_B["USB 端口 2"]
+        USB_C["USB 端口 3"]
+    end
+
+    subgraph Devices ["🔌 连接的外设元器件"]
+        Screen_VCC["ST7789 屏幕 VCC"]
+        Screen_GND["ST7789 屏幕 GND"]
+        Screen_SDA["ST7789 屏幕 SDA/DIN"]
+        Screen_SCL["ST7789 屏幕 SCL/CLK"]
+        Screen_CS["ST7789 屏幕 CS"]
+        Screen_DC["ST7789 屏幕 DC"]
+        Screen_RES["ST7789 屏幕 RES"]
+        Screen_BLK["ST7789 屏幕 BLK (悬空或接3.3V)"]
+
+        Pan_PWM["水平舵机 Pan (黄色信号线)"]
+        Pan_VCC["水平舵机 Pan (红色 5V)"]
+        Pan_GND["水平舵机 Pan (棕/黑 GND)"]
+
+        Tilt_PWM["垂直舵机 Tilt (黄色信号线)"]
+        Tilt_VCC["垂直舵机 Tilt (红色 5V)"]
+        Tilt_GND["垂直舵机 Tilt (棕/黑 GND)"]
+
+        Touch_VCC["TTP223 摸头传感器 VCC"]
+        Touch_GND["TTP223 摸头传感器 GND"]
+        Touch_SIG["TTP223 摸头传感器 SIG"]
+
+        USB_Cam["📷 USB 720P 摄像头模组"]
+        USB_Mic["🎤 USB 迷你直插麦克风"]
+        USB_Spk["🔊 Y57 USB 一线通扩音喇叭"]
+    end
+
+    %% 屏幕接线
+    Pin1 --> Screen_VCC
+    Pin6 --> Screen_GND
+    Pin19 --> Screen_SDA
+    Pin23 --> Screen_SCL
+    Pin24 --> Screen_CS
+    Pin22 --> Screen_DC
+    Pin15 --> Screen_RES
+
+    %% 触摸传感器接线
+    Pin1 --> Touch_VCC
+    Pin9 --> Touch_GND
+    Pin11 --> Touch_SIG
+
+    %% 舵机信号线
+    Pin12 --> Pan_PWM
+    Pin33 --> Tilt_PWM
+
+    %% 舵机供电线 (经过滤波电容保护)
+    ServoPowerNode --> Pan_VCC
+    ServoPowerNode --> Tilt_VCC
+    SystemGND --> Pan_GND
+    SystemGND --> Tilt_GND
+    Pin6 --- SystemGND
+
+    %% USB 外设
+    USB_A --> USB_Cam
+    USB_B --> USB_Mic
+    USB_C --> USB_Spk
+```
 
 ```text
                外部 5V 独立供电头 / 或树莓派 5V (并联 1000μF 电容)
