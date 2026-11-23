@@ -11,7 +11,8 @@
 - [二、 P2：多模态视觉认知与场景问答 (Visual QA)](#二-p2多模态视觉认知与场景问答-visual-qa)
 - [三、 P1：专属情感陪伴技能生态 (Couple Memory Skill)](#三-p1专属情感陪伴技能生态-couple-memory-skill)
 - [四、 硬件拓展：三键实体导航与 OSD 交互菜单](#四-硬件拓展三键实体导航与-osd-交互菜单)
-- [五、 交付物与阶段规划](#五-交付物与阶段规划)
+- [五、 具身移动进化：USB 模块化动力底盘 (Mobile Embodied Chassis)](#五-具身移动进化usb-模块化动力底盘-mobile-embodied-chassis)
+- [六、 交付物与阶段规划](#六-交付物与阶段规划)
 
 ---
 
@@ -19,14 +20,14 @@
 
 ```mermaid
 flowchart LR
-    Current["当前版本 (v2.0)<br/>• 触摸摸头杀闭环<br/>• 舵机自动卸力休眠<br/>• 全双工打断/Barge-in<br/>• ReAct 极速闭环"]
-    NextP1["P1 阶段：专属情感 Skill<br/>• couple_memory 插件<br/>• 纪念日/回忆唤醒<br/>• 身体不适关怀链<br/>• 原声克隆引导"]
-    NextP2["P2 阶段：多模态视觉 QA<br/>• 摄像头单帧捕获<br/>• 多模态 VLM 问答<br/>• 桌面物品/穿搭识别<br/>• (不引入人脸对比)"]
-    NextHW["硬件扩展：三键交互<br/>• 上/下/确认微动开关<br/>• 紧急配网/IP 查看<br/>• 优雅关机防坏卡<br/>• 轻量 OSD 气泡菜单"]
+    Current["当前核心版本<br/>• 触摸摸头杀闭环<br/>• 舵机自动卸力休眠<br/>• 全双工打断/Barge-in<br/>• Gitee 开源技能生态"]
+    NextP1["专属情感 Skill<br/>• couple_memory 插件<br/>• 纪念日/回忆唤醒<br/>• 身体不适关怀链"]
+    NextP2["多模态视觉感知<br/>• 摄像头单帧捕获<br/>• 多模态 VLM 问答<br/>• 桌面物品/穿搭识别"]
+    NextM5["具身底盘 (M5)<br/>• USB 即插即用载具<br/>• 电气彻底隔离无损供电<br/>• 视觉伺服全向对准锁定<br/>• 3D 虚拟底盘孪生位移"]
 
     Current --> NextP1
     Current --> NextP2
-    Current --> NextHW
+    Current --> NextM5
 ```
 
 ---
@@ -111,11 +112,66 @@ sequenceDiagram
 
 ---
 
-## 五、 交付物与阶段规划
+## 五、 具身移动进化：USB 模块化动力底盘 (Mobile Embodied Chassis)
+
+### 1. 核心定位：“机甲合体 / 扩展坞”式即插即用载具
+- **常态（桌面伴宠模式）**：静置桌面，以 2-DOF 脖子转头、表情屏、语音多模态交流为主，极低待机功耗。
+- **扩展（移动伴侣模式）**：将 PIG 置于轮式底盘上，通过**一根标准 Type-C USB 数据线**相连，机器人瞬间解锁“双腿”，变身为可在地面/桌面巡航的具身移动机器人（类似 Vector / Emo）。
+
+### 2. 硬件拓扑与电气隔离设计
+```mermaid
+flowchart LR
+    RPi["🍓 树莓派 4B (PIG 大脑中枢)<br/>• 视觉/语音/大模型推理<br/>• 5V Type-C 独立供电"]
+    USBCable["🔌 USB CDC 虚拟串口线<br/>(/dev/ttyUSB0 115200bps)"]
+    ChassisMCU["🤖 底盘独立微控制器<br/>(ESP32 / RP2040 / STM32)<br/>• 硬件级双轮差速 PID 闭环调速<br/>• 霍尔编码器测速 / 防跌落检测"]
+    Battery["🔋 独立锂电池组 (2S / 7.4V)<br/>• 底盘独立供电，电气彻底隔离"]
+    Motors["⚙️ 双路微型减速电机<br/>(N20 / TT 马达 + 万向牛眼轮)"]
+
+    RPi <-->|"指令: MOVE,v,w / 遥测: STATUS"| USBCable
+    USBCable <--> ChassisMCU
+    Battery --> ChassisMCU
+    ChassisMCU --> Motors
+```
+
+- **电气彻底隔离**：底盘由独立锂电池组供电，电机启停的大电流与感性反电动势完全被底盘硬件隔离吸收，**树莓派只通过 USB 走纯数字逻辑信号，彻底杜绝拉垮系统电压或烧毁 GPIO 的风险**。
+- **即插即用热插拔**：拔掉 USB 线即退回桌面摆件，插上 USB 线秒级自动握手激活底盘驱动。
+
+### 3. 软件 HAL 层契约与优雅降级
+```python
+class BaseChassis(ABC):
+    """底盘运动硬件抽象接口"""
+    @abstractmethod
+    def move(self, linear: float, angular: float, duration: float = 0.0):
+        """
+        :param linear: 前后线速度 [-1.0, 1.0] (正为前，负为后)
+        :param angular: 原地旋转角速度 [-1.0, 1.0] (正为顺时针/右转，负为逆时针/左转)
+        :param duration: 持续时间 (秒)，0 为非阻塞
+        """
+        pass
+
+    @abstractmethod
+    def stop(self):
+        """紧急制动刹车"""
+        pass
+```
+- **双模驱动自适应**：
+  - `NoopChassis`：未连接 USB 底盘时默认加载，接收移动指令不报错，可触发虚拟开动拟声。
+  - `USBSerialChassis`：探测到 `/dev/ttyUSB*` 设备并握手成功时动态加载，自动向单片机推送串口帧。
+- **3D 数字孪生同步**：Web 仿真工作台中的虚拟 3D PIG 底座同步支持位移渲染，可通过键盘 `WASD` 实时遥控。
+
+### 4. 具身 AI 进阶玩法
+1. **视觉伺服全向对准 (Visual Servoing)**：当人脸注视追踪超出头部舵机机械极限（<40° 或 >140°）时，底盘联动原地自转，将目标重新拉入视野正中心，实现 360° 无死角视线锁定。
+2. **大模型自然语言导航**：“小猪往前走两步”、“转过来看看我”、“去门口巡逻一下”。
+3. **情绪肢体语言增强**：开心兴奋时 360° 原地转圈欢呼；受惊或被批评时后退两步拉开距离低头；困倦时倒退回充电坞。
+
+---
+
+## 六、 交付物与阶段规划
 
 | 里程碑 | 目标 | 核心输出 |
 | :--- | :--- | :--- |
-| **M1 (当前已完成)** | P0 硬件落地与闭环 | 摸头传感器中断 + 舵机防抖卸力 + 全双工打断 (Barge-in) + Web 孪生按钮 |
-| **M2** | P1 专属互动技能 | `skills/couple_memory/` 插件 + 纪念日提醒 + 身体不适关怀链 |
-| **M3** | P2 多模态视觉问答 | `skills/visual_qa/` 插件 + 拍照场景认知 + MiMo-Vision 流式闭环 |
-| **M4** | 实体三按键与 OSD | GPIO 23/24/27 按键监听驱动 + 240x320 液晶屏轻量 OSD 气泡菜单 |
+| **M1 (已完成)** | P0 硬件落地与闭环 | 摸头传感器中断 + 舵机防抖卸力 + 全双工打断 (Barge-in) + Web 孪生按钮 |
+| **M2 (已完成)** | 飞书与多Session助理 | 飞书双向 Bot 接入 + Session 隔离多端会话 + 报警推送通道 |
+| **M3 (已完成)** | Gitee 在线开源技能生态 | 纯在线开源 Registry (`registry/`) + 14款精选技能一键安装热加载 |
+| **M4 (已完成)** | 硬件自检与 OSD 菜单 | 4按键 FSM 菜单 + ST7789 2.4寸屏幕 OSD 状态与 AP 热点配网 |
+| **M5 (规划中)** | USB 模块化动力底盘 | USB 即插即用动力底盘驱动 (`drivers/chassis_usb.py`) + `BaseChassis` 抽象层 + 视觉伺服联动 + 3D 虚拟底盘控制 |
