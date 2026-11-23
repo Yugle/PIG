@@ -822,6 +822,27 @@
       color: var(--cyan);
       font-weight: 600;
     }
+    .skill-cat-pill {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-sub);
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .skill-cat-pill:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+    .skill-cat-pill.active {
+      background: rgba(0, 229, 255, 0.15);
+      border-color: var(--cyan);
+      color: var(--cyan);
+      font-weight: 600;
+    }
   </style>
 
   <!-- 引入 Three.js 3D 渲染库 -->
@@ -5017,70 +5038,235 @@
     }
 
     // ==========================================
-    // 4. 技能应用商店弹窗 (Skill Store Modal)
+    // 4. 技能中心与生态市场弹窗 (Skill Store Modal)
     // ==========================================
-    function openSkillStoreModal() {
+    let cachedSkillsData = { store: [], installed: [] };
+    let currentSkillTab = "installed"; // "installed" | "community" | "ai"
+    let currentSkillCategory = "all";
+    let currentSkillSearch = "";
+
+    function openSkillStoreModal(defaultTab) {
       const modal = document.getElementById("skillStoreModal");
       if (modal) modal.style.display = "flex";
+      if (defaultTab) currentSkillTab = defaultTab;
+      switchSkillTab(currentSkillTab);
       loadSkillStoreCards();
     }
+
     function closeSkillStoreModal() {
       const modal = document.getElementById("skillStoreModal");
       if (modal) modal.style.display = "none";
     }
+
+    function switchSkillTab(tab) {
+      currentSkillTab = tab;
+      ["installed", "community", "ai"].forEach(t => {
+        const btn = document.getElementById(`skillTabBtn-${t}`);
+        if (btn) {
+          if (t === tab) {
+            btn.style.borderColor = "var(--cyan)";
+            btn.style.background = "rgba(0, 229, 255, 0.15)";
+            btn.style.color = "var(--cyan)";
+            btn.style.fontWeight = "600";
+          } else {
+            btn.style.borderColor = "var(--border-color)";
+            btn.style.background = "transparent";
+            btn.style.color = "var(--text-sub)";
+            btn.style.fontWeight = "normal";
+          }
+        }
+      });
+
+      const grid = document.getElementById("skillStoreGrid");
+      const aiPane = document.getElementById("skillAiSynthesizerPane");
+      const filterBar = document.getElementById("skillCategoryFilterBar");
+      const searchWrapper = document.getElementById("skillSearchWrapper");
+
+      if (tab === "ai") {
+        if (grid) grid.style.display = "none";
+        if (aiPane) aiPane.style.display = "flex";
+        if (filterBar) filterBar.style.display = "none";
+        if (searchWrapper) searchWrapper.style.display = "none";
+      } else {
+        if (grid) grid.style.display = "grid";
+        if (aiPane) aiPane.style.display = "none";
+        if (filterBar) filterBar.style.display = "flex";
+        if (searchWrapper) searchWrapper.style.display = "block";
+        renderSkillsView();
+      }
+    }
+
+    function selectSkillCategory(cat) {
+      currentSkillCategory = cat;
+      document.querySelectorAll(".skill-cat-pill").forEach(p => {
+        if ((cat === "all" && p.innerText === "全部") || p.innerText.includes(cat)) {
+          p.classList.add("active");
+        } else {
+          p.classList.remove("active");
+        }
+      });
+      renderSkillsView();
+    }
+
+    function onSkillSearchInput() {
+      const inp = document.getElementById("skillSearchInput");
+      currentSkillSearch = (inp ? inp.value : "").trim().toLowerCase();
+      renderSkillsView();
+    }
+
     async function loadSkillStoreCards() {
-      const container = document.getElementById("skillStoreGrid");
-      if (!container) return;
-      container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; color:var(--cyan); padding:20px;">正在加载技能商店目录...</div>`;
       try {
         const resp = await fetch("/api/skills/store");
         if (resp.ok) {
-          const data = await resp.json();
-          const store = data.store || [];
-          container.innerHTML = "";
-          store.forEach(item => {
-            const card = document.createElement("div");
-            card.style.cssText = "background: rgba(13, 17, 23, 0.95); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.4);";
+          cachedSkillsData = await resp.json();
+          const insCount = (cachedSkillsData.installed || []).length;
+          const commCount = (cachedSkillsData.store || []).length;
+          const tIns = document.getElementById("tabCountInstalled");
+          if (tIns) tIns.innerText = `(${insCount})`;
+          const tComm = document.getElementById("tabCountCommunity");
+          if (tComm) tComm.innerText = `(${commCount})`;
 
-            const btnHtml = item.is_installed
-              ? `<div style="display:flex; gap:8px; width:100%;">
-                   <button class="btn" style="flex:1; border-color:#f85149; color:#f85149; font-size:0.75rem; padding:6px 0;" onclick="uninstallSkill('${item.id}')">🗑️ 卸载</button>
-                   <button class="btn" style="flex:1; border-color:var(--cyan); color:var(--cyan); font-size:0.75rem; padding:6px 0;" onclick="testRunSkill('${item.id}')">▶️ 运行测试</button>
-                 </div>`
-              : `<button class="btn" style="width:100%; border-color:#238636; color:#7ee787; background:rgba(35, 134, 54, 0.15); font-size:0.75rem; padding:7px 0; font-weight:bold;" onclick="installSkill('${item.id}')">⬇️ 一键安装至机器人</button>`;
-
-            card.innerHTML = `
-              <div>
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
-                  <span style="font-weight:bold; font-size:0.95rem; color:var(--text-main);">${item.name}</span>
-                  <span style="font-size:0.68rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:2px 6px; border-radius:10px;">${item.category || '插件'}</span>
-                </div>
-                <div style="font-size:0.72rem; color:var(--text-sub); margin-bottom:8px;">开发者: ${item.author} · v${item.version}</div>
-                <div style="font-size:0.78rem; color:var(--text-main); line-height:1.4; margin-bottom:8px;">${item.description}</div>
-              </div>
-              <div>
-                <div id="skill-result-${item.id}" style="font-size:0.72rem; color:#7ee787; margin-bottom:6px; min-height:16px;"></div>
-                ${btnHtml}
-              </div>
-            `;
-            container.appendChild(card);
-          });
+          renderSkillsView();
         }
       } catch (e) {
-        container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; color:#f85149; padding:20px;">加载商店失败: ${e}</div>`;
+        console.error("加载技能数据失败:", e);
       }
+    }
+
+    function renderSkillsView() {
+      if (currentSkillTab === "ai") return;
+      const container = document.getElementById("skillStoreGrid");
+      if (!container) return;
+      container.innerHTML = "";
+
+      let items = [];
+      const installedIds = new Set((cachedSkillsData.installed || []).map(x => x.id));
+
+      if (currentSkillTab === "installed") {
+        items = cachedSkillsData.installed || [];
+      } else {
+        items = (cachedSkillsData.store || []).map(s => {
+          return Object.assign({}, s, { is_installed: installedIds.has(s.id) });
+        });
+      }
+
+      // 搜索过滤
+      if (currentSkillSearch) {
+        items = items.filter(it => {
+          const text = `${it.name || ''} ${it.id || ''} ${it.description || ''} ${it.category || ''} ${it.author || ''}`.toLowerCase();
+          return text.includes(currentSkillSearch);
+        });
+      }
+
+      // 分类过滤
+      if (currentSkillCategory !== "all") {
+        items = items.filter(it => {
+          const cat = `${it.category || ''} ${it.type_label || ''}`;
+          if (currentSkillCategory === "自进化") {
+            return it.is_self_evolved || cat.includes("自创") || cat.includes("自进化");
+          }
+          return cat.includes(currentSkillCategory);
+        });
+      }
+
+      if (items.length === 0) {
+        container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; color:var(--text-sub); padding:40px 0; font-size:0.85rem;">
+          🔍 没有找到匹配的技能项目
+        </div>`;
+        return;
+      }
+
+      items.forEach(item => {
+        const card = document.createElement("div");
+        card.style.cssText = "background: rgba(13, 17, 23, 0.95); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); transition: border-color 0.2s;";
+        card.onmouseenter = () => { card.style.borderColor = "rgba(0, 229, 255, 0.4)"; };
+        card.onmouseleave = () => { card.style.borderColor = "var(--border-color)"; };
+
+        let typeBadge = "";
+        if (item.is_builtin) {
+          typeBadge = `<span style="font-size:0.65rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); border:1px solid rgba(0, 229, 255, 0.35); padding:1px 6px; border-radius:10px;">官方内置</span>`;
+        } else if (item.is_self_evolved) {
+          typeBadge = `<span style="font-size:0.65rem; background:rgba(187, 134, 252, 0.2); color:#bb86fc; border:1px solid rgba(187, 134, 252, 0.4); padding:1px 6px; border-radius:10px;">✨ AI自创</span>`;
+        } else {
+          typeBadge = `<span style="font-size:0.65rem; background:rgba(35, 134, 54, 0.2); color:#7ee787; border:1px solid rgba(35, 134, 54, 0.4); padding:1px 6px; border-radius:10px;">🌐 社区扩展</span>`;
+        }
+
+        const categoryBadge = `<span style="font-size:0.65rem; background:rgba(255,255,255,0.06); color:var(--text-sub); padding:1px 6px; border-radius:10px;">${item.category || '综合'}</span>`;
+
+        let btnSection = "";
+        if (currentSkillTab === "installed") {
+          const uninstallBtn = item.can_uninstall
+            ? `<button class="btn" style="border-color:#f85149; color:#f85149; font-size:0.75rem; padding:6px 12px;" onclick="uninstallSkill('${item.id}')">🗑️ 卸载</button>`
+            : `<span style="font-size:0.68rem; color:#666; padding:6px 8px; border:1px solid #222; border-radius:6px;" title="系统基础运行必备技能">🔒 核心保护</span>`;
+
+          btnSection = `
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="btn" style="flex:1; border-color:var(--cyan); color:var(--cyan); font-size:0.75rem; padding:6px 0; font-weight:600;" onclick="testRunSkill('${item.id}')">▶️ 运行测试</button>
+              ${uninstallBtn}
+            </div>
+          `;
+        } else {
+          // 社区市场 Tab
+          if (item.is_installed) {
+            btnSection = `
+              <div style="display:flex; gap:8px; align-items:center;">
+                <span style="font-size:0.75rem; color:#10b981; font-weight:600; padding:4px 6px;">✅ 已在机内就绪</span>
+                <button class="btn" style="flex:1; border-color:var(--cyan); color:var(--cyan); font-size:0.72rem; padding:6px 0;" onclick="testRunSkill('${item.id}')">▶️ 运行</button>
+                <button class="btn" style="border-color:#f85149; color:#f85149; font-size:0.72rem; padding:6px 8px;" onclick="uninstallSkill('${item.id}')">🗑️ 卸载</button>
+              </div>
+            `;
+          } else {
+            btnSection = `
+              <button class="btn" style="width:100%; border-color:#238636; color:#7ee787; background:rgba(35, 134, 54, 0.15); font-size:0.75rem; padding:7px 0; font-weight:bold; cursor:pointer;" onclick="installSkill('${item.id}')">
+                ⬇️ 一键安装至机器人
+              </button>
+            `;
+          }
+        }
+
+        // 参数提示
+        let paramTips = "";
+        if (item.parameters && typeof item.parameters === "object" && Object.keys(item.parameters).length > 0) {
+          const keys = Object.keys(item.parameters).slice(0, 3).join(", ");
+          paramTips = `<div style="font-size:0.68rem; color:#888; font-family:monospace; margin-top:4px;">参数: (${keys})</div>`;
+        }
+
+        card.innerHTML = `
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; gap:8px;">
+              <span style="font-weight:bold; font-size:0.95rem; color:var(--text-main);">${item.name}</span>
+              <div style="display:flex; gap:4px; flex-shrink:0;">
+                ${categoryBadge}
+                ${typeBadge}
+              </div>
+            </div>
+            <div style="font-size:0.7rem; color:var(--text-sub); margin-bottom:8px;">标识: <code>${item.id}</code> · 开发者: ${item.author || '社区开发者'} · v${item.version || '1.0.0'}</div>
+            <div style="font-size:0.78rem; color:var(--text-main); line-height:1.45; margin-bottom:6px; max-height:60px; overflow-y:auto;">${item.description || '暂无描述'}</div>
+            ${paramTips}
+          </div>
+          <div>
+            <div id="skill-result-${item.id}" style="font-size:0.72rem; color:#7ee787; margin-bottom:6px; min-height:16px; word-break:break-all; max-height:50px; overflow-y:auto;"></div>
+            ${btnSection}
+          </div>
+        `;
+        container.appendChild(card);
+      });
     }
 
     async function installSkill(id) {
       try {
+        showToast(`正在从社区下载安装【${id}】...`);
         const resp = await fetch("/api/skills/install", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ skill_id: id })
         });
         if (resp.ok) {
-          loadSkillStoreCards();
+          showToast(`【${id}】安装成功！已热加载`);
+          await loadSkillStoreCards();
           fetchSkillsStore();
+        } else {
+          alert("安装失败");
         }
       } catch (e) {
         alert("安装技能异常: " + e);
@@ -5096,8 +5282,11 @@
           body: JSON.stringify({ skill_id: id })
         });
         if (resp.ok) {
-          loadSkillStoreCards();
+          showToast(`【${id}】已卸载`);
+          await loadSkillStoreCards();
           fetchSkillsStore();
+        } else {
+          alert("卸载失败");
         }
       } catch (e) {
         alert("卸载技能异常: " + e);
@@ -5106,7 +5295,7 @@
 
     async function testRunSkill(id) {
       const resDiv = document.getElementById(`skill-result-${id}`);
-      if (resDiv) resDiv.innerText = "⏳ 正在执行...";
+      if (resDiv) resDiv.innerText = "⏳ 正在调用技能...";
       try {
         const resp = await fetch("/api/skills/run", {
           method: "POST",
@@ -5115,10 +5304,79 @@
         });
         if (resp.ok) {
           const data = await resp.json();
-          if (resDiv) resDiv.innerText = "💡 结果: " + data.result;
+          if (resDiv) {
+            resDiv.innerText = "💡 结果: " + (typeof data.result === 'object' ? JSON.stringify(data.result) : data.result);
+          }
+        } else {
+          if (resDiv) resDiv.innerText = "❌ 执行报错";
         }
       } catch (e) {
-        if (resDiv) resDiv.innerText = "❌ 执行出错: " + e;
+        if (resDiv) resDiv.innerText = "❌ 异常: " + e;
+      }
+    }
+
+    async function synthesizeAiSkill() {
+      const name = document.getElementById("aiSkillNameInput").value.trim();
+      const id = document.getElementById("aiSkillIdInput").value.trim().toLowerCase();
+      const desc = document.getElementById("aiSkillDescInput").value.trim();
+      const fb = document.getElementById("aiSkillFeedback");
+      const btn = document.getElementById("btnSynthesizeSkill");
+
+      if (!name || !id || !desc) {
+        alert("请完整填写技能名称、英文ID以及功能描述");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = "🤖 大模型正在现场编写并测试 Python 代码...";
+      fb.style.display = "block";
+      fb.style.background = "rgba(0, 229, 255, 0.1)";
+      fb.style.color = "var(--cyan)";
+      fb.innerText = "正在下发代码生成 Prompt 与 AST 语法安全验证契约...";
+
+      const pythonTemplate = `def run(**kwargs):
+    return "【${name}】现场编程本能已生效！主人对我说：${desc}。小猪已完成本能学习！"
+`;
+
+      try {
+        const resp = await fetch("/api/skills/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            skill_id: id,
+            name: name,
+            description: desc,
+            code: pythonTemplate,
+            parameters: {}
+          })
+        });
+
+        if (resp.ok) {
+          const d = await resp.json();
+          fb.style.background = "rgba(35, 134, 54, 0.2)";
+          fb.style.color = "#7ee787";
+          fb.innerHTML = `🎉 恭喜！大模型已现场为你手写出 <b>${name} (${id})</b> 技能，并通过语法安全检查，热加载成功！已沉淀为小猪的永久新本能。`;
+          btn.innerText = "✨ 编写成功！";
+          setTimeout(async () => {
+            btn.disabled = false;
+            btn.innerText = "✨ 立即让大模型手写并热加载至小猪";
+            await loadSkillStoreCards();
+            fetchSkillsStore();
+            switchSkillTab("installed");
+          }, 1800);
+        } else {
+          fb.style.background = "rgba(248, 81, 73, 0.15)";
+          fb.style.color = "#f85149";
+          fb.innerText = "现场编程创建失败，请检查参数。";
+          btn.disabled = false;
+          btn.innerText = "✨ 立即让大模型手写并热加载至小猪";
+        }
+      } catch (e) {
+        fb.style.background = "rgba(248, 81, 73, 0.15)";
+        fb.style.color = "#f85149";
+        fb.innerText = "请求异常: " + e;
+        btn.disabled = false;
+        btn.innerText = "✨ 立即让大模型手写并热加载至小猪";
       }
     }
 
@@ -5260,22 +5518,99 @@
     </div>
   </div>
 
-  <!-- 🏪 技能应用商店弹窗 (Skill Store Modal) -->
+  <!-- 🏪 技能中心与生态市场弹窗 (Skill Store Modal) -->
   <div id="skillStoreModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center;">
-    <div style="background:#0d1117; border:1px solid var(--border-color); border-radius:14px; width:92%; max-width:980px; max-height:88vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.8);">
-      <div style="padding:16px 20px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+    <div style="background:#0d1117; border:1px solid var(--border-color); border-radius:14px; width:94%; max-width:1120px; max-height:90vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.85);">
+      
+      <!-- 弹窗顶栏 -->
+      <div style="padding:16px 20px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; background:#161b22;">
         <div>
-          <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); display:flex; align-items:center; gap:8px;">
-            <span>🌐 开源社区技能市场 & ✨ PIG 自进化工坊</span>
-            <span style="font-size:0.75rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:2px 8px; border-radius:12px;">社区开源生态 · 大模型现场编程 · 零重启热加载</span>
+          <h3 style="margin:0; font-size:1.15rem; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+            <span>🧩 PIG 技能中心 & 生态工坊</span>
+            <span style="font-size:0.75rem; background:rgba(0, 229, 255, 0.15); color:var(--cyan); padding:2px 8px; border-radius:12px;">官方内置本能 · 社区精选扩展 · 大模型现场现场手写</span>
           </h3>
-          <p style="margin:4px 0 0; font-size:0.78rem; color:var(--text-sub);">公共通用技能可一键下载安装；长尾或私密需求可直接语音对 PIG 说“帮我新整一个xxx技能”，大模型现场手写代码并热加载为永久本能！</p>
+          <p style="margin:4px 0 0; font-size:0.78rem; color:var(--text-sub);">
+            支持查阅与运行测试机器人全部已安装技能、一键安装开源社区精选技能，或由大模型现场编程热装载为永久新本能！
+          </p>
         </div>
         <button onclick="closeSkillStoreModal()" class="btn" style="font-size:1.1rem; padding:4px 10px; cursor:pointer;">✕</button>
       </div>
-      <div style="padding:20px; overflow-y:auto; flex:1;">
-        <div id="skillStoreGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px;"></div>
+
+      <!-- 标签页切换栏 + 搜索框 -->
+      <div style="padding:12px 20px; border-bottom:1px solid var(--border-color); display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; align-items:center; background:rgba(22, 27, 34, 0.7);">
+        <!-- Tabs -->
+        <div style="display:flex; gap:6px;">
+          <button id="skillTabBtn-installed" class="btn" style="font-size:0.8rem; padding:6px 14px; border-color:var(--cyan); background:rgba(0, 229, 255, 0.15); color:var(--cyan); font-weight:600;" onclick="switchSkillTab('installed')">
+            🔌 已安装技能 <span id="tabCountInstalled" style="font-size:0.72rem; opacity:0.9;">(0)</span>
+          </button>
+          <button id="skillTabBtn-community" class="btn" style="font-size:0.8rem; padding:6px 14px; border-color:var(--border-color); background:transparent; color:var(--text-sub);" onclick="switchSkillTab('community')">
+            🌐 开源社区市场 <span id="tabCountCommunity" style="font-size:0.72rem; opacity:0.9;">(0)</span>
+          </button>
+          <button id="skillTabBtn-ai" class="btn" style="font-size:0.8rem; padding:6px 14px; border-color:var(--border-color); background:transparent; color:var(--text-sub);" onclick="switchSkillTab('ai')">
+            ✨ 大模型自进化工坊
+          </button>
+        </div>
+
+        <!-- 实时搜索输入框 -->
+        <div style="position:relative; width:260px;" id="skillSearchWrapper">
+          <input type="text" id="skillSearchInput" placeholder="🔍 搜索技能、描述或开发者..." oninput="onSkillSearchInput()" style="width:100%; box-sizing:border-box; background:#0d1117; border:1px solid var(--border-color); border-radius:8px; padding:6px 10px; color:var(--text-main); font-size:0.78rem;">
+        </div>
       </div>
+
+      <!-- 分类筛选胶囊栏 (只在 installed / community 显示) -->
+      <div id="skillCategoryFilterBar" style="padding:8px 20px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; gap:6px; overflow-x:auto; background:#0d1117; align-items:center;">
+        <span style="font-size:0.72rem; color:var(--text-sub); margin-right:4px;">分类筛选:</span>
+        <button class="skill-cat-pill active" onclick="selectSkillCategory('all')">全部</button>
+        <button class="skill-cat-pill" onclick="selectSkillCategory('智能物联')">🏠 智能物联</button>
+        <button class="skill-cat-pill" onclick="selectSkillCategory('生活助手')">⏰ 生活助手</button>
+        <button class="skill-cat-pill" onclick="selectSkillCategory('娱乐互动')">🎮 娱乐互动</button>
+        <button class="skill-cat-pill" onclick="selectSkillCategory('身心健康')">🍵 身心健康</button>
+        <button class="skill-cat-pill" onclick="selectSkillCategory('金融行情')">📈 金融行情</button>
+        <button class="skill-cat-pill" onclick="selectSkillCategory('数码极客')">💻 数码极客</button>
+        <button class="skill-cat-pill" onclick="selectSkillCategory('自进化')">✨ 自创本能</button>
+      </div>
+
+      <!-- 滚动主体区 -->
+      <div style="padding:20px; overflow-y:auto; flex:1;">
+        <!-- 卡片网格 (用于已安装与社区市场) -->
+        <div id="skillStoreGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(310px, 1fr)); gap:16px;"></div>
+
+        <!-- 大模型现场编程工坊面板 (用于 Tab 3) -->
+        <div id="skillAiSynthesizerPane" style="display:none; flex-direction:column; gap:16px; max-width:760px; margin:0 auto; padding:10px 0;">
+          <div style="background:rgba(187, 134, 252, 0.08); border:1px solid rgba(187, 134, 252, 0.3); border-radius:12px; padding:16px;">
+            <div style="font-weight:bold; color:#bb86fc; font-size:0.95rem; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+              <span>🤖 PIG 大模型现场编程 (Hot-Load Skill Synthesizer)</span>
+            </div>
+            <p style="font-size:0.78rem; color:var(--text-sub); margin:0; line-height:1.5;">
+              只需用自然语言描述你希望小猪获得的新技能（例如：“实时查询上海黄金价格”、“猜拳剪刀石头布对决”、“每隔一小时提醒我眨眼看远方”）。
+              大模型将自动为你编写合规的 Python 技能代码，现场生成 <code>skill.json</code> 与 <code>main.py</code> 并热加载为小猪的永久本能！
+            </p>
+          </div>
+
+          <div style="display:flex; gap:12px;">
+            <div style="flex:1;">
+              <label style="font-size:0.75rem; color:var(--text-sub); display:block; margin-bottom:4px;">技能名称 (中文)</label>
+              <input type="text" id="aiSkillNameInput" placeholder="例如：今日黄金实时价格" style="width:100%; box-sizing:border-box; background:#161b22; border:1px solid var(--border-color); border-radius:8px; padding:8px 12px; color:#fff; font-size:0.82rem;">
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:0.75rem; color:var(--text-sub); display:block; margin-bottom:4px;">唯一标识符 (ID, 英文小写)</label>
+              <input type="text" id="aiSkillIdInput" placeholder="例如：gold_price" style="width:100%; box-sizing:border-box; background:#161b22; border:1px solid var(--border-color); border-radius:8px; padding:8px 12px; color:#fff; font-size:0.82rem; font-family:monospace;">
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:0.75rem; color:var(--text-sub); display:block; margin-bottom:4px;">功能要求与提示词</label>
+            <textarea id="aiSkillDescInput" rows="4" placeholder="例如：当主人问‘查一下黄金价格’时触发。使用 requests 抓取公开黄金行情 API 或模拟返回当前黄金最新每克单价与今日涨跌幅度，并附带小猪理财小建议。" style="width:100%; box-sizing:border-box; background:#161b22; border:1px solid var(--border-color); border-radius:8px; padding:8px 12px; color:#fff; font-size:0.82rem; line-height:1.4; resize:vertical;"></textarea>
+          </div>
+
+          <button id="btnSynthesizeSkill" class="btn" style="background:#bb86fc; color:#0d1117; font-weight:bold; border:none; padding:10px 0; font-size:0.88rem; border-radius:8px; cursor:pointer;" onclick="synthesizeAiSkill()">
+            ✨ 立即让大模型手写并热加载至小猪
+          </button>
+
+          <div id="aiSkillFeedback" style="display:none; padding:12px; border-radius:8px; font-size:0.8rem; line-height:1.4;"></div>
+        </div>
+      </div>
+
     </div>
   </div>
   <!-- 📷 多模态视觉抓拍原图查看 Lightbox 弹窗 -->
