@@ -266,56 +266,60 @@
     .pip-buttons-bar {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 5px;
+      gap: 6px;
       width: 100%;
-      margin-top: 6px;
+      margin-top: 8px;
     }
 
     .pip-hw-btn {
-      background: rgba(30, 41, 59, 0.85);
-      border: 1px solid rgba(0, 229, 255, 0.25);
-      color: #e2e8f0;
+      background: #18191c;
+      border: 1px solid #2d3036;
+      color: #d1d5db;
       border-radius: 6px;
-      padding: 5px 4px;
-      font-size: 0.72rem;
+      padding: 6px 4px;
+      font-size: 0.74rem;
       font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 3px;
-      transition: all 0.15s ease;
+      gap: 4px;
+      transition: all 0.12s ease;
       user-select: none;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
 
     .pip-hw-btn:hover {
-      background: rgba(0, 229, 255, 0.15);
-      border-color: var(--cyan);
-      box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
-      color: #fff;
+      background: #23252a;
+      border-color: #4b5563;
+      color: #ffffff;
     }
 
     .pip-hw-btn:active {
-      transform: scale(0.95);
-      background: var(--cyan);
-      color: #0b0f19;
+      transform: translateY(1px);
+      background: #121316;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+      border-color: #1f2227;
     }
 
     .pip-hw-btn.pip-btn-primary {
-      border-color: rgba(0, 229, 255, 0.6);
-      background: rgba(0, 229, 255, 0.15);
-      color: var(--cyan);
+      background: #252830;
+      border-color: #3b4252;
+      color: #ffffff;
+    }
+
+    .pip-hw-btn.pip-btn-primary:hover {
+      background: #2f3440;
+      border-color: #4c566a;
     }
 
     .pip-hw-btn.pip-btn-danger {
-      border-color: rgba(239, 68, 68, 0.4);
-      color: #f87171;
+      color: #9ca3af;
     }
 
     .pip-hw-btn.pip-btn-danger:hover {
-      background: rgba(239, 68, 68, 0.2);
-      border-color: #ef4444;
-      color: #fff;
+      color: #f87171;
+      border-color: rgba(239, 68, 68, 0.4);
     }
 
     /* 控制面板 */
@@ -1174,13 +1178,41 @@
             </div>
           </div>
 
-          <!-- 元认知看板 -->
+          <!-- 元认知与五维性格看板 -->
           <div class="control-section">
             <div class="section-title">
-              <span>🌱 元认知自进化看板</span>
-              <button class="btn" style="padding:2px 8px; font-size:0.7rem; color:#a371f7; border-color:rgba(163, 113, 247, 0.4); background:rgba(163, 113, 247, 0.1);" onclick="triggerNightlyReflection()" id="reflectBtn">🌙 触发反思</button>
+              <span>🌱 元认知与五维性格</span>
+              <button class="btn" style="padding:2px 8px; font-size:0.7rem; color:#a371f7; border-color:rgba(163, 113, 247, 0.4); background:rgba(163, 113, 247, 0.1);" onclick="triggerNightlyReflection()" id="reflectBtn">🌙 夜间反思</button>
             </div>
-            <div style="font-size:0.75rem; display:flex; flex-direction:column; gap:4px; color:var(--text-sub); background:#161b22; padding:6px 10px; border-radius:6px; border:1px solid #30363d;">
+            
+            <!-- 五维性格动态雷达图卡片 -->
+            <div style="background:#161b22; padding:8px; border-radius:6px; border:1px solid #30363d; margin-bottom:6px; display:flex; flex-direction:column; align-items:center;">
+              <div style="width:100%; display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:0.72rem;">
+                <span id="personaTagText" style="color:#ffb020; font-weight:600;">✨ 元气治愈系桌宠</span>
+                <span id="intimacyLvlText" style="color:var(--cyan); background:rgba(0,229,255,0.12); padding:1px 6px; border-radius:4px; border:1px solid rgba(0,229,255,0.25);">Lv.2 亲密</span>
+              </div>
+              <canvas id="personalityRadarCanvas" width="210" height="135" style="display:block; margin:2px auto;"></canvas>
+              <!-- 亲密度经验条 -->
+              <div style="width:100%; margin-top:4px;">
+                <div style="display:flex; justify-content:space-between; font-size:0.65rem; color:var(--text-sub); margin-bottom:2px;">
+                  <span>亲密羁绊</span>
+                  <span id="intimacyExpText">35/100 EXP</span>
+                </div>
+                <div style="width:100%; height:4px; background:#21262d; border-radius:2px; overflow:hidden;">
+                  <div id="intimacyExpBar" style="width:35%; height:100%; background:linear-gradient(90deg, #00e5ff, #a371f7); transition:width 0.4s ease;"></div>
+                </div>
+              </div>
+              <!-- 专属默契黑话暗号 -->
+              <div style="width:100%; margin-top:6px; border-top:1px dashed #30363d; padding-top:4px; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+                <span style="font-size:0.65rem; color:var(--text-sub);">🏷️ 默契暗号:</span>
+                <div id="privateMemesList" style="display:flex; gap:3px; flex-wrap:wrap;">
+                  <span style="font-size:0.62rem; color:#7ee787; background:rgba(126,231,135,0.1); padding:1px 4px; border-radius:3px;">开润</span>
+                  <span style="font-size:0.62rem; color:#7ee787; background:rgba(126,231,135,0.1); padding:1px 4px; border-radius:3px;">泰裤辣</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="font-size:0.72rem; display:flex; flex-direction:column; gap:4px; color:var(--text-sub); background:#161b22; padding:6px 10px; border-radius:6px; border:1px solid #30363d;">
               <div>🕒 <strong style="color:var(--cyan);">作息习惯</strong>: <span id="habitsDesc" style="color:var(--text-main);">09:00 起床 · 14:00 易疲劳</span></div>
               <div>🧠 <strong style="color:#a371f7;">记忆升华</strong>: <span id="reflectionDesc" style="color:#7ee787;">尚未进行夜间反思</span></div>
             </div>
@@ -1227,7 +1259,11 @@
             <video id="webcamVideo" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; transform:scaleX(-1);"></video>
             <canvas id="webcamOverlayCanvas" width="160" height="120" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></canvas>
           </div>
-          <div id="webcamStatusText" style="padding:4px 6px; font-size:0.7rem; color:var(--text-sub); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">正在捕获人脸...</div>
+          <div id="webcamStatusText" style="padding:3px 6px; font-size:0.68rem; color:var(--text-sub); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">正在捕获人脸...</div>
+          <div id="webcamIdentityBar" style="padding:3px 6px; font-size:0.65rem; background:#161b22; border-top:1px solid rgba(0,229,255,0.2); display:flex; justify-content:space-between; align-items:center;">
+            <span>身份: <strong id="faceIdText" style="color:#8b949e;">未认主</strong></span>
+            <button onclick="registerMasterFace()" style="background:#238636; color:#fff; border:none; padding:1px 6px; border-radius:3px; font-size:0.62rem; cursor:pointer;" title="录入当前镜头人脸为唯一主人">📸 认主</button>
+          </div>
         </div>
 
         <!-- 🔔 PIG 主动打断提醒弹窗 -->
@@ -1587,7 +1623,7 @@
     }
 
     // ==========================================
-    // 1.5 🐷 4-Key 统一菜单状态机与 Canvas 2D 同构渲染引擎
+    // 1.5 🐷 4-Key 统一菜单状态机与 Canvas 2D 极简工业风同构渲染引擎
     // ==========================================
     let menuState = {
       mode: "FACE",
@@ -1597,10 +1633,10 @@
       servo_sleeping: false,
       local_ip: location.hostname || "127.0.0.1",
       main_menu_items: [
-        { icon: "📱", title: "手机配置", desc: "扫码进设置页 / 查IP" },
-        { icon: "🩺", title: "一键体检", desc: "API与硬件实时排障" },
-        { icon: "🛡️", title: "硬件开关", desc: "静音 / 追踪 / 休眠" },
-        { icon: "⚡", title: "服务电源", desc: "重启服务 / 安全关机" }
+        { num: "01", title: "无线配置", desc: "手机扫码进设置后台 / 查IP" },
+        { num: "02", title: "系统体检", desc: "网络延迟与外设实时排障" },
+        { num: "03", title: "硬件开关", desc: "麦克风静音 / 追踪 / 休眠" },
+        { num: "04", title: "服务电源", desc: "重启服务 / 树莓派安全关机" }
       ],
       doctor: {
         wifi_ip: location.hostname,
@@ -1716,245 +1752,288 @@
       }
     });
 
-    // 2.4 寸屏幕 Canvas 菜单叠加渲染
+    // 2.4 寸屏幕 Canvas 极简工业风菜单渲染 (Dieter Rams / Teenage Engineering 风格)
     function renderMenuOverlayCanvas(ctx, w, h, now) {
       if (menuState.mode === "FACE") {
-        // 右上角微小 HUD 角标
+        // 右上角极简状态微圆点
         if (menuState.is_mic_muted) {
           ctx.fillStyle = "#ef4444";
           ctx.beginPath();
-          ctx.arc(220, 16, 9, 0, Math.PI * 2);
+          ctx.arc(222, 16, 5, 0, Math.PI * 2);
           ctx.fill();
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "bold 10px sans-serif";
-          ctx.fillText("M", 216, 20);
         }
         if (menuState.servo_sleeping) {
-          ctx.fillStyle = "#00e5ff";
-          ctx.font = "bold 11px sans-serif";
-          ctx.fillText("💤", 192, 20);
+          ctx.fillStyle = "#8e8e93";
+          ctx.font = "bold 10px monospace";
+          ctx.fillText("Z", 204, 19);
         }
         return;
       }
 
-      // 菜单模式背景遮罩
-      ctx.fillStyle = "rgba(10, 16, 28, 0.93)";
+      // 菜单模式背景：纯正哑光深色浮层
+      ctx.fillStyle = "rgba(10, 10, 12, 0.96)";
       ctx.fillRect(0, 0, w, h);
 
-      // 顶部标题栏
-      ctx.fillStyle = "#121c2e";
-      ctx.fillRect(0, 0, w, 36);
-      ctx.strokeStyle = "#00e5ff";
+      // 顶部极简信息栏
+      ctx.strokeStyle = "#242428";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(0, 36);
-      ctx.lineTo(w, 36);
+      ctx.moveTo(16, 36);
+      ctx.lineTo(224, 36);
       ctx.stroke();
 
       if (menuState.mode === "MENU_MAIN") {
-        ctx.fillStyle = "#00e5ff";
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText("⚙️ 系统菜单 (4-Key)", 14, 23);
+        ctx.fillStyle = "#94949b";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText("SETTINGS", 16, 24);
+        ctx.fillStyle = "#686870";
+        ctx.fillText(`0${menuState.cursor + 1}/04`, 190, 24);
 
         const items = menuState.main_menu_items || [
-          { icon: "📱", title: "手机配置", desc: "扫码进设置页 / 查IP" },
-          { icon: "🩺", title: "一键体检", desc: "API与硬件实时排障" },
-          { icon: "🛡️", title: "硬件开关", desc: "静音 / 追踪 / 休眠" },
-          { icon: "⚡", title: "服务电源", desc: "重启服务 / 安全关机" }
+          { num: "01", title: "无线配置", desc: "手机扫码进设置后台 / 查IP" },
+          { num: "02", title: "系统体检", desc: "网络延迟与外设实时排障" },
+          { num: "03", title: "硬件开关", desc: "麦克风静音 / 追踪 / 休眠" },
+          { num: "04", title: "服务电源", desc: "重启服务 / 树莓派安全关机" }
         ];
 
-        const yStart = 48;
+        const yStart = 46;
         items.forEach((it, idx) => {
           const isSel = (idx === menuState.cursor);
           const cy = yStart + idx * 56;
           if (isSel) {
-            ctx.fillStyle = "rgba(0, 160, 220, 0.4)";
-            ctx.strokeStyle = "#00e5ff";
-            ctx.lineWidth = 2;
-            roundRect(ctx, 10, cy, 220, 48, 8, true);
-            ctx.stroke();
+            // 极简高对比纯白反色选框
             ctx.fillStyle = "#ffffff";
-            // 指示箭头
-            ctx.beginPath();
-            ctx.moveTo(216, cy + 24);
-            ctx.lineTo(206, cy + 18);
-            ctx.lineTo(206, cy + 30);
-            ctx.fill();
+            roundRect(ctx, 12, cy, 216, 48, 8, true);
+            ctx.fillStyle = "#000000";
+            ctx.font = "bold 14px sans-serif";
+            ctx.fillText(`${it.num}  ${it.title}`, 22, cy + 22);
+            ctx.fillStyle = "#55555c";
+            ctx.font = "11px sans-serif";
+            ctx.fillText(it.desc, 22, cy + 39);
+            ctx.fillStyle = "#000000";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText("›", 212, cy + 28);
           } else {
-            ctx.fillStyle = "rgba(22, 34, 52, 0.6)";
-            ctx.strokeStyle = "rgba(35, 50, 75, 0.8)";
+            ctx.fillStyle = "#121215";
+            ctx.strokeStyle = "#222226";
             ctx.lineWidth = 1;
-            roundRect(ctx, 10, cy, 220, 48, 8, true);
+            roundRect(ctx, 12, cy, 216, 48, 8, true);
             ctx.stroke();
-            ctx.fillStyle = "#cbd5e1";
+            ctx.fillStyle = "#d1d1d6";
+            ctx.font = "bold 14px sans-serif";
+            ctx.fillText(`${it.num}  ${it.title}`, 22, cy + 22);
+            ctx.fillStyle = "#787880";
+            ctx.font = "11px sans-serif";
+            ctx.fillText(it.desc, 22, cy + 39);
+            ctx.fillStyle = "#4a4a50";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText("›", 212, cy + 28);
           }
-          ctx.font = "bold 14px sans-serif";
-          ctx.fillText(`${it.icon} ${it.title}`, 20, cy + 22);
-          ctx.font = "11px sans-serif";
-          ctx.fillStyle = isSel ? "#e0f2fe" : "#94a3b8";
-          ctx.fillText(it.desc, 20, cy + 40);
         });
 
         // 底部按键提示
-        ctx.fillStyle = "#0e1524";
-        ctx.fillRect(0, 292, w, 28);
-        ctx.fillStyle = "#64748b";
-        ctx.font = "11px sans-serif";
-        ctx.fillText("[▲▼]移动  [●]确认  [✕]返回", 14, 310);
+        ctx.strokeStyle = "#222226";
+        ctx.beginPath();
+        ctx.moveTo(16, 288);
+        ctx.lineTo(224, 288);
+        ctx.stroke();
+        ctx.fillStyle = "#66666e";
+        ctx.font = "10px sans-serif";
+        ctx.fillText("[▲▼] 移动    [OK] 确认    [ESC] 返回", 24, 306);
 
       } else if (menuState.mode === "QR_CODE") {
-        ctx.fillStyle = "#00e5ff";
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText("📱 手机扫码配置", 14, 23);
+        ctx.fillStyle = "#94949b";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText("01 / CONNECT", 16, 24);
+        ctx.fillStyle = "#686870";
+        ctx.fillText("WIFI WEB", 180, 24);
 
         const ip = menuState.local_ip || location.hostname;
+        // 居中极简白底卡片
+        ctx.fillStyle = "#ffffff";
+        roundRect(ctx, 42, 46, 156, 156, 10, true);
+
         if (!qrCodeImg) preloadQrCode();
         if (qrCodeLoaded && qrCodeImg) {
-          ctx.drawImage(qrCodeImg, 45, 52, 150, 150);
+          ctx.drawImage(qrCodeImg, 48, 52, 144, 144);
         } else {
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(45, 52, 150, 150);
           ctx.fillStyle = "#000000";
-          ctx.font = "12px sans-serif";
-          ctx.fillText("生成二维码中...", 75, 130);
+          ctx.font = "11px sans-serif";
+          ctx.fillText("二维码载入中...", 76, 128);
         }
 
-        ctx.fillStyle = "#94a3b8";
+        ctx.fillStyle = "#787880";
         ctx.font = "11px sans-serif";
-        ctx.fillText("手机连同WiFi打开网址:", 14, 222);
-        ctx.fillStyle = "#00e5ff";
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText(`http://${ip}:8090/settings`, 14, 244);
-        ctx.fillStyle = "#64748b";
+        ctx.fillText("IP 地址", 24, 222);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 15px monospace";
+        ctx.fillText(`${ip}:8090`, 24, 242);
+        ctx.fillStyle = "#9999a0";
         ctx.font = "11px sans-serif";
-        ctx.fillText("可配置 Token / 人设 / 零点校准", 14, 268);
+        ctx.fillText("手机连相同 WiFi 扫码访问设置页", 24, 266);
 
-        ctx.fillStyle = "#0e1524";
-        ctx.fillRect(0, 292, w, 28);
-        ctx.fillStyle = "#64748b";
-        ctx.font = "11px sans-serif";
-        ctx.fillText("按任意键或 [✕] 返回菜单", 45, 310);
+        ctx.strokeStyle = "#222226";
+        ctx.beginPath();
+        ctx.moveTo(16, 288);
+        ctx.lineTo(224, 288);
+        ctx.stroke();
+        ctx.fillStyle = "#66666e";
+        ctx.font = "10px sans-serif";
+        ctx.fillText("按任意键或 [ESC] 返回", 58, 306);
 
       } else if (menuState.mode === "DOCTOR") {
-        ctx.fillStyle = "#00e5ff";
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText("🩺 一键体检与排障", 14, 23);
+        ctx.fillStyle = "#94949b";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText("02 / DIAGNOSTICS", 16, 24);
+        ctx.fillStyle = "#686870";
+        ctx.fillText("STATUS", 192, 24);
 
         const d = menuState.doctor || {};
         const diagList = [
-          { label: "📶 WiFi IP", val: d.wifi_ip || location.hostname },
-          { label: "🧠 MiMo API", val: d.mimo_status || "正常" },
-          { label: "📷 摄像头", val: d.camera_status || "正常 (OK)" },
-          { label: "🎙️ 麦克风", val: menuState.is_mic_muted ? "静音 (Muted)" : (d.mic_status || "正常") },
-          { label: "🌡️ CPU温度", val: d.cpu_temp || "45°C" },
+          { label: "WIFI IP", val: d.wifi_ip || location.hostname },
+          { label: "MIMO API", val: d.mimo_status || "正常" },
+          { label: "CAMERA", val: d.camera_status || "正常 (OK)" },
+          { label: "MICROPHONE", val: menuState.is_mic_muted ? "静音 (Muted)" : (d.mic_status || "正常") },
+          { label: "CPU TEMP", val: d.cpu_temp || "45°C" },
         ];
 
-        let cy = 50;
+        let cy = 48;
         diagList.forEach(item => {
-          ctx.fillStyle = "rgba(20, 30, 48, 0.7)";
-          ctx.strokeStyle = "rgba(35, 50, 75, 0.8)";
+          ctx.fillStyle = "#121215";
+          ctx.strokeStyle = "#222226";
           ctx.lineWidth = 1;
           roundRect(ctx, 12, cy, 216, 40, 6, true);
           ctx.stroke();
 
-          ctx.fillStyle = "#94a3b8";
-          ctx.font = "12px sans-serif";
-          ctx.fillText(item.label, 20, cy + 24);
+          ctx.fillStyle = "#8e8e93";
+          ctx.font = "11px monospace";
+          ctx.fillText(item.label, 22, cy + 24);
 
           ctx.font = "bold 12px sans-serif";
           const isGood = item.val && (item.val.includes("正常") || item.val.includes("OK") || item.val.includes("在线") || item.val.includes("°C"));
-          ctx.fillStyle = isGood ? "#00e5ff" : "#f59e0b";
+          ctx.fillStyle = isGood ? "#ffffff" : "#f59e0b";
           ctx.fillText(item.val, 115, cy + 24);
           cy += 46;
         });
 
-        ctx.fillStyle = "#0e1524";
-        ctx.fillRect(0, 292, w, 28);
-        ctx.fillStyle = "#64748b";
-        ctx.font = "11px sans-serif";
-        ctx.fillText("[●]重新检测    [✕]返回菜单", 24, 310);
+        ctx.strokeStyle = "#222226";
+        ctx.beginPath();
+        ctx.moveTo(16, 288);
+        ctx.lineTo(224, 288);
+        ctx.stroke();
+        ctx.fillStyle = "#66666e";
+        ctx.font = "10px sans-serif";
+        ctx.fillText("[OK] 重新检测       [ESC] 返回", 30, 306);
 
       } else if (menuState.mode === "TOGGLES") {
-        ctx.fillStyle = "#00e5ff";
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText("🛡️ 硬件与防扰开关", 14, 23);
+        ctx.fillStyle = "#94949b";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText("03 / HARDWARE", 16, 24);
+        ctx.fillStyle = "#686870";
+        ctx.fillText("SWITCH", 188, 24);
 
         const toggleList = [
-          { name: "麦克风输入", on: !menuState.is_mic_muted },
+          { name: "麦克风收音", on: !menuState.is_mic_muted },
           { name: "人脸视线跟随", on: menuState.face_tracking },
           { name: "舵机工作状态", on: !menuState.servo_sleeping },
         ];
 
-        let cy = 55;
+        let cy = 52;
         toggleList.forEach((tg, idx) => {
           const isSel = (idx === menuState.cursor);
+          const statusTxt = tg.on ? "ON" : "OFF";
+
           if (isSel) {
-            ctx.fillStyle = "rgba(0, 120, 180, 0.5)";
-            ctx.strokeStyle = "#00e5ff";
-            ctx.lineWidth = 2;
+            ctx.fillStyle = "#ffffff";
             roundRect(ctx, 12, cy, 216, 54, 8, true);
-            ctx.stroke();
+            ctx.fillStyle = "#000000";
+            ctx.font = "bold 13px sans-serif";
+            ctx.fillText(`0${idx + 1}  ${tg.name}`, 22, cy + 24);
+            ctx.fillStyle = "#55555c";
+            ctx.font = "11px sans-serif";
+            ctx.fillText(`当前状态: ${statusTxt}`, 22, cy + 44);
+
+            // 右侧胶囊标牌
+            ctx.fillStyle = "#000000";
+            roundRect(ctx, 168, cy + 16, 44, 24, 4, true);
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 11px monospace";
+            ctx.fillText(statusTxt, 180, cy + 32);
           } else {
-            ctx.fillStyle = "rgba(22, 34, 52, 0.6)";
-            ctx.strokeStyle = "rgba(35, 50, 75, 0.8)";
+            ctx.fillStyle = "#121215";
+            ctx.strokeStyle = "#222226";
             ctx.lineWidth = 1;
             roundRect(ctx, 12, cy, 216, 54, 8, true);
             ctx.stroke();
+
+            ctx.fillStyle = "#d1d1d6";
+            ctx.font = "bold 13px sans-serif";
+            ctx.fillText(`0${idx + 1}  ${tg.name}`, 22, cy + 24);
+            ctx.fillStyle = "#787880";
+            ctx.font = "11px sans-serif";
+            ctx.fillText(`当前状态: ${statusTxt}`, 22, cy + 44);
+
+            // 右侧胶囊标牌
+            ctx.fillStyle = "#222226";
+            roundRect(ctx, 168, cy + 16, 44, 24, 4, true);
+            ctx.fillStyle = tg.on ? "#10b981" : "#8e8e93";
+            ctx.font = "bold 11px monospace";
+            ctx.fillText(statusTxt, 180, cy + 32);
           }
-
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "bold 13px sans-serif";
-          ctx.fillText(tg.name, 22, cy + 24);
-
-          ctx.font = "11px sans-serif";
-          ctx.fillStyle = tg.on ? "#10b981" : "#ef4444";
-          ctx.fillText(`状态: ${tg.on ? "开启 [ON]" : "关闭 [OFF]"}`, 22, cy + 44);
-          cy += 64;
+          cy += 66;
         });
 
-        ctx.fillStyle = "#0e1524";
-        ctx.fillRect(0, 292, w, 28);
-        ctx.fillStyle = "#64748b";
-        ctx.font = "11px sans-serif";
-        ctx.fillText("[▲▼]移动  [●]切换  [✕]返回", 18, 310);
+        ctx.strokeStyle = "#222226";
+        ctx.beginPath();
+        ctx.moveTo(16, 288);
+        ctx.lineTo(224, 288);
+        ctx.stroke();
+        ctx.fillStyle = "#66666e";
+        ctx.font = "10px sans-serif";
+        ctx.fillText("[▲▼] 移动    [OK] 切换    [ESC] 返回", 24, 306);
 
       } else if (menuState.mode === "POWER") {
-        ctx.fillStyle = "#00e5ff";
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText("⚡ 服务与电源", 14, 23);
+        ctx.fillStyle = "#94949b";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText("04 / POWER", 16, 24);
+        ctx.fillStyle = "#686870";
+        ctx.fillText("SYSTEM", 188, 24);
 
         const pItems = [
-          { title: "🔄 重启 AI 机器人服务", danger: false },
-          { title: "🛑 树莓派系统安全关机", danger: true }
+          { num: "01", title: "重启机器人服务" },
+          { num: "02", title: "安全关闭树莓派" }
         ];
 
         let cy = 70;
         pItems.forEach((it, idx) => {
           const isSel = (idx === menuState.cursor);
           if (isSel) {
-            ctx.fillStyle = it.danger ? "rgba(239, 68, 68, 0.6)" : "rgba(0, 140, 200, 0.6)";
-            ctx.strokeStyle = "#ffffff";
-            ctx.lineWidth = 2;
-            roundRect(ctx, 12, cy, 216, 56, 8, true);
-            ctx.stroke();
+            ctx.fillStyle = "#ffffff";
+            roundRect(ctx, 12, cy, 216, 54, 8, true);
+            ctx.fillStyle = "#000000";
+            ctx.font = "bold 13px sans-serif";
+            ctx.fillText(`${it.num}  ${it.title}`, 22, cy + 32);
           } else {
-            ctx.fillStyle = "rgba(25, 35, 55, 0.6)";
-            ctx.strokeStyle = "rgba(40, 55, 80, 0.8)";
+            ctx.fillStyle = "#121215";
+            ctx.strokeStyle = "#222226";
             ctx.lineWidth = 1;
-            roundRect(ctx, 12, cy, 216, 56, 8, true);
+            roundRect(ctx, 12, cy, 216, 54, 8, true);
             ctx.stroke();
+            ctx.fillStyle = "#d1d1d6";
+            ctx.font = "bold 13px sans-serif";
+            ctx.fillText(`${it.num}  ${it.title}`, 22, cy + 32);
           }
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "bold 13px sans-serif";
-          ctx.fillText(it.title, 20, cy + 34);
-          cy += 75;
+          cy += 72;
         });
 
-        ctx.fillStyle = "#0e1524";
-        ctx.fillRect(0, 292, w, 28);
-        ctx.fillStyle = "#64748b";
-        ctx.font = "11px sans-serif";
-        ctx.fillText("[▲▼]选择  [●]执行  [✕]返回", 20, 310);
+        ctx.strokeStyle = "#222226";
+        ctx.beginPath();
+        ctx.moveTo(16, 288);
+        ctx.lineTo(224, 288);
+        ctx.stroke();
+        ctx.fillStyle = "#66666e";
+        ctx.font = "10px sans-serif";
+        ctx.fillText("[▲▼] 选择    [OK] 执行    [ESC] 取消", 24, 306);
       }
     }
 

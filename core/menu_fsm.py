@@ -48,25 +48,25 @@ class MenuFSM:
         self.face_tracking_enabled = True
         self.is_servo_sleeping = False
         
-        # 主菜单定义
+        # 主菜单定义 (工业极简风，杜绝劣质 AI Emojis)
         self.main_menu_items = [
-            {"id": "qr", "icon": "📱", "title": "手机配置", "desc": "扫码进设置页 / 查IP"},
-            {"id": "doctor", "icon": "🩺", "title": "一键体检", "desc": "API与硬件实时排障"},
-            {"id": "toggles", "icon": "🛡️", "title": "硬件开关", "desc": "静音 / 追踪 / 休眠"},
-            {"id": "power", "icon": "⚡", "title": "服务电源", "desc": "重启服务 / 安全关机"},
+            {"id": "qr", "num": "01", "title": "无线配置", "desc": "手机扫码进设置后台 / 查IP"},
+            {"id": "doctor", "num": "02", "title": "系统体检", "desc": "网络延迟与外设实时排障"},
+            {"id": "toggles", "num": "03", "title": "硬件开关", "desc": "麦克风静音 / 追踪 / 休眠"},
+            {"id": "power", "num": "04", "title": "服务电源", "desc": "重启服务 / 树莓派安全关机"},
         ]
         
         # 开关菜单项
         self.toggle_items = [
-            {"id": "mic", "name": "麦克风输入", "state_key": "is_mic_muted", "inverted": True},
-            {"id": "track", "name": "人脸视线追踪", "state_key": "face_tracking_enabled", "inverted": False},
+            {"id": "mic", "name": "麦克风收音", "state_key": "is_mic_muted", "inverted": True},
+            {"id": "track", "name": "人脸视线跟随", "state_key": "face_tracking_enabled", "inverted": False},
             {"id": "servo", "name": "舵机工作状态", "state_key": "is_servo_sleeping", "inverted": True},
         ]
         
         # 电源菜单项
         self.power_items = [
-            {"id": "restart", "name": "🔄 重启 AI 机器人服务"},
-            {"id": "shutdown", "name": "🛑 树莓派系统安全关机"},
+            {"id": "restart", "name": "重启 AI 机器人服务"},
+            {"id": "shutdown", "name": "树莓派系统安全关机"},
         ]
 
         # 诊断体检数据缓存
@@ -385,152 +385,165 @@ class MenuFSM:
         }
 
     # ========================================================
-    # 树莓派真机端 PIL 绘图渲染器 (覆盖在眼睛画布之上)
+    # 树莓派真机端 PIL 绘图渲染器 (极简工业设计 / 彻底去除廉价 AI 浮夸风)
     # ========================================================
     def render_pil_overlay(self, base_image: Image.Image) -> Image.Image:
         """
-        在 240x320 PIL 图像上渲染菜单与二维码 (用于树莓派 ST7789 真机 LCD 直刷)
+        在 240x320 PIL 图像上渲染高对比度极简工业风菜单 (用于树莓派 ST7789 真机 LCD 直刷)
         """
         img = base_image.copy()
         draw = ImageDraw.Draw(img)
 
-        # 1. 灵动表情模式下只画右上角微小角标
+        # 1. 灵动表情模式下：保持纯净，仅在右上角以极简微圆点标注状态
         if self.current_mode == "FACE":
             if self.is_mic_muted:
-                draw.ellipse([214, 8, 230, 24], fill=(235, 60, 60))
-                draw.text((218, 9), "M", fill=(255, 255, 255), font=self.font_small)
+                draw.ellipse([218, 12, 228, 22], fill=(239, 68, 68))
             if self.is_servo_sleeping:
-                draw.text((195, 9), "Zz", fill=(100, 200, 255), font=self.font_small)
+                draw.text((200, 11), "Z", fill=(140, 140, 140), font=self.font_small)
             return img
 
-        # 2. 菜单背景磨砂黑半透明浮层
-        overlay = Image.new("RGBA", (240, 320), (12, 18, 30, 235))
+        # 2. 菜单背景：纯正工业哑光深灰浮层
+        overlay = Image.new("RGBA", (240, 320), (10, 10, 12, 245))
         img.paste(overlay, (0, 0), overlay)
         draw = ImageDraw.Draw(img)
 
-        # 顶部标题栏
-        draw.rectangle([0, 0, 240, 38], fill=(18, 28, 46))
-        draw.line([0, 38, 240, 38], fill=(0, 229, 255), width=1)
+        # 顶部极简信息栏
+        draw.line([(16, 36), (224, 36)], fill=(38, 38, 42), width=1)
 
         # A. 主菜单界面
         if self.current_mode == "MENU_MAIN":
-            draw.text((16, 10), "⚙️ 系统菜单 (4-Key)", fill=(0, 229, 255), font=self.font_bold)
-            y_start = 50
+            draw.text((16, 16), "SETTINGS", fill=(150, 150, 155), font=self.font_small)
+            draw.text((192, 16), f"0{self.cursor+1}/04", fill=(110, 110, 115), font=self.font_small)
+
+            y_start = 46
             for idx, item in enumerate(self.main_menu_items):
                 is_selected = (idx == self.cursor)
                 card_y = y_start + idx * 56
-                # 选项背景卡片
+
                 if is_selected:
-                    draw.rounded_rectangle([12, card_y, 228, card_y + 48], radius=8, fill=(0, 150, 200), outline=(0, 229, 255), width=2)
-                    text_color = (255, 255, 255)
-                    desc_color = (220, 245, 255)
-                    # 选中指示箭头
-                    draw.polygon([(216, card_y + 24), (206, card_y + 18), (206, card_y + 30)], fill=(255, 255, 255))
+                    # 极简高对比反色选框 (Dieter Rams / Teenage Engineering 风格)
+                    draw.rounded_rectangle([14, card_y, 226, card_y + 48], radius=8, fill=(255, 255, 255))
+                    draw.text((24, card_y + 8), f"{item['num']}  {item['title']}", fill=(0, 0, 0), font=self.font_bold)
+                    draw.text((24, card_y + 28), item["desc"], fill=(90, 90, 95), font=self.font_small)
+                    draw.text((210, card_y + 14), "›", fill=(0, 0, 0), font=self.font_bold)
                 else:
-                    draw.rounded_rectangle([12, card_y, 228, card_y + 48], radius=8, fill=(22, 34, 52), outline=(35, 50, 75), width=1)
-                    text_color = (200, 215, 230)
-                    desc_color = (130, 150, 175)
+                    draw.rounded_rectangle([14, card_y, 226, card_y + 48], radius=8, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
+                    draw.text((24, card_y + 8), f"{item['num']}  {item['title']}", fill=(210, 210, 215), font=self.font_bold)
+                    draw.text((24, card_y + 28), item["desc"], fill=(120, 120, 125), font=self.font_small)
+                    draw.text((210, card_y + 14), "›", fill=(80, 80, 85), font=self.font_bold)
 
-                draw.text((24, card_y + 8), f"{item['icon']} {item['title']}", fill=text_color, font=self.font_bold)
-                draw.text((24, card_y + 28), item["desc"], fill=desc_color, font=self.font_small)
-
-            # 底部按键提示
-            draw.rectangle([0, 290, 240, 320], fill=(14, 20, 32))
-            draw.text((16, 298), "[▲▼]移动  [●]确认  [✕]返回", fill=(100, 130, 160), font=self.font_small)
+            # 底部极简按键提示
+            draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
+            draw.text((24, 298), "[▲▼] 移动    [OK] 确认    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
         # B. 扫码手机配置界面
         elif self.current_mode == "QR_CODE":
-            draw.text((16, 10), "📱 手机扫码配置", fill=(0, 229, 255), font=self.font_bold)
+            draw.text((16, 16), "01 / CONNECT", fill=(150, 150, 155), font=self.font_small)
+            draw.text((188, 16), "WIFI WEB", fill=(110, 110, 115), font=self.font_small)
+
             ip = get_local_ip()
             url = f"http://{ip}:8090/settings"
 
-            # 生成二维码并贴图
+            # 居中纯白卡片放二维码
+            draw.rounded_rectangle([42, 46, 198, 202], radius=10, fill=(255, 255, 255))
             if qrcode:
                 try:
-                    qr = qrcode.QRCode(box_size=4, border=2)
+                    qr = qrcode.QRCode(box_size=4, border=1)
                     qr.add_data(url)
                     qr.make(fit=True)
                     qr_pil = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-                    # 缩放到 150x150
-                    qr_pil = qr_pil.resize((150, 150), Image.Resampling.NEAREST)
-                    img.paste(qr_pil, (45, 52))
+                    qr_pil = qr_pil.resize((144, 144), Image.Resampling.NEAREST)
+                    img.paste(qr_pil, (48, 52))
                 except Exception as e:
-                    draw.text((40, 110), f"二维码生成错误:\n{e}", fill=(255, 100, 100), font=self.font_small)
-            else:
-                draw.rectangle([45, 52, 195, 202], fill=(255, 255, 255))
-                draw.text((50, 110), "请安装 qrcode 库", fill=(0, 0, 0), font=self.font_small)
+                    draw.text((50, 110), f"Error: {e}", fill=(0, 0, 0), font=self.font_small)
 
-            # 网址提示
-            draw.text((14, 214), "手机连同WiFi打开网址:", fill=(160, 180, 205), font=self.font_small)
-            draw.text((14, 234), f"{ip}:8090", fill=(0, 229, 255), font=self.font_bold)
-            draw.text((14, 256), "可配置 Token / 人设 / 舵机对齐", fill=(120, 140, 170), font=self.font_small)
+            # 清爽单色网址排版
+            draw.text((24, 218), "IP 地址", fill=(120, 120, 125), font=self.font_small)
+            draw.text((24, 236), f"{ip}:8090", fill=(255, 255, 255), font=self.font_bold)
+            draw.text((24, 260), "手机连相同 WiFi 扫码访问设置页", fill=(140, 140, 145), font=self.font_small)
 
-            draw.rectangle([0, 290, 240, 320], fill=(14, 20, 32))
-            draw.text((45, 298), "按任意键或 [✕] 返回菜单", fill=(100, 130, 160), font=self.font_small)
+            draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
+            draw.text((56, 298), "按任意键或 [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
         # C. 一键体检诊断界面
         elif self.current_mode == "DOCTOR":
-            draw.text((16, 10), "🩺 一键体检与排障", fill=(0, 229, 255), font=self.font_bold)
-            d = self.doctor_cache
+            draw.text((16, 16), "02 / DIAGNOSTICS", fill=(150, 150, 155), font=self.font_small)
+            draw.text((196, 16), "STATUS", fill=(110, 110, 115), font=self.font_small)
 
+            d = self.doctor_cache
             items = [
-                ("📶 WiFi IP", d.get("wifi_ip", "--")),
-                ("🧠 MiMo API", d.get("mimo_status", "--")),
-                ("📷 摄像头", d.get("camera_status", "--")),
-                ("🎙️ 麦克风", d.get("mic_status", "--")),
-                ("🌡️ CPU温度", d.get("cpu_temp", "--")),
+                ("WIFI IP", d.get("wifi_ip", "--")),
+                ("MIMO API", d.get("mimo_status", "--")),
+                ("CAMERA", d.get("camera_status", "--")),
+                ("MICROPHONE", d.get("mic_status", "--")),
+                ("CPU TEMP", d.get("cpu_temp", "--")),
             ]
 
-            y = 52
+            y = 48
             for label, val in items:
-                draw.rounded_rectangle([14, y, 226, y + 40], radius=6, fill=(20, 30, 48), outline=(35, 50, 75))
-                draw.text((24, y + 10), label, fill=(160, 190, 220), font=self.font_main)
-                color = (0, 229, 255) if "正常" in val or "OK" in val or "在线" in val else (255, 180, 60)
-                draw.text((120, y + 10), val, fill=color, font=self.font_bold)
+                draw.rounded_rectangle([14, y, 226, y + 40], radius=6, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
+                draw.text((24, y + 12), label, fill=(130, 130, 135), font=self.font_small)
+                # 状态点与值
+                is_good = any(x in val for x in ["正常", "OK", "在线", "°C"])
+                val_color = (255, 255, 255) if is_good else (245, 158, 11)
+                draw.text((115, y + 11), val, fill=val_color, font=self.font_bold)
                 y += 46
 
-            draw.rectangle([0, 290, 240, 320], fill=(14, 20, 32))
-            draw.text((24, 298), "[●]重新检测    [✕]返回菜单", fill=(100, 130, 160), font=self.font_small)
+            draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
+            draw.text((28, 298), "[OK] 重新检测       [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
         # D. 硬件与防扰开关
         elif self.current_mode == "TOGGLES":
-            draw.text((16, 10), "🛡️ 硬件与防扰开关", fill=(0, 229, 255), font=self.font_bold)
-            y = 55
+            draw.text((16, 16), "03 / HARDWARE", fill=(150, 150, 155), font=self.font_small)
+            draw.text((192, 16), "SWITCH", fill=(110, 110, 115), font=self.font_small)
+
+            y = 52
             for idx, item in enumerate(self.toggle_items):
                 is_selected = (idx == self.cursor)
                 k = item["state_key"]
                 is_on = not getattr(self, k) if item["inverted"] else getattr(self, k)
-                status_txt = "开启 [ON]" if is_on else "关闭 [OFF]"
-                status_color = (0, 255, 180) if is_on else (255, 80, 80)
+                status_txt = "ON" if is_on else "OFF"
 
                 if is_selected:
-                    draw.rounded_rectangle([12, y, 228, y + 54], radius=8, fill=(0, 120, 180), outline=(0, 229, 255), width=2)
+                    draw.rounded_rectangle([14, y, 226, y + 54], radius=8, fill=(255, 255, 255))
+                    draw.text((24, y + 10), f"0{idx+1}  {item['name']}", fill=(0, 0, 0), font=self.font_bold)
+                    draw.text((24, y + 32), f"当前状态: {status_txt}", fill=(80, 80, 85), font=self.font_small)
+                    # 开关标识框
+                    draw.rounded_rectangle([170, y + 14, 214, y + 38], radius=4, fill=(0, 0, 0))
+                    draw.text((182, y + 18), status_txt, fill=(255, 255, 255), font=self.font_bold)
                 else:
-                    draw.rounded_rectangle([12, y, 228, y + 54], radius=8, fill=(22, 34, 52), outline=(35, 50, 75), width=1)
+                    draw.rounded_rectangle([14, y, 226, y + 54], radius=8, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
+                    draw.text((24, y + 10), f"0{idx+1}  {item['name']}", fill=(210, 210, 215), font=self.font_bold)
+                    draw.text((24, y + 32), f"当前状态: {status_txt}", fill=(120, 120, 125), font=self.font_small)
+                    # 开关标识框
+                    box_fill = (35, 35, 40)
+                    draw.rounded_rectangle([170, y + 14, 214, y + 38], radius=4, fill=box_fill)
+                    draw.text((182, y + 18), status_txt, fill=(16, 185, 129) if is_on else (140, 140, 145), font=self.font_bold)
+                y += 66
 
-                draw.text((22, y + 8), item["name"], fill=(255, 255, 255), font=self.font_bold)
-                draw.text((22, y + 30), f"当前: {status_txt}", fill=status_color, font=self.font_small)
-                y += 64
-
-            draw.rectangle([0, 290, 240, 320], fill=(14, 20, 32))
-            draw.text((20, 298), "[▲▼]移动  [●]切换  [✕]返回", fill=(100, 130, 160), font=self.font_small)
+            draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
+            draw.text((24, 298), "[▲▼] 移动    [OK] 切换    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
         # E. 电源与服务维护
         elif self.current_mode == "POWER":
-            draw.text((16, 10), "⚡ 服务与电源", fill=(0, 229, 255), font=self.font_bold)
+            draw.text((16, 16), "04 / POWER", fill=(150, 150, 155), font=self.font_small)
+            draw.text((192, 16), "SYSTEM", fill=(110, 110, 115), font=self.font_small)
+
             y = 70
             for idx, item in enumerate(self.power_items):
                 is_selected = (idx == self.cursor)
                 if is_selected:
-                    draw.rounded_rectangle([14, y, 226, y + 56], radius=8, fill=(180, 50, 50) if "关机" in item["name"] else (0, 130, 190), outline=(255, 255, 255), width=2)
+                    draw.rounded_rectangle([14, y, 226, y + 54], radius=8, fill=(255, 255, 255))
+                    draw.text((24, y + 18), f"0{idx+1}  {item['name']}", fill=(0, 0, 0), font=self.font_bold)
                 else:
-                    draw.rounded_rectangle([14, y, 226, y + 56], radius=8, fill=(25, 35, 55), outline=(40, 55, 80), width=1)
+                    draw.rounded_rectangle([14, y, 226, y + 54], radius=8, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
+                    draw.text((24, y + 18), f"0{idx+1}  {item['name']}", fill=(210, 210, 215), font=self.font_bold)
+                y += 72
 
-                draw.text((24, y + 16), item["name"], fill=(255, 255, 255), font=self.font_bold)
-                y += 75
+            draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
+            draw.text((24, 298), "[▲▼] 选择    [OK] 执行    [ESC] 取消", fill=(100, 100, 105), font=self.font_small)
 
-            draw.rectangle([0, 290, 240, 320], fill=(14, 20, 32))
-            draw.text((20, 298), "[▲▼]选择  [●]立即执行  [✕]返回", fill=(100, 130, 160), font=self.font_small)
+        return img
 
         return img
 

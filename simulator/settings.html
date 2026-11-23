@@ -3,19 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>🐷 PIG 机器人 · 手机控制台</title>
+  <title>PIG · 无线设置后台</title>
   <style>
     :root {
-      --bg: #0b0f19;
-      --card-bg: rgba(20, 28, 45, 0.75);
-      --border: rgba(0, 229, 255, 0.2);
-      --cyan: #00e5ff;
-      --cyan-glow: rgba(0, 229, 255, 0.35);
-      --accent: #ff4081;
-      --text: #e2e8f0;
-      --text-sub: #94a3b8;
+      --bg: #090a0c;
+      --card: #131417;
+      --border: #23252a;
+      --text: #ededed;
+      --text-muted: #888b93;
+      --accent: #ffffff;
       --success: #10b981;
-      --warning: #f59e0b;
       --danger: #ef4444;
     }
     * {
@@ -27,9 +24,9 @@
     body {
       background-color: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "PingFang SC", sans-serif;
       min-height: 100vh;
-      padding: 16px 14px 40px;
+      padding: 20px 16px 48px;
       line-height: 1.5;
     }
     .header {
@@ -37,11 +34,10 @@
       align-items: center;
       justify-content: space-between;
       padding: 12px 14px;
-      margin-bottom: 16px;
-      background: var(--card-bg);
+      margin-bottom: 20px;
+      background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
-      backdrop-filter: blur(12px);
+      border-radius: 12px;
     }
     .brand {
       display: flex;
@@ -49,35 +45,36 @@
       gap: 10px;
     }
     .brand-avatar {
-      width: 36px;
-      height: 36px;
-      background: linear-gradient(135deg, #00e5ff, #0284c7);
-      border-radius: 10px;
+      width: 32px;
+      height: 32px;
+      background: #22242a;
+      border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
-      box-shadow: 0 0 10px var(--cyan-glow);
+      font-size: 16px;
+      border: 1px solid #33363f;
     }
     .brand-title {
-      font-size: 1.05rem;
+      font-size: 0.95rem;
       font-weight: 700;
       color: #fff;
+      letter-spacing: 0.5px;
     }
     .brand-sub {
-      font-size: 0.72rem;
-      color: var(--cyan);
+      font-size: 0.7rem;
+      color: var(--text-muted);
     }
     .status-badge {
       font-size: 0.72rem;
       padding: 3px 8px;
-      border-radius: 12px;
-      background: rgba(16, 185, 129, 0.15);
-      color: var(--success);
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 6px;
+      background: #191b20;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
     }
     .status-badge::before {
       content: "";
@@ -85,27 +82,21 @@
       height: 6px;
       border-radius: 50%;
       background: var(--success);
-      box-shadow: 0 0 6px var(--success);
     }
     .card {
-      background: var(--card-bg);
+      background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 12px;
       padding: 16px 14px;
       margin-bottom: 14px;
-      backdrop-filter: blur(12px);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
     }
     .card-title {
-      font-size: 0.92rem;
+      font-size: 0.8rem;
       font-weight: 600;
-      color: var(--cyan);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
     }
     .form-group {
       margin-bottom: 14px;
@@ -116,23 +107,22 @@
     label {
       display: block;
       font-size: 0.78rem;
-      color: var(--text-sub);
+      color: var(--text-muted);
       margin-bottom: 6px;
     }
-    input[type="text"], input[type="password"], textarea, select {
+    input[type="text"], input[type="password"], select {
       width: 100%;
-      background: rgba(11, 15, 25, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: #0d0e11;
+      border: 1px solid var(--border);
       border-radius: 8px;
       padding: 10px 12px;
       color: var(--text);
       font-size: 0.88rem;
       outline: none;
-      transition: all 0.2s;
+      transition: border 0.15s;
     }
-    input:focus, textarea:focus, select:focus {
-      border-color: var(--cyan);
-      box-shadow: 0 0 8px var(--cyan-glow);
+    input:focus, select:focus {
+      border-color: #666;
     }
     .password-wrap {
       position: relative;
@@ -144,44 +134,45 @@
       transform: translateY(-50%);
       background: none;
       border: none;
-      color: var(--text-sub);
-      font-size: 0.9rem;
+      color: var(--text-muted);
+      font-size: 0.85rem;
       cursor: pointer;
       padding: 4px;
     }
     .btn {
       width: 100%;
-      background: linear-gradient(135deg, #00b4d8, #0077b6);
-      color: #fff;
+      background: #ffffff;
+      color: #000000;
       border: none;
       border-radius: 8px;
       padding: 11px 16px;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      transition: all 0.2s;
-      box-shadow: 0 4px 12px rgba(0, 180, 216, 0.3);
+      transition: all 0.15s;
     }
     .btn:active {
       transform: scale(0.98);
-      opacity: 0.9;
+      background: #e2e2e2;
     }
     .btn-secondary {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: #1b1c21;
+      border: 1px solid var(--border);
       color: var(--text);
-      box-shadow: none;
+    }
+    .btn-secondary:active {
+      background: #25262c;
     }
     .toggle-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 10px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid #1a1c21;
     }
     .toggle-row:last-child {
       border-bottom: none;
@@ -192,14 +183,14 @@
     }
     .toggle-desc {
       font-size: 0.72rem;
-      color: var(--text-sub);
+      color: var(--text-muted);
     }
-    /* Switch component */
+    /* Switch */
     .switch {
       position: relative;
       display: inline-block;
-      width: 44px;
-      height: 24px;
+      width: 42px;
+      height: 22px;
     }
     .switch input {
       opacity: 0;
@@ -210,57 +201,54 @@
       position: absolute;
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
-      background-color: rgba(255, 255, 255, 0.15);
-      transition: .3s;
-      border-radius: 24px;
+      background-color: #272930;
+      transition: .2s;
+      border-radius: 22px;
     }
     .slider:before {
       position: absolute;
       content: "";
-      height: 18px;
-      width: 18px;
+      height: 16px;
+      width: 16px;
       left: 3px;
       bottom: 3px;
-      background-color: white;
-      transition: .3s;
+      background-color: #ffffff;
+      transition: .2s;
       border-radius: 50%;
     }
     input:checked + .slider {
-      background-color: var(--cyan);
-      box-shadow: 0 0 10px var(--cyan-glow);
+      background-color: #ffffff;
     }
     input:checked + .slider:before {
       transform: translateX(20px);
+      background-color: #000000;
     }
     /* Range Slider */
-    .range-box {
-      margin-top: 8px;
-    }
     .range-header {
       display: flex;
       justify-content: space-between;
       font-size: 0.78rem;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
     .range-val {
-      color: var(--cyan);
+      color: #ffffff;
       font-weight: 600;
+      font-family: monospace;
     }
     input[type=range] {
       width: 100%;
-      height: 6px;
-      border-radius: 3px;
-      background: rgba(255, 255, 255, 0.15);
+      height: 4px;
+      border-radius: 2px;
+      background: #272930;
       outline: none;
       -webkit-appearance: none;
     }
     input[type=range]::-webkit-slider-thumb {
       -webkit-appearance: none;
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
-      background: var(--cyan);
-      box-shadow: 0 0 8px var(--cyan);
+      background: #ffffff;
       cursor: pointer;
     }
     /* Diagnostics list */
@@ -269,7 +257,7 @@
       justify-content: space-between;
       padding: 8px 0;
       font-size: 0.82rem;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid #1a1c21;
     }
     .diag-item:last-child {
       border-bottom: none;
@@ -279,15 +267,16 @@
       bottom: 24px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(16, 185, 129, 0.95);
-      color: #fff;
-      padding: 10px 20px;
+      background: #ffffff;
+      color: #000000;
+      font-weight: 600;
+      padding: 8px 18px;
       border-radius: 20px;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.3s;
+      transition: opacity 0.2s;
       z-index: 999;
     }
     .toast.show {
@@ -297,26 +286,25 @@
 </head>
 <body>
 
-  <!-- 头部品牌 -->
   <header class="header">
     <div class="brand">
-      <div class="brand-avatar">🐷</div>
+      <div class="brand-avatar">P</div>
       <div>
-        <div class="brand-title">PIG 桌面助手</div>
-        <div class="brand-sub">无线手机配置后台</div>
+        <div class="brand-title">PIG HARDWARE</div>
+        <div class="brand-sub">DEVICE SETTINGS PORTAL</div>
       </div>
     </div>
-    <div class="status-badge" id="onlineBadge">设备在线</div>
+    <div class="status-badge" id="onlineBadge">ONLINE</div>
   </header>
 
   <!-- 1. API Token 与大模型配置 -->
   <section class="card">
-    <div class="card-title">🔑 大模型与 API Token</div>
+    <div class="card-title">01 / MODEL & API TOKEN</div>
     <div class="form-group">
-      <label>小米 MiMo 2.5 API Key</label>
+      <label>MiMo API Key</label>
       <div class="password-wrap">
         <input type="password" id="apiKeyInput" placeholder="sk-..." />
-        <button class="toggle-pwd" type="button" onclick="togglePwdVisibility()">👁️</button>
+        <button class="toggle-pwd" type="button" onclick="togglePwdVisibility()">SHOW</button>
       </div>
     </div>
     <div class="form-group">
@@ -326,14 +314,14 @@
         <option value="mimo-v2.5-flash">MiMo-V2.5-Flash (超快响应)</option>
       </select>
     </div>
-    <button class="btn" onclick="saveApiConfig()">💾 保存 API 配置</button>
+    <button class="btn" onclick="saveApiConfig()">保存 API 配置</button>
   </section>
 
   <!-- 2. 机器人人设与称呼 -->
   <section class="card">
-    <div class="card-title">🤖 称呼与人设定制</div>
+    <div class="card-title">02 / PERSONA & IDENTITY</div>
     <div class="form-group">
-      <label>机器人称呼 (小名)</label>
+      <label>机器人称呼</label>
       <input type="text" id="robotNameInput" value="PIG" />
     </div>
     <div class="form-group">
@@ -343,21 +331,21 @@
     <div class="form-group">
       <label>音色选择</label>
       <select id="voiceSelect">
-        <option value="冰糖">冰糖 (甜美少女音)</option>
+        <option value="冰糖">冰糖 (少女音)</option>
         <option value="小爱">小爱 (清亮灵动)</option>
         <option value="温柔男声">温柔男声</option>
       </select>
     </div>
-    <button class="btn btn-secondary" onclick="savePersonaConfig()">✨ 保存称呼与人设</button>
+    <button class="btn btn-secondary" onclick="savePersonaConfig()">保存称呼与人设</button>
   </section>
 
   <!-- 3. 硬件快捷开关 -->
   <section class="card">
-    <div class="card-title">🛡️ 硬件与免打扰</div>
+    <div class="card-title">03 / HARDWARE SWITCHES</div>
     <div class="toggle-row">
       <div>
         <div class="toggle-label">麦克风收音</div>
-        <div class="toggle-desc">关闭后进入物理静音防误唤醒</div>
+        <div class="toggle-desc">关闭进入物理静音防误唤醒</div>
       </div>
       <label class="switch">
         <input type="checkbox" id="micSwitch" checked onchange="toggleMic(this.checked)">
@@ -367,7 +355,7 @@
     <div class="toggle-row">
       <div>
         <div class="toggle-label">人脸视线跟随</div>
-        <div class="toggle-desc">开启后转头并注视主人人脸</div>
+        <div class="toggle-desc">注视并跟随主人人脸</div>
       </div>
       <label class="switch">
         <input type="checkbox" id="trackingSwitch" checked onchange="toggleTracking(this.checked)">
@@ -376,8 +364,8 @@
     </div>
     <div class="toggle-row">
       <div>
-        <div class="toggle-label">舵机低头休眠</div>
-        <div class="toggle-desc">关闭 PWM 脉冲，防抖防啸叫</div>
+        <div class="toggle-label">舵机休眠</div>
+        <div class="toggle-desc">关闭 PWM 脉冲防抖动与发热</div>
       </div>
       <label class="switch">
         <input type="checkbox" id="servoSleepSwitch" onchange="toggleServoSleep(this.checked)">
@@ -388,65 +376,66 @@
 
   <!-- 4. 舵机零点实时校准 -->
   <section class="card">
-    <div class="card-title">📐 舵机零点对齐校准</div>
+    <div class="card-title">04 / SERVO CALIBRATION</div>
     <div class="form-group">
       <div class="range-header">
-        <span>水平航向角 (Pan):</span>
+        <span>航向角 (PAN)</span>
         <span class="range-val" id="panVal">90°</span>
       </div>
       <input type="range" id="panRange" min="50" max="130" value="90" oninput="updateServoLive('pan', this.value)">
     </div>
     <div class="form-group">
       <div class="range-header">
-        <span>俯仰角度 (Tilt):</span>
+        <span>俯仰角 (TILT)</span>
         <span class="range-val" id="tiltVal">90°</span>
       </div>
       <input type="range" id="tiltRange" min="60" max="120" value="90" oninput="updateServoLive('tilt', this.value)">
     </div>
     <div style="display:flex; gap:8px; margin-top:10px;">
-      <button class="btn btn-secondary" style="flex:1;" onclick="resetServo()">🔄 居中回位</button>
-      <button class="btn" style="flex:1;" onclick="saveServoTrim()">🎯 保存零点</button>
+      <button class="btn btn-secondary" style="flex:1;" onclick="resetServo()">居中归位</button>
+      <button class="btn" style="flex:1;" onclick="saveServoTrim()">保存零点</button>
     </div>
   </section>
 
   <!-- 5. 系统状态与一键体检 -->
   <section class="card">
-    <div class="card-title">🩺 硬件状态与体检</div>
+    <div class="card-title">05 / SYSTEM DIAGNOSTICS</div>
     <div class="diag-item">
-      <span>局域网 IP</span>
-      <strong id="diagIp" style="color:var(--cyan);">获取中...</strong>
+      <span>WIFI IP</span>
+      <strong id="diagIp" style="font-family:monospace;">--</strong>
     </div>
     <div class="diag-item">
       <span>CPU 温度</span>
-      <strong id="diagTemp">--</strong>
+      <strong id="diagTemp" style="font-family:monospace;">--</strong>
     </div>
     <div class="diag-item">
-      <span>MiMo API 连通</span>
-      <strong id="diagMimo">--</strong>
+      <span>MIMO API 连通</span>
+      <strong id="diagMimo" style="font-family:monospace;">--</strong>
     </div>
     <div class="diag-item">
       <span>摄像头状态</span>
-      <strong id="diagCam">正常</strong>
+      <strong id="diagCam">READY</strong>
     </div>
-    <button class="btn btn-secondary" style="margin-top:12px;" onclick="runDoctorCheck()">🩺 立即重新体检</button>
+    <button class="btn btn-secondary" style="margin-top:12px;" onclick="runDoctorCheck()">重新检测</button>
   </section>
 
-  <div class="toast" id="toast">保存成功！</div>
+  <div class="toast" id="toast">已保存</div>
 
   <script>
     function showToast(msg) {
       const t = document.getElementById("toast");
       t.innerText = msg;
       t.classList.add("show");
-      setTimeout(() => t.classList.remove("show"), 2000);
+      setTimeout(() => t.classList.remove("show"), 1800);
     }
 
     function togglePwdVisibility() {
       const inp = document.getElementById("apiKeyInput");
+      const btn = event.target;
       inp.type = inp.type === "password" ? "text" : "password";
+      btn.innerText = inp.type === "password" ? "SHOW" : "HIDE";
     }
 
-    // 加载当前设置
     async function loadSettings() {
       try {
         const res = await fetch("/api/settings");
@@ -480,7 +469,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ api_key: key, llm_model: model })
         });
-        if (res.ok) showToast("API 配置已保存！");
+        if (res.ok) showToast("API 配置已保存");
       } catch (e) {
         alert("保存失败: " + e);
       }
@@ -496,7 +485,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ robot_name, user_name, mimo_voice })
         });
-        if (res.ok) showToast("人设已同步！");
+        if (res.ok) showToast("人设已同步");
       } catch (e) {
         alert("保存失败: " + e);
       }
@@ -508,7 +497,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_mic_muted: !on })
       });
-      showToast(on ? "麦克风已开启" : "麦克风已静音");
+      showToast(on ? "麦克风已开启" : "已静音");
     }
 
     async function toggleTracking(on) {
@@ -526,12 +515,11 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ servo_sleeping: sleep })
       });
-      showToast(sleep ? "舵机已低头休眠" : "舵机已恢复工作");
+      showToast(sleep ? "舵机已休眠" : "舵机已恢复");
     }
 
     function updateServoLive(axis, val) {
       document.getElementById(axis + "Val").innerText = val + "°";
-      // 实时发给舵机测试
       fetch("/api/servo/move", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -551,12 +539,12 @@
     }
 
     async function saveServoTrim() {
-      showToast("舵机零点已校准保存！");
+      showToast("零点已保存");
     }
 
     async function runDoctorCheck() {
       const btn = event.target;
-      btn.innerText = "⏳ 检测中...";
+      btn.innerText = "CHECKING...";
       try {
         const res = await fetch("/api/system/doctor");
         if (res.ok) {
@@ -564,16 +552,15 @@
           document.getElementById("diagIp").innerText = d.wifi_ip;
           document.getElementById("diagTemp").innerText = d.cpu_temp;
           document.getElementById("diagMimo").innerText = d.mimo_status;
-          showToast("体检完成！各项指标正常");
+          showToast("检测完成");
         }
       } catch (e) {
-        alert("体检请求失败: " + e);
+        alert("检测失败: " + e);
       } finally {
-        btn.innerText = "🩺 立即重新体检";
+        btn.innerText = "重新检测";
       }
     }
 
-    // 初始化加载
     loadSettings();
   </script>
 </body>
