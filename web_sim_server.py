@@ -517,7 +517,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 if has_face:
                     cur_p = float(getattr(hardware_agent.hal, "cur_pan", 90.0))
                     cur_t = float(getattr(hardware_agent.hal, "cur_tilt", 90.0))
-                    lx, ly, tp, tt = face_tracker.compute_gaze_and_angles(float(ox), float(oy), cur_p, cur_t)
+                    lx, ly, tp, tt = face_tracker.compute_gaze_and_angles(float(ox), float(oy), cur_p, cur_t, is_moving_camera=False)
                     res["look_x"] = int(lx)
                     res["look_y"] = int(ly)
                     res["target_pan"] = round(float(tp), 1)
@@ -531,8 +531,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                             "h": int(face_tracker.last_box["h"])
                         }
 
-                    if abs(ox) > 0.22 or abs(oy) > 0.22:
-                        hardware_agent.hal.set_angles(float(tp), float(tt))
+                    hardware_agent.hal.set_angles(float(tp), float(tt))
 
                 def _safe_json_serialize(obj):
                     if hasattr(obj, "item"):

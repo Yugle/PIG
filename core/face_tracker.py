@@ -131,29 +131,44 @@ class FaceTracker:
         self.last_box = None
         return False, 0.0, 0.0
 
-    def compute_gaze_and_angles(self, offset_x: float, offset_y: float, cur_pan: float, cur_tilt: float):
+    def compute_gaze_and_angles(self, offset_x: float, offset_y: float, cur_pan: float = 90.0, cur_tilt: float = 90.0, is_moving_camera: bool = False):
         """
-        两级拟人生理注视逻辑：
+        两级拟人生理注视逻辑 (Two-tier Gaze & Head Tracking)：
+        :param offset_x: 人脸相对画面中心偏移 [-1.0, 1.0]，未镜像时向右移动为负
+        :param offset_y: 人脸相对画面中心纵向偏移 [-1.0, 1.0]，向上为负，向下为正
+        :param cur_pan: 当前水平舵机角度
+        :param cur_tilt: 当前俯仰舵机角度
+        :param is_moving_camera: 摄像头是否随头部舵机转动 (真机额头摄像头为 True，电脑固定摄像头为 False)
         :return: (look_x, look_y, target_pan, target_tilt)
         """
-        # 1. 微小位移 (阈值 0.22 内): 仅动眼球，不动脖子
-        # 画面中的 X 向右为正，但镜像面对机器人时：人往右走，机器人眼珠应该往右(正方向)看
-        look_x = int(offset_x * 32.0)
-        look_y = int(offset_y * 22.0)
+        # 1. 瞳孔视线注视偏移 (人向右 -> 镜像对齐后眼珠向右看正方向；人向上 -> 眼珠向上瞄负坐标)
+        look_x = int(-offset_x * 28.0)
+        look_y = int(offset_y * 20.0)
 
-        target_pan = cur_pan
-        target_tilt = cur_tilt
+        # 2. 脖子舵机两级生理驱动机制
+        if is_moving_camera:
+            # 动架摄像头 (真机闭环 P 控制)
+            target_pan = cur_pan
+            target_tilt = cur_tilt
+            if abs(offset_x) > 0.22:
+                delta_pan = offset_x * 3.5
+                target_pan = max(30.0, min(150.0, cur_pan + delta_pan))
+            if abs(offset_y) > 0.22:
+                delta_tilt = offset_y * 2.5
+                target_tilt = max(68.0, min(112.0, cur_tilt + delta_tilt))
+        else:
+            # 定架摄像头 (电脑屏幕 / 网页仿真 Sim-to-Real): 绝对注视角映射
+            # 微小位移 (|offset| <= 0.22): 脖子保持端正居中 90°，仅靠眼球转动灵动注视
+            # 较大位移 (|offset| > 0.22): 脖子柔顺协同转动，精准将视野朝向主人
+            if abs(offset_x) > 0.22:
+                target_pan = round(max(35.0, min(145.0, 90.0 + offset_x * 38.0)), 1)
+            else:
+                target_pan = 90.0
 
-        # 2. 较大位移: 舵机柔和协同转动追踪
-        if abs(offset_x) > 0.22:
-            # 摄像头镜像：人脸在画面右侧 (offset_x > 0)，机器人需向对应侧平滑转头
-            delta_pan = -offset_x * 3.5
-            target_pan = max(30.0, min(150.0, cur_pan + delta_pan))
-
-        if abs(offset_y) > 0.22:
-            # 画面下方 (offset_y > 0) 代表人低头或走近，机器人低头 (tilt 变大)
-            delta_tilt = offset_y * 2.5
-            target_tilt = max(70.0, min(110.0, cur_tilt + delta_tilt))
+            if abs(offset_y) > 0.22:
+                target_tilt = round(max(68.0, min(112.0, 90.0 + offset_y * 24.0)), 1)
+            else:
+                target_tilt = 90.0
 
         return look_x, look_y, target_pan, target_tilt
 

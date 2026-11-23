@@ -45,17 +45,17 @@ def run_face_tracker_tests():
     # 场景 A: 微小偏移 (offset_x = 0.15, offset_y = -0.10，绝对值 <= 0.22)
     lx, ly, tp, tt = tracker.compute_gaze_and_angles(0.15, -0.10, cur_pan, cur_tilt)
     print(f"  • [场景 A: 视线微偏] offset=(+0.15, -0.10) -> 眼球瞳孔偏移 look=({lx}, {ly}), 目标舵机 angles=({tp:.1f}°, {tt:.1f}°)")
-    assert tp == cur_pan and tt == cur_tilt, "微小位移时脖子舵机必须保持不动 (仅动眼球)"
-    assert lx > 0 and ly < 0, "眼球瞳孔偏移方向必须与视线位移方向一致"
-    print("    -> 验证通过：小幅度位移仅转动眼球瞳孔，脖子保持静止！")
+    assert tp == 90.0 and tt == 90.0, "微小位移时脖子舵机必须端正居中 90° (仅动眼球)"
+    assert lx == int(-0.15 * 28.0) and ly == int(-0.10 * 20.0), "眼球瞳孔偏移方向必须与视线位移方向一致"
+    print("    -> 验证通过：小幅度位移仅转动眼球瞳孔，脖子保持端正居中！")
 
     # 场景 B: 人脸向右大位移 (offset_x = 0.60, offset_y = 0.35，绝对值 > 0.22)
     lx, ly, tp, tt = tracker.compute_gaze_and_angles(0.60, 0.35, cur_pan, cur_tilt)
     print(f"  • [场景 B: 主人右移] offset=(+0.60, +0.35) -> 眼球瞳孔偏移 look=({lx}, {ly}), 目标舵机 angles=({tp:.1f}°, {tt:.1f}°)")
-    assert tp != cur_pan, "大幅度横向位移时水平舵机必须联动转动跟随"
-    assert tt != cur_tilt, "大幅度纵向位移时俯仰舵机必须联动转动跟随"
+    assert tp != 90.0, "大幅度横向位移时水平舵机必须联动转动跟随"
+    assert tt != 90.0, "大幅度纵向位移时俯仰舵机必须联动转动跟随"
     assert 30.0 <= tp <= 150.0, f"水平舵机角度必须限制在安全物理极限内 (当前: {tp})"
-    assert 70.0 <= tt <= 110.0, f"俯仰舵机角度必须限制在安全物理极限内 (当前: {tt})"
+    assert 68.0 <= tt <= 112.0, f"俯仰舵机角度必须限制在安全物理极限内 (当前: {tt})"
     print("    -> 验证通过：大幅度位移触发眼球边缘锁定 + 舵机平滑跟随转向居中！")
 
     # 4. EMA 防抖动低通滤波器平滑度验证
