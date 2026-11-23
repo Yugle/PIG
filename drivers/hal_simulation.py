@@ -64,6 +64,10 @@ class SimulationRobotHAL(BaseRobotHAL):
         pan = max(20.0, min(160.0, float(pan)))
         tilt = max(60.0, min(120.0, float(tilt)))
 
+        # 最小变动死区过滤 (小于 1.0° 视为静止，抑制控制台刷屏与微小抖动)
+        if abs(pan - self.cur_pan) < 0.8 and abs(tilt - self.cur_tilt) < 0.8:
+            return
+
         if self.has_mujoco and self.model and self.data and self.viewer:
             # 映射角度至弧度 (90 度为中间零位)
             rad_pan = math.radians(pan - 90.0)

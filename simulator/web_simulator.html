@@ -637,6 +637,77 @@
       transform: translateY(0);
     }
 
+    /* 📷 对话框多模态视觉抓拍瞬间卡片 */
+    .visual-snapshot-card {
+      margin: 8px 0 10px 0;
+      background: #11161d;
+      border: 1px solid rgba(0, 229, 255, 0.35);
+      border-radius: 10px;
+      overflow: hidden;
+      max-width: 280px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+      transition: border-color 0.2s ease;
+    }
+    .visual-snapshot-card:hover {
+      border-color: var(--cyan);
+    }
+    .visual-snapshot-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 10px;
+      background: rgba(0, 229, 255, 0.08);
+      border-bottom: 1px solid rgba(0, 229, 255, 0.15);
+      font-size: 0.72rem;
+    }
+    .visual-snapshot-title {
+      color: var(--cyan);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .visual-snapshot-badge {
+      color: var(--text-sub);
+      font-size: 0.65rem;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .visual-snapshot-img-wrap {
+      position: relative;
+      cursor: pointer;
+      background: #05070a;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .visual-snapshot-img-wrap img {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 200px;
+      object-fit: cover;
+      transition: transform 0.25s ease;
+    }
+    .visual-snapshot-img-wrap:hover img {
+      transform: scale(1.03);
+    }
+    .visual-snapshot-hint {
+      position: absolute;
+      bottom: 6px;
+      right: 8px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      color: #fff;
+      font-size: 0.65rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      pointer-events: none;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
     @keyframes blink {
       0%, 100% { opacity: 1; }
       50% { opacity: 0; }
@@ -1792,6 +1863,7 @@
     async function toggleWebcamGaze() {
       recordUserAction();
       const btn = document.getElementById("webcamGazeBtn");
+      const chatCamBtn = document.getElementById("chatHeaderCamBtn");
       const hud = document.getElementById("webcamHudModal");
       const video = document.getElementById("webcamVideo");
       const overlay = document.getElementById("webcamOverlayCanvas");
@@ -1801,6 +1873,7 @@
       if (!webcamGazeEnabled) {
         try {
           btn.innerText = "⏳ 正在连接摄像头...";
+          if (chatCamBtn) chatCamBtn.innerText = "⏳ 连接中...";
           webcamStream = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }
           });
@@ -1812,6 +1885,12 @@
           btn.style.color = "var(--cyan)";
           btn.style.borderColor = "var(--cyan)";
           btn.style.background = "rgba(0, 229, 255, 0.15)";
+          if (chatCamBtn) {
+            chatCamBtn.innerText = "📷 摄像头: 开";
+            chatCamBtn.style.color = "var(--cyan)";
+            chatCamBtn.style.borderColor = "var(--cyan)";
+            chatCamBtn.style.background = "rgba(0, 229, 255, 0.15)";
+          }
           hud.style.display = "block";
           playChirp("wake_chime");
 
@@ -1886,8 +1965,20 @@
                       drawEyes(currentEmotion);
                     }
                   } else {
-                    // 纯待机闲置状态 (最低优先级生效)：驱动头颈舵机朝向主人
-                    statusText.innerText = `👁️ 锁定人脸: X:${data.offset_x > 0 ? '+' : ''}${data.offset_x} Y:${data.offset_y > 0 ? '+' : ''}${data.offset_y}`;
+                    // 纯待机闲置状态 (最低优先级生效)：驱动头颈舵机九向稳定注视
+                    const sectorMap = {
+                      "CENTER": "正中端视",
+                      "UP_MID": "抬头仰望",
+                      "DOWN_MID": "低头俯视",
+                      "MID_LEFT": "偏左凝视",
+                      "MID_RIGHT": "偏右凝视",
+                      "UP_LEFT": "左上方",
+                      "UP_RIGHT": "右上方",
+                      "DOWN_LEFT": "左下方",
+                      "DOWN_RIGHT": "右下方"
+                    };
+                    const sName = sectorMap[data.sector] || "正中凝视";
+                    statusText.innerText = `👁️ [${sName}] X:${data.offset_x > 0 ? '+' : ''}${data.offset_x} Y:${data.offset_y > 0 ? '+' : ''}${data.offset_y}`;
                     statusText.style.color = "var(--cyan)";
 
                     // 1. 动眼球瞳孔
@@ -1922,6 +2013,12 @@
           btn.style.color = "var(--text-sub)";
           btn.style.borderColor = "var(--border-color)";
           btn.style.background = "rgba(13, 17, 23, 0.8)";
+          if (chatCamBtn) {
+            chatCamBtn.innerText = "📷 摄像头: 关";
+            chatCamBtn.style.color = "var(--text-sub)";
+            chatCamBtn.style.borderColor = "var(--border-color)";
+            chatCamBtn.style.background = "rgba(13, 17, 23, 0.8)";
+          }
           webcamGazeEnabled = false;
         }
       } else {
@@ -1931,6 +2028,12 @@
         btn.style.color = "var(--text-sub)";
         btn.style.borderColor = "var(--border-color)";
         btn.style.background = "rgba(13, 17, 23, 0.8)";
+        if (chatCamBtn) {
+          chatCamBtn.innerText = "📷 摄像头: 关";
+          chatCamBtn.style.color = "var(--text-sub)";
+          chatCamBtn.style.borderColor = "var(--border-color)";
+          chatCamBtn.style.background = "rgba(13, 17, 23, 0.8)";
+        }
         hud.style.display = "none";
 
         if (webcamInterval) {
@@ -2272,11 +2375,45 @@
       if (!text) return "";
       return text
         .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-        .replace(/!\[(.*?)\]\((https?:\/\/[^\s\)]+)\)/g, '<img src="$2" alt="$1" style="max-width:190px; border-radius:8px; display:block; margin:8px 0; border:2px solid #ff6700; background:#fff; padding:6px;" />')
-        .replace(/\[(.*?)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" style="color:var(--cyan); text-decoration:underline;">$1</a>')
+        .replace(/!\[(.*?)\]\(([^\s\)]+)\)/g, '<img src="$2" alt="$1" style="max-width:240px; border-radius:8px; display:block; margin:8px 0; border:1px solid rgba(0,229,255,0.4); cursor:pointer;" onclick="showImageLightbox(this.src)" />')
+        .replace(/\[(.*?)\]\(([^\s\)]+)\)/g, '<a href="$2" target="_blank" style="color:var(--cyan); text-decoration:underline;">$1</a>')
         .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
         .replace(/\n/g, '<br>');
     }
+
+    function renderSnapshotCard(snapUrl) {
+      if (!snapUrl) return "";
+      return `
+        <div class="visual-snapshot-card">
+          <div class="visual-snapshot-header">
+            <span class="visual-snapshot-title">📷 小猪眼前抓拍瞬间</span>
+            <span class="visual-snapshot-badge">MiMo 视觉输入</span>
+          </div>
+          <div class="visual-snapshot-img-wrap" onclick="showImageLightbox('${snapUrl}')" title="点击放大查看抓拍原图">
+            <img src="${snapUrl}" alt="视觉抓拍" />
+            <div class="visual-snapshot-hint">🔍 点击看大图</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function showImageLightbox(src) {
+      const modal = document.getElementById("imageLightboxModal");
+      const img = document.getElementById("lightboxImg");
+      if (modal && img) {
+        img.src = src;
+        modal.style.display = "flex";
+      }
+    }
+
+    function closeImageLightbox() {
+      const modal = document.getElementById("imageLightboxModal");
+      if (modal) modal.style.display = "none";
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeImageLightbox();
+    });
 
     function appendChat(role, text) {
       const chatLogs = document.getElementById("chatLogs");
@@ -2610,6 +2747,20 @@
       triggerThinkingCadence();
       streamingPlayer.reset();
 
+      // 提问触发瞬间：若本地开启了摄像头，立即对准此刻抓拍一帧传给后端，确保 100% 绝对实时！
+      const videoElem = document.getElementById("webcamVideo");
+      if (webcamStream && offscreenCtx && videoElem && videoElem.readyState >= 2) {
+        try {
+          offscreenCtx.drawImage(videoElem, 0, 0, 480, 360);
+          const snapDataUrl = offscreenCanvas.toDataURL("image/jpeg", 0.75);
+          fetch("/api/vision/face_detect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: snapDataUrl })
+          }).catch(() => {});
+        } catch (e) {}
+      }
+
       let accumulatedReply = "";
       let toolStepsHtml = "";
       let finalBehaviors = [];
@@ -2726,8 +2877,15 @@
                 }
               }
 
+              let snapHtml = "";
+              const hasVisualQa = ev.visual_snapshot || (ev.steps && ev.steps.some(s => (s.action || '').includes('visual_qa')));
+              if (hasVisualQa) {
+                const snapUrl = ev.visual_snapshot || `/api/vision/snapshot?t=${Date.now()}`;
+                snapHtml = renderSnapshotCard(snapUrl);
+              }
+
               const displayReply = ev.reply || accumulatedReply || "收到啦！";
-              botDiv.innerHTML = `${summaryHtml}<div>${formatMarkdown(displayReply)}</div>`;
+              botDiv.innerHTML = `${summaryHtml}${snapHtml}<div>${formatMarkdown(displayReply)}</div>`;
               chatLogs.scrollTop = chatLogs.scrollHeight;
 
               streamingPlayer.markStreamDone();
@@ -2770,6 +2928,11 @@
               const stepChain = actionSteps.map(s => `⚡ ${s.action}`).join(" ➔ ");
               contentHtml += `<div style="font-size:0.7rem; color:var(--cyan); margin-bottom:6px; background:rgba(0, 229, 255, 0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(0, 229, 255, 0.2);">🧠 ReAct 多步推理 (${res.steps.length} 轮): ${stepChain}</div>`;
             }
+          }
+          const hasVisualQa = res.visual_snapshot || (res.steps && res.steps.some(s => (s.action || '').includes('visual_qa')));
+          if (hasVisualQa) {
+            const snapUrl = res.visual_snapshot || `/api/vision/snapshot?t=${Date.now()}`;
+            contentHtml += renderSnapshotCard(snapUrl);
           }
           contentHtml += `<div>${formatMarkdown(res.reply || "收到啦！")}</div>`;
           botDiv.innerHTML = contentHtml;
@@ -3266,8 +3429,14 @@
               summaryHtml = `<div style="font-size:0.7rem; color:var(--cyan); margin-bottom:6px; background:rgba(0, 229, 255, 0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(0, 229, 255, 0.2);">🧠 ReAct 多步推理 (${ev.steps.length} 轮): ${stepChain}</div>`;
             }
           }
+          let snapHtml = "";
+          const hasVisualQa = ev.visual_snapshot || (ev.steps && ev.steps.some(s => (s.action || '').includes('visual_qa')));
+          if (hasVisualQa) {
+            const snapUrl = ev.visual_snapshot || `/api/vision/snapshot?t=${Date.now()}`;
+            snapHtml = renderSnapshotCard(snapUrl);
+          }
           const displayReply = ev.reply || accumulatedTwinReply || "收到啦！";
-          currentTwinBotDiv.innerHTML = `${summaryHtml}<div>${formatMarkdown(displayReply)}</div>`;
+          currentTwinBotDiv.innerHTML = `${summaryHtml}${snapHtml}<div>${formatMarkdown(displayReply)}</div>`;
           const chatLogs = document.getElementById("chatLogs");
           if (chatLogs) chatLogs.scrollTop = chatLogs.scrollHeight;
         }
@@ -4180,6 +4349,16 @@
       </div>
       <div style="padding:20px; overflow-y:auto; flex:1;">
         <div id="skillStoreGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px;"></div>
+      </div>
+    </div>
+  </div>
+  <!-- 📷 多模态视觉抓拍原图查看 Lightbox 弹窗 -->
+  <div id="imageLightboxModal" style="display:none; position:fixed; z-index:99999; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.88); backdrop-filter:blur(8px); align-items:center; justify-content:center; cursor:zoom-out;" onclick="closeImageLightbox()">
+    <div style="position:relative; max-width:92vw; max-height:92vh; display:flex; flex-direction:column; align-items:center;" onclick="event.stopPropagation()">
+      <img id="lightboxImg" src="" style="max-width:90vw; max-height:82vh; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.9); border:2px solid rgba(0,229,255,0.45); object-fit:contain;" />
+      <div style="margin-top:12px; color:#fff; font-size:0.82rem; background:rgba(13,17,23,0.85); border:1px solid rgba(255,255,255,0.15); padding:6px 16px; border-radius:20px; display:flex; align-items:center; gap:8px;">
+        <span>📷 小猪眼前实时视觉瞬间原图</span>
+        <span style="color:var(--text-sub); font-size:0.75rem;">(点击空白处或按 Esc 键关闭)</span>
       </div>
     </div>
   </div>

@@ -189,6 +189,10 @@ class PhysicalRobotHAL(BaseRobotHAL):
         pan = max(20.0, min(160.0, float(pan)))
         tilt = max(60.0, min(120.0, float(tilt)))
 
+        # 硬件防抖滤波死区 (若目标角度变化小于 1.0°，忽略微小抖动，避免电机频繁唤醒与发热)
+        if abs(pan - self.cur_pan) < 1.0 and abs(tilt - self.cur_tilt) < 1.0:
+            return
+
         if not smooth:
             self.pi.set_servo_pulsewidth(self.pan_pin, self._angle_to_pulse(pan))
             self.pi.set_servo_pulsewidth(self.tilt_pin, self._angle_to_pulse(tilt))

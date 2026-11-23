@@ -1,6 +1,7 @@
 import http.server
 import os
 import json
+import time
 import subprocess
 import threading
 import queue
@@ -111,6 +112,15 @@ hardware_agent.register_event_listener(on_agent_event_broadcast)
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
+
+    def do_HEAD(self):
+        if self.path.startswith("/api/vision/snapshot") or self.path.startswith("/api/vision/latest_snapshot"):
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.end_headers()
+            return
+        return super().do_HEAD()
 
     def do_GET(self):
         if self.path in ["/", "", "/web_simulator.html", "/simulator/web_simulator.html"]:
@@ -720,11 +730,13 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 if has_face:
                     cur_p = float(getattr(hardware_agent.hal, "cur_pan", 90.0))
                     cur_t = float(getattr(hardware_agent.hal, "cur_tilt", 90.0))
-                    lx, ly, tp, tt = face_tracker.compute_gaze_and_angles(float(ox), float(oy), cur_p, cur_t, is_moving_camera=False)
+                    gaze_mode = hardware_agent.cfg.get("gaze_tracking_mode", "9grid") if hardware_agent else "9grid"
+                    lx, ly, tp, tt = face_tracker.compute_gaze_and_angles(float(ox), float(oy), cur_p, cur_t, is_moving_camera=False, mode=gaze_mode)
                     res["look_x"] = int(lx)
                     res["look_y"] = int(ly)
                     res["target_pan"] = round(float(tp), 1)
                     res["target_tilt"] = round(float(tt), 1)
+                    res["sector"] = getattr(face_tracker, "cur_sector", "CENTER")
 
                     if face_tracker.last_box:
                         res["box"] = {
@@ -1126,9 +1138,13 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
         return super().do_POST()
 
+class ReusableThreadingServer(http.server.ThreadingHTTPServer):
+    allow_reuse_address = True
+    allow_reuse_port = True
+    daemon_threads = True
+
 def run_server():
-    http.server.ThreadingHTTPServer.allow_reuse_address = True
-    with http.server.ThreadingHTTPServer(("", PORT), CustomHandler) as httpd:
+    with ReusableThreadingServer(("", PORT), CustomHandler) as httpd:
         print("="*60)
         print("🚀 [PIG 3D 仿真工作台已就绪]")
         print(f"👉 本地访问地址: http://localhost:{PORT}")

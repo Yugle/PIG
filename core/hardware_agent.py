@@ -496,6 +496,11 @@ class HardwareAgent:
                 time.sleep(0.5)
                 continue
 
+            # 仿真模式下由 Web 前端 /api/vision/face_detect 单独接管驱动，避免多线程重叠调用
+            if not IS_RASPBERRY_PI:
+                time.sleep(0.5)
+                continue
+
             # 核心优先级管理：视线注视追踪为最低优先级
             # 若当前正在执行肢体动作、思考、语音播报，视线追踪绝对不抢占舵机
             is_busy = (self.state not in (self.STATE_IDLE, self.STATE_AFTERGLOW)) or self.is_action_playing()
