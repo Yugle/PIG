@@ -93,13 +93,13 @@ class FaceTracker:
                         "w": int(box[2]),
                         "h": int(box[3])
                     }
-                    cx = (box[0] + box[2] / 2.0) / self.input_size[0]
-                    cy = (box[1] + box[3] / 2.0) / self.input_size[1]
-                    raw_offset_x = (cx - 0.5) * 2.0
-                    raw_offset_y = (cy - 0.5) * 2.0
+                    cx = float((box[0] + box[2] / 2.0) / self.input_size[0])
+                    cy = float((box[1] + box[3] / 2.0) / self.input_size[1])
+                    raw_offset_x = float((cx - 0.5) * 2.0)
+                    raw_offset_y = float((cy - 0.5) * 2.0)
 
-                    self.smooth_offset_x = self.smooth_offset_x * (1 - self.alpha) + raw_offset_x * self.alpha
-                    self.smooth_offset_y = self.smooth_offset_y * (1 - self.alpha) + raw_offset_y * self.alpha
+                    self.smooth_offset_x = float(self.smooth_offset_x * (1 - self.alpha) + raw_offset_x * self.alpha)
+                    self.smooth_offset_y = float(self.smooth_offset_y * (1 - self.alpha) + raw_offset_y * self.alpha)
                     return True, self.smooth_offset_x, self.smooth_offset_y
             except Exception:
                 pass
@@ -117,13 +117,13 @@ class FaceTracker:
                         "w": int(fw),
                         "h": int(fh)
                     }
-                    cx = (x + fw / 2.0) / self.input_size[0]
-                    cy = (y + fh / 2.0) / self.input_size[1]
-                    raw_offset_x = (cx - 0.5) * 2.0
-                    raw_offset_y = (cy - 0.5) * 2.0
+                    cx = float((x + fw / 2.0) / self.input_size[0])
+                    cy = float((y + fh / 2.0) / self.input_size[1])
+                    raw_offset_x = float((cx - 0.5) * 2.0)
+                    raw_offset_y = float((cy - 0.5) * 2.0)
 
-                    self.smooth_offset_x = self.smooth_offset_x * (1 - self.alpha) + raw_offset_x * self.alpha
-                    self.smooth_offset_y = self.smooth_offset_y * (1 - self.alpha) + raw_offset_y * self.alpha
+                    self.smooth_offset_x = float(self.smooth_offset_x * (1 - self.alpha) + raw_offset_x * self.alpha)
+                    self.smooth_offset_y = float(self.smooth_offset_y * (1 - self.alpha) + raw_offset_y * self.alpha)
                     return True, self.smooth_offset_x, self.smooth_offset_y
             except Exception:
                 pass

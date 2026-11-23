@@ -510,29 +510,39 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 res = {
                     "status": "ok",
                     "has_face": bool(has_face),
-                    "offset_x": round(ox, 3),
-                    "offset_y": round(oy, 3)
+                    "offset_x": round(float(ox), 3),
+                    "offset_y": round(float(oy), 3)
                 }
 
                 if has_face:
-                    cur_p = getattr(hardware_agent.hal, "cur_pan", 90.0)
-                    cur_t = getattr(hardware_agent.hal, "cur_tilt", 90.0)
-                    lx, ly, tp, tt = face_tracker.compute_gaze_and_angles(ox, oy, cur_p, cur_t)
-                    res["look_x"] = lx
-                    res["look_y"] = ly
-                    res["target_pan"] = round(tp, 1)
-                    res["target_tilt"] = round(tt, 1)
+                    cur_p = float(getattr(hardware_agent.hal, "cur_pan", 90.0))
+                    cur_t = float(getattr(hardware_agent.hal, "cur_tilt", 90.0))
+                    lx, ly, tp, tt = face_tracker.compute_gaze_and_angles(float(ox), float(oy), cur_p, cur_t)
+                    res["look_x"] = int(lx)
+                    res["look_y"] = int(ly)
+                    res["target_pan"] = round(float(tp), 1)
+                    res["target_tilt"] = round(float(tt), 1)
 
                     if face_tracker.last_box:
-                        res["box"] = face_tracker.last_box
+                        res["box"] = {
+                            "x": int(face_tracker.last_box["x"]),
+                            "y": int(face_tracker.last_box["y"]),
+                            "w": int(face_tracker.last_box["w"]),
+                            "h": int(face_tracker.last_box["h"])
+                        }
 
                     if abs(ox) > 0.22 or abs(oy) > 0.22:
-                        hardware_agent.hal.set_angles(tp, tt)
+                        hardware_agent.hal.set_angles(float(tp), float(tt))
+
+                def _safe_json_serialize(obj):
+                    if hasattr(obj, "item"):
+                        return obj.item()
+                    return str(obj)
 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(json.dumps(res).encode("utf-8"))
+                self.wfile.write(json.dumps(res, default=_safe_json_serialize).encode("utf-8"))
             except Exception as e:
                 self.send_error(500, str(e))
             return
