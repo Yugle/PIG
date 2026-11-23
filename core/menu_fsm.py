@@ -375,11 +375,12 @@ class MenuFSM:
 
             # 2. 处于主菜单 (MENU_MAIN)
             if self.current_mode == "MENU_MAIN":
-                if button == "K1":  # 上 (边界安全钳制，绝不回绕跳顶)
-                    self.cursor = max(0, self.cursor - 1)
+                main_len = len(self.main_menu_items)
+                if button == "K1":  # 上 (支持循环回绕)
+                    self.cursor = (self.cursor - 1) % main_len
                     self._notify_listeners()
-                elif button == "K2":  # 下 (触底保持，绝不跳顶)
-                    self.cursor = min(len(self.main_menu_items) - 1, self.cursor + 1)
+                elif button == "K2":  # 下 (支持循环回绕)
+                    self.cursor = (self.cursor + 1) % main_len
                     self._notify_listeners()
                 elif button == "K3":
                     if event_type == "long_press":
@@ -443,11 +444,12 @@ class MenuFSM:
 
             # 5. 处于硬件开关页 (TOGGLES)
             if self.current_mode == "TOGGLES":
+                tog_len = len(self.toggle_items)
                 if button == "K1":
-                    self.cursor = max(0, self.cursor - 1)
+                    self.cursor = (self.cursor - 1) % tog_len
                     self._notify_listeners()
                 elif button == "K2":
-                    self.cursor = min(len(self.toggle_items) - 1, self.cursor + 1)
+                    self.cursor = (self.cursor + 1) % tog_len
                     self._notify_listeners()
                 elif button == "K3":
                     # 切换当前项开关
@@ -468,11 +470,12 @@ class MenuFSM:
 
             # 6. 处于系统设置页 (SYSTEM: 认主/版本号/更新/关机/重启)
             if self.current_mode == "SYSTEM":
+                sys_len = len(self.system_items)
                 if button == "K1":
-                    self.cursor = max(0, self.cursor - 1)
+                    self.cursor = (self.cursor - 1) % sys_len
                     self._notify_listeners()
                 elif button == "K2":
-                    self.cursor = min(len(self.system_items) - 1, self.cursor + 1)
+                    self.cursor = (self.cursor + 1) % sys_len
                     self._notify_listeners()
                 elif button == "K3":
                     action_id = self.system_items[self.cursor]["id"]
@@ -767,28 +770,62 @@ class MenuFSM:
             draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
             draw.text((24, 298), "[▲▼] 移动    [OK] 切换    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
-        # E. 系统设置界面 (SYSTEM: 版本号/更新/关机/重启/认主)
+        # E. 系统设置界面 (SYSTEM: 版本号/更新/关机/重启/认主 - 支持视口平滑滚动与循环回绕)
         elif self.current_mode == "SYSTEM":
+            total = len(self.system_items)
+            cur_idx = max(0, min(total - 1, self.cursor))
+
             draw.text((16, 16), "04 / SYSTEM", fill=(150, 150, 155), font=self.font_small)
-            draw.text((192, 16), "CONFIG", fill=(110, 110, 115), font=self.font_small)
+            count_txt = f"{cur_idx+1:02d}/{total:02d}"
+            draw.text((186, 16), count_txt, fill=(255, 103, 0), font=self.font_small)
 
-            y = 44
-            for idx, item in enumerate(self.system_items):
-                is_selected = (idx == self.cursor)
-                if is_selected:
-                    draw.rounded_rectangle([14, y, 226, y + 42], radius=6, fill=(255, 255, 255))
-                    draw.text((24, y + 5), f"0{idx+1}  {item['name']}", fill=(0, 0, 0), font=self.font_bold)
-                    draw.text((24, y + 23), str(item["val"]), fill=(70, 70, 75), font=self.font_small)
-                    draw.text((210, y + 11), "›", fill=(0, 0, 0), font=self.font_bold)
+            max_visible = 4
+            start_idx = 0
+            if total > max_visible:
+                if cur_idx < 2:
+                    start_idx = 0
+                elif cur_idx >= total - 2:
+                    start_idx = total - max_visible
                 else:
-                    draw.rounded_rectangle([14, y, 226, y + 42], radius=6, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
-                    draw.text((24, y + 5), f"0{idx+1}  {item['name']}", fill=(210, 210, 215), font=self.font_bold)
-                    draw.text((24, y + 23), str(item["val"]), fill=(120, 120, 125), font=self.font_small)
-                    draw.text((210, y + 11), "›", fill=(80, 80, 85), font=self.font_bold)
-                y += 48
+                    start_idx = cur_idx - 1
+                start_idx = max(0, min(start_idx, total - max_visible))
 
-            draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
-            draw.text((24, 298), "[▲▼] 选择    [OK] 执行    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
+            visible_items = self.system_items[start_idx : start_idx + max_visible]
+            card_w = 206 if total > max_visible else 216
+            card_h = 48
+            card_gap = 6
+            y = 44
+
+            for v_idx, item in enumerate(visible_items):
+                real_idx = start_idx + v_idx
+                is_selected = (real_idx == cur_idx)
+                if is_selected:
+                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=6, fill=(255, 255, 255))
+                    draw.text((22, y + 6), f"{real_idx+1:02d}  {item['name']}", fill=(0, 0, 0), font=self.font_bold)
+                    draw.text((22, y + 26), str(item["val"]), fill=(70, 70, 75), font=self.font_small)
+                    draw.text((12 + card_w - 14, y + 14), "›", fill=(0, 0, 0), font=self.font_bold)
+                else:
+                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=6, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
+                    draw.text((22, y + 6), f"{real_idx+1:02d}  {item['name']}", fill=(210, 210, 215), font=self.font_bold)
+                    draw.text((22, y + 26), str(item["val"]), fill=(120, 120, 125), font=self.font_small)
+                    draw.text((12 + card_w - 14, y + 14), "›", fill=(80, 80, 85), font=self.font_bold)
+                y += (card_h + card_gap)
+
+            # 极简工业滚动条
+            if total > max_visible:
+                track_x = 224
+                track_y = 44
+                track_h = max_visible * (card_h + card_gap) - card_gap
+                draw.rounded_rectangle([track_x, track_y, track_x + 3, track_y + track_h], radius=2, fill=(28, 28, 32))
+                thumb_h = max(24, int(track_h * (max_visible / total)))
+                max_scroll = track_h - thumb_h
+                thumb_y = track_y + int((start_idx / (total - max_visible)) * max_scroll)
+                draw.rounded_rectangle([track_x, thumb_y, track_x + 3, thumb_y + thumb_h], radius=2, fill=(255, 103, 0))
+
+            # 底部防遮挡实色保护底栏
+            draw.rectangle([0, 280, 240, 320], fill=(10, 10, 12))
+            draw.line([(16, 284), (224, 284)], fill=(32, 32, 36), width=1)
+            draw.text((24, 296), "[▲▼] 选择    [OK] 执行    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
         # F. 人脸录入倒计时/取景界面 (FACE_ENROLL)
         elif self.current_mode == "FACE_ENROLL":
