@@ -785,6 +785,23 @@ class SkillManager:
             return res.get("message", "技能创建完成")
         elif name in self.installed_plugins:
             return self.execute_skill(name, **args)
+        # 智能别名与模糊容错映射 (针对大模型自由发挥的工具名自动纠偏)
+        elif any(w in name.lower() for w in ["xiaomi", "mijia", "miot", "xiaoai", "mi_home"]) and "xiaomi_iot" in self.installed_plugins:
+            is_query = any(w in name.lower() or w in str(args).lower() for w in ["query", "list", "all", "查", "看", "设备", "清单"])
+            if is_query or not args:
+                if not args.get("device"):
+                    args["device"] = "all"
+                if not args.get("action"):
+                    args["action"] = "查询设备列表"
+            return self.execute_skill("xiaomi_iot", **args)
+        elif any(w in name.lower() for w in ["weather", "tianqi"]) and "weather" in self.installed_plugins:
+            return self.execute_skill("weather", **args)
+        elif any(w in name.lower() for w in ["news", "xinwen"]) and "news_briefing" in self.installed_plugins:
+            return self.execute_skill("news_briefing", **args)
+        elif any(w in name.lower() for w in ["net", "wifi", "ping"]) and "network_diagnostics" in self.installed_plugins:
+            return self.execute_skill("network_diagnostics", **args)
+        elif any(w in name.lower() for w in ["pet", "tamagotchi", "feed"]) and "pet_tamagotchi" in self.installed_plugins:
+            return self.execute_skill("pet_tamagotchi", **args)
         return f"未识别的技能指令: {name}"
 
     def close(self):

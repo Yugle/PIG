@@ -55,10 +55,25 @@ ACTION_SKILLS = {
     "install_skill", "uninstall_skill", "create_skill"
 }
 
+def is_action_skill(tool_name: str, tool_args: Dict[str, Any]) -> bool:
+    """判断是否为可单轮直接闭环的执行类动作技能（排除查询类意图）"""
+    t_name = str(tool_name).lower()
+    # 小米生态：如果是查设备列表，则是查询类技能，必须走第2轮获取真实数据并汇总
+    if any(w in t_name for w in ["xiaomi", "mijia", "miot", "xiaoai"]):
+        act = str(tool_args.get("action", "")).lower()
+        dev = str(tool_args.get("device", "")).lower()
+        val = str(tool_args.get("value", "")).lower()
+        combined = f"{act} {dev} {val}"
+        if any(w in combined for w in ["查", "看", "列表", "有哪些", "什么设备", "清单", "query", "list", "all", "所有"]):
+            return False
+        return True
+
+    return tool_name in ACTION_SKILLS
+
 def is_skill_failure(obs: Any) -> bool:
     """判断技能执行结果是否包含明确失败语义"""
     obs_str = str(obs).lower()
-    return any(k in obs_str for k in ["失败", "错误", "未能", "异常", "未找到", "无效", "error", "fail", "invalid", "超时", "离线"])
+    return any(k in obs_str for k in ["失败", "错误", "未能", "异常", "未找到", "无效", "error", "fail", "invalid", "超时", "离线", "未识别的技能"])
 
 
 class AgentReasoner:
@@ -202,7 +217,7 @@ class AgentReasoner:
                             final_behaviors = act_obj["keyframes"]
 
                     # ⚡ 优化 1：执行类动作技能单轮极速闭环 (Speculative Execution)
-                    if tool_name in ACTION_SKILLS and not is_skill_failure(observation):
+                    if is_action_skill(tool_name, tool_args) and not is_skill_failure(observation):
                         final_reply = reply_candidate or str(observation)
                         logger.info(f"⚡ [ReAct FastPath] 执行类技能【{tool_name}】单轮极速闭环完成，跳过第2轮LLM。")
                         break
@@ -210,7 +225,7 @@ class AgentReasoner:
                     # 若已达到最大步数，无法继续循环推理，直接输出当前真实执行反馈，绝不掩饰
                     if step >= self.max_steps:
                         logger.warning(f"⚠️ ReAct 循环达到最大步数 ({self.max_steps})")
-                        is_fail = any(k in str(observation) for k in ["失败", "错误", "未找到", "超时", "异常", "未能", "离线"])
+                        is_fail = is_skill_failure(observation)
                         if is_fail:
                             final_reply = f"操作未完全达成：{observation}"
                         else:
@@ -225,12 +240,21 @@ class AgentReasoner:
                     }, ensure_ascii=False)
 
                     messages.append({"role": "assistant", "content": assistant_turn_content})
-                    observation_prompt = (
-                        f"【系统工具执行反馈 (Observation)】:\n{observation}\n\n"
-                        f"请根据上述真实工具反馈继续思考：\n"
-                        f"- 若工具执行失败或报错，必须在 reply 中直接向主人坦白失败原因，严禁敷衍！\n"
-                        f"- 若任务已完成，请立即将 skill 设为 null，并在 reply 中向主人给出最终清晰口语答复。"
-                    )
+                    if is_skill_failure(observation):
+                        observation_prompt = (
+                            f"【系统工具执行反馈 (Observation)】:\n{observation}\n\n"
+                            f"⚠️ 工具执行遇到了异常或未查询到数据！\n"
+                            f"请根据此真实反馈如实向主人说明情况，【严禁】凭空编造不存在的数据、设备或内容！\n"
+                            f"- 必须将 skill 设为 null。\n"
+                            f"- 在 reply 中直接向主人说明实际情况。"
+                        )
+                    else:
+                        observation_prompt = (
+                            f"【系统工具执行反馈 (Observation)】:\n{observation}\n\n"
+                            f"真实数据现已就绪，请给出面向主人的最终口语答复：\n"
+                            f"- 必须将 skill 设为 null。\n"
+                            f"- 必须严格依据上述真实反馈中的内容，在 reply 中向主人清晰汇报结果，绝不编造虚假信息！"
+                        )
                     messages.append({"role": "user", "content": observation_prompt})
 
                 else:
@@ -422,7 +446,7 @@ class AgentReasoner:
                     })
 
                     # ⚡ 优化 1：执行类动作技能单轮极速闭环直出 (Speculative Execution)
-                    if tool_name in ACTION_SKILLS and not is_skill_failure(observation):
+                    if is_action_skill(tool_name, tool_args) and not is_skill_failure(observation):
                         if not reply_candidate:
                             reply_candidate = str(observation)
                             yield {"type": "sentence", "text": reply_candidate}
@@ -444,14 +468,24 @@ class AgentReasoner:
                         "skill": skill_call
                     }, ensure_ascii=False)
                     messages.append({"role": "assistant", "content": assistant_turn_content})
-                    ack_hint = f"你刚才已经向主人给出了先行口头垫话：“{reply_candidate}”。\n" if reply_candidate else ""
-                    observation_prompt = (
-                        f"【系统工具执行反馈 (Observation)】:\n{observation}\n\n"
-                        f"{ack_hint}"
-                        f"真实数据现已就绪，请给出面向主人的最终口语答复：\n"
-                        f"- 必须将 skill 设为 null。\n"
-                        f"- 在 reply 中直接向主人清晰汇报查询结果，自然衔接前文，无需重复刚才的垫话。"
-                    )
+
+                    if is_skill_failure(observation):
+                        observation_prompt = (
+                            f"【系统工具执行反馈 (Observation)】:\n{observation}\n\n"
+                            f"⚠️ 工具执行遇到了异常或未查询到数据！\n"
+                            f"请根据此真实反馈如实向主人说明情况，【绝对严禁】凭空编造不存在的数据、设备或内容！\n"
+                            f"- 必须将 skill 设为 null。\n"
+                            f"- 在 reply 中直接向主人说明实际情况。"
+                        )
+                    else:
+                        ack_hint = f"你刚才已经向主人给出了先行口头垫话：“{reply_candidate}”。\n" if reply_candidate else ""
+                        observation_prompt = (
+                            f"【系统工具执行反馈 (Observation)】:\n{observation}\n\n"
+                            f"{ack_hint}"
+                            f"真实数据现已就绪，请给出面向主人的最终口语答复：\n"
+                            f"- 必须将 skill 设为 null。\n"
+                            f"- 必须严格依据上述真实反馈中的内容，在 reply 中向主人清晰汇报结果，绝不编造虚假信息；自然衔接前文，无需重复刚才的垫话。"
+                        )
                     messages.append({"role": "user", "content": observation_prompt})
 
                 else:

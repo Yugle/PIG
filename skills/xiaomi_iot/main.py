@@ -100,8 +100,14 @@ def run(device="台灯", action="打开", value=""):
 
     if is_query:
         if lan_devs:
-            dev_names = list(lan_devs.keys())
-            return f"米家设备扫描完毕！你账号下当前已绑定的设备有：{', '.join(dev_names)}。请问需要我帮你开或关哪一个？"
+            dev_items = []
+            for k, v in lan_devs.items():
+                real_name = v.get("name") if isinstance(v, dict) and v.get("name") else k
+                if real_name != k and real_name:
+                    dev_items.append(f"{real_name}（简称: {k}）")
+                else:
+                    dev_items.append(f"{k}")
+            return f"米家设备查询完毕！你账号下目前绑定的真实设备共 {len(dev_items)} 台：{', '.join(dev_items)}。需要我帮你控制哪一个？"
         elif cloud_cfg.get("enabled") and cloud_cfg.get("username") and cloud_cfg.get("username") != "13800000000":
             try:
                 from micloud import MiCloud
