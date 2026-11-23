@@ -1054,6 +1054,7 @@
       <div class="chat-panel-body">
         <!-- 快捷场景提问气泡 (单行横向丝滑滑动，释放对话纵向高度) -->
         <div class="quick-chips-container">
+          <div class="quick-chip" onclick="sendQuickChip('看看我手里拿的什么')" style="border-color: rgba(0, 229, 255, 0.4); color: var(--cyan);">👁️ 看看手里</div>
           <div class="quick-chip" onclick="sendQuickChip('今天天气怎么样？')">🌦️ 天气</div>
           <div class="quick-chip" onclick="sendQuickChip('10秒后提醒我关火')">⏰ 倒计时</div>
           <div class="quick-chip" onclick="sendQuickChip('跳个害羞舞看看')">💃 害羞舞</div>
@@ -1069,8 +1070,10 @@
             <div class="msg bot">你好！我是 PIG。你可以跟我聊天，我会根据你说的话做出肢体动作和表情哦！</div>
           </div>
           <div class="chat-input-bar">
+            <input type="file" id="simPhotoInput" accept="image/*" style="display:none;" onchange="handleSimPhotoSelected(event)">
+            <button id="photoUploadBtn" onclick="document.getElementById('simPhotoInput').click()" style="background:#21262d; border-right:1px solid var(--border-color); color:#a371f7; padding:0 10px; cursor:pointer; font-size:0.78rem;" title="传一张照片给小猪看 (测试多模态视觉之眼)">📷 传图</button>
             <input type="text" id="chatInput" placeholder="输入文字，或点击麦克风说话..." onkeydown="if(event.key==='Enter') sendChat()">
-            <button id="micBtn" onclick="toggleMic()" style="background:#21262d; border-right:1px solid var(--border-color); color:var(--cyan); padding:0 12px; cursor:pointer;" title="点击开始/停止录音 (百度 ASR 转写)">🎙️ 语音</button>
+            <button id="micBtn" onclick="toggleMic()" style="background:#21262d; border-right:1px solid var(--border-color); color:var(--cyan); padding:0 12px; cursor:pointer;" title="点击开始/停止录音 (MiMo ASR 转写)">🎙️ 语音</button>
             <button onclick="sendChat()">发送</button>
           </div>
         </div>
@@ -3400,6 +3403,33 @@
       } catch (e) {
         console.error("打断触发失败:", e);
       }
+    }
+
+    function handleSimPhotoSelected(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async function(evt) {
+        const dataUrl = evt.target.result;
+        try {
+          const res = await fetch("/api/vision/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: dataUrl })
+          });
+          if (res.ok) {
+            console.log("📷 图片已成功同步给小猪的眼睛 (/tmp/pig_latest_frame.jpg)");
+            const chatInput = document.getElementById("chatInput");
+            if (chatInput) {
+              chatInput.value = "看看我给你看的这张图是什么？";
+              sendChat();
+            }
+          }
+        } catch (err) {
+          console.error("图片上传失败:", err);
+        }
+      };
+      reader.readAsDataURL(file);
     }
 
     async function fetchHardwareStatus() {

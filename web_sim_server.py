@@ -620,6 +620,29 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(500, str(e))
             return
 
+        # 网页仿真端主动上传图片让小猪观察 (支持本地拍照或文件选择)
+        if self.path == "/api/vision/upload":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8"))
+                img_data = body.get("image", "")
+                if "," in img_data:
+                    img_data = img_data.split(",", 1)[1]
+                img_bytes = base64.b64decode(img_data)
+                global _latest_webcam_frame
+                _latest_webcam_frame = img_bytes
+                with open("/tmp/pig_latest_frame.jpg", "wb") as f:
+                    f.write(img_bytes)
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "message": "图片已传递给小猪的眼睛！"}).encode("utf-8"))
+            except Exception as e:
+                self.send_error(400, str(e))
+            return
+
         # 电脑真实摄像头视觉注视帧处理接口 (Sim-to-Real PC Webcam)
         if self.path == "/api/vision/face_detect":
             content_length = int(self.headers.get("Content-Length", 0))
@@ -632,6 +655,11 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 img_bytes = base64.b64decode(img_data)
                 global _latest_webcam_frame
                 _latest_webcam_frame = img_bytes
+                try:
+                    with open("/tmp/pig_latest_frame.jpg", "wb") as f:
+                        f.write(img_bytes)
+                except Exception:
+                    pass
                 import numpy as np
                 import cv2
                 nparr = np.frombuffer(img_bytes, np.uint8)

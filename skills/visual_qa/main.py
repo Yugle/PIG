@@ -27,6 +27,17 @@ def _load_config():
 
 def _capture_frame_bytes() -> bytes:
     """按优先级从不同链路获取当前摄像头一帧 JPEG 字节流"""
+    # 0. 优先检查仿真端或最新捕获的共享帧文件 (/tmp/pig_latest_frame.jpg)
+    tmp_path = "/tmp/pig_latest_frame.jpg"
+    if os.path.exists(tmp_path):
+        try:
+            with open(tmp_path, "rb") as f:
+                content = f.read()
+                if len(content) > 100:
+                    return content
+        except Exception:
+            pass
+
     # 1. 尝试从 web_sim_server 抓取最新帧 (支持 Web 仿真端网页摄像头或已绑定的 HAL)
     try:
         import web_sim_server
@@ -87,7 +98,7 @@ def run(question="请仔细观察这张照片，告诉我你看到了什么？",
     # 1. 抓取摄像头画面
     img_bytes = _capture_frame_bytes()
     if not img_bytes:
-        return "未能捕获到摄像头画面：请确认树莓派免驱 USB 摄像头已插好，或在 Web 仿真工作台中打开了摄像头预览开关。"
+        return "未能捕获到画面：若在 Web 仿真端，请在右上角打开【📷 摄像头追踪】或点击聊天框左侧的【📷 拍照/传图】给小猪发一张图片；若在真机，请检查 USB 摄像头连线。"
 
     # 2. 构造 OpenAI 兼容格式的多模态请求
     b64_img = base64.b64encode(img_bytes).decode("utf-8")
