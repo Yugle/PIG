@@ -1,0 +1,24 @@
+{
+  "id": "system_config",
+  "name": "系统设置与个性化调节",
+  "version": "1.0.0",
+  "author": "Antigravity Lab",
+  "category": "系统工具",
+  "description": "动态修改小猪的系统配置、个性化称呼与硬件开关。支持自然语言语音指令：开启/关闭人脸追踪、开启/关闭主动关怀、修改主人称呼（如'以后叫我胖虎'）、修改机器人名字（如'你以后叫小丸子'）、开启/关闭萌趣非语言音效、查询当前配置等。",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "配置类型：'face_tracking' (人脸追踪开关), 'proactive_care' (主动关怀开关), 'user_name' (设置主人名字), 'bot_name' (设置机器人名字), 'non_verbal_audio' (设置萌趣音效), 'query' (查询当前配置)",
+      "default": "query"
+    },
+    "value": {
+      "type": "string",
+      "description": "需要设置的值：对于开关类传入 'true'/'false'/'on'/'off'；对于名字类传入新的名字字符串（如 '胖虎', '小丸子'）",
+      "default": ""
+    }
+  },
+  "default_behavior": {
+    "emotion": "HAPPY",
+    "action": "NOD"
+  }
+}

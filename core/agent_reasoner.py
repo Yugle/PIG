@@ -46,6 +46,7 @@ def parse_llm_json(raw_text: str, reasoning_text: str = "") -> Optional[Dict[str
 
 # 常见的执行类动作技能集合 (高确定性、状态变更类，支持单轮极速闭环直出)
 ACTION_SKILLS = {
+    "system_config", "config", "sys_config", "shezhi",
     "set_bot_name", "rename_bot", "change_bot_name",
     "set_user_name", "change_name", "update_name",
     "reminder", "set_alarm", "set_timer", "set_reminder", "add_reminder", "delete_reminder",

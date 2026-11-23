@@ -172,6 +172,40 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"enabled": face_tracker.enabled}).encode("utf-8"))
             return
 
+        # 获取系统完整配置与软硬件环境状态 (局域网设置中心)
+        if self.path == "/api/system/config":
+            cfg = load_config()
+            merged_info = dict(cfg)
+            if os.path.exists(os.path.join(DATA_DIR, "memory.json")):
+                try:
+                    with open(os.path.join(DATA_DIR, "memory.json"), "r", encoding="utf-8") as f:
+                        m_data = json.load(f)
+                        merged_info["bot_name"] = m_data.get("bot_name", "小猪")
+                        merged_info["user_name"] = m_data.get("user_name", "胖虎")
+                except Exception:
+                    pass
+            import socket, platform
+            hostname = socket.gethostname()
+            local_ip = "127.0.0.1"
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                pass
+            merged_info["system_env"] = {
+                "platform": platform.platform(),
+                "hostname": hostname,
+                "local_ip": local_ip,
+                "is_raspberry_pi": os.path.exists("/proc/device-tree/model")
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(merged_info, ensure_ascii=False).encode("utf-8"))
+            return
+
         # 获取主动关怀状态与配置
         if self.path == "/api/proactive_care":
             self.send_response(200)
@@ -487,6 +521,45 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"status": "ok", "enabled": face_tracker.enabled}).encode("utf-8"))
             except Exception as e:
                 self.send_error(400, str(e))
+            return
+
+        # 持久化更新系统配置 (局域网设置中心保存)
+        if self.path == "/api/system/config":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                updates = json.loads(post_data.decode("utf-8"))
+                cfg = load_config()
+                for k, v in updates.items():
+                    if k in ["system_env", "status"]:
+                        continue
+                    cfg[k] = v
+
+                cfg_file = os.path.join(DIRECTORY, "config.json")
+                with open(cfg_file, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+                # 同步热生效
+                if "user_name" in updates:
+                    mem.set_user_name(updates["user_name"])
+                if "bot_name" in updates or "robot_name" in updates:
+                    new_b = updates.get("bot_name") or updates.get("robot_name")
+                    mem.set_bot_name(new_b)
+                if "face_tracking" in updates:
+                    face_tracker.set_enabled(bool(updates["face_tracking"]))
+                    if hardware_agent:
+                        hardware_agent.set_face_tracking(bool(updates["face_tracking"]))
+                if "proactive_care" in updates:
+                    proactive_care.set_enabled(bool(updates["proactive_care"]))
+                if hardware_agent:
+                    hardware_agent.cfg.update(cfg)
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "message": "配置已保存并即时热生效！"}).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
             return
 
         # 电脑真实摄像头视觉注视帧处理接口 (Sim-to-Real PC Webcam)

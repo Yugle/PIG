@@ -536,6 +536,29 @@
     .cursor-blink {
       animation: blink 0.8s infinite;
     }
+
+    /* ⚙️ 系统设置中心抽屉与标签样式 */
+    .cfg-tab {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-sub);
+      padding: 5px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .cfg-tab:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .cfg-tab.active {
+      background: rgba(0, 229, 255, 0.15);
+      border-color: var(--cyan);
+      color: var(--cyan);
+      font-weight: 600;
+    }
   </style>
 
   <!-- 引入 Three.js 3D 渲染库 -->
@@ -579,7 +602,7 @@
       <!-- 快速灵敏度调优与一键手动唤醒 -->
       <div style="display: flex; align-items: center; gap: 6px;">
         <button id="manual-wake-btn" onclick="triggerManualWake()" style="background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; border: none; border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35); transition: all 0.2s;" title="跳过唤醒词检测，直接手动唤醒机器人倾听并对话">⚡ 一键唤醒</button>
-        <button id="audio-settings-toggle-btn" onclick="toggleAudioSettingsModal()" style="background: rgba(255, 255, 255, 0.08); color: var(--text-sub); border: 1px solid var(--border-color); border-radius: 12px; padding: 4px 8px; font-size: 0.76rem; cursor: pointer;" title="调整唤醒灵敏度与麦克风增益">⚙️</button>
+        <button id="system-settings-btn" onclick="openSystemSettingsModal()" style="background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid var(--cyan); border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" title="打开全栈系统设置中心 (大模型Key/音色/注视/灵敏度/更名)">⚙️ 系统设置</button>
       </div>
 
       <div id="memory-badge" style="font-size: 0.78rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 12px; color: var(--text-sub); display: flex; align-items: center; gap: 6px;">
@@ -598,6 +621,160 @@
       </div>
     </div>
   </header>
+
+  <!-- ⚙️ 全栈系统设置中心模态浮窗 (局域网手机/电脑双端自适应) -->
+  <div id="systemSettingsModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:99999; backdrop-filter:blur(6px); align-items:center; justify-content:center;">
+    <div style="background:#121722; border:1px solid rgba(0, 229, 255, 0.35); border-radius:16px; width:92%; max-width:680px; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.8); overflow:hidden; color:#e0e7ff;">
+      <!-- 头部 -->
+      <div style="background:linear-gradient(90deg, rgba(0, 229, 255, 0.15), rgba(163, 113, 247, 0.15)); padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-size:1.05rem; font-weight:bold; color:#00e5ff; display:flex; align-items:center; gap:8px;">
+          <span>⚙️ 具身机器人全栈系统设置中心</span>
+          <span id="cfg-env-badge" style="font-size:0.7rem; background:rgba(0, 229, 255, 0.2); padding:2px 8px; border-radius:10px; font-weight:normal;">检测中...</span>
+        </div>
+        <span onclick="closeSystemSettingsModal()" style="cursor:pointer; color:#888; font-size:1.3rem; padding:0 4px; line-height:1;">✕</span>
+      </div>
+
+      <!-- 分类标签栏 -->
+      <div style="display:flex; gap:6px; padding:10px 16px; background:rgba(0,0,0,0.3); border-bottom:1px solid rgba(255,255,255,0.05); overflow-x:auto;">
+        <button id="btn-tab-persona" class="cfg-tab active" onclick="switchCfgTab('tab-persona')">🤖 称呼与个性</button>
+        <button id="btn-tab-vision" class="cfg-tab" onclick="switchCfgTab('tab-vision')">👁️ 视觉注视</button>
+        <button id="btn-tab-audio" class="cfg-tab" onclick="switchCfgTab('tab-audio')">🎙️ 拾音灵敏度</button>
+        <button id="btn-tab-voice" class="cfg-tab" onclick="switchCfgTab('tab-voice')">🔊 语音音色</button>
+        <button id="btn-tab-care" class="cfg-tab" onclick="switchCfgTab('tab-care')">❤️ 主动关怀</button>
+        <button id="btn-tab-llm" class="cfg-tab" onclick="switchCfgTab('tab-llm')">🧠 大模型大脑</button>
+      </div>
+
+      <!-- 内容区域 (可滚动) -->
+      <div style="padding:16px 20px; overflow-y:auto; flex:1;" id="cfg-tab-container">
+        <!-- 标签 1: 称呼与个性 -->
+        <div id="tab-persona" class="cfg-pane">
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">机器人名字 (唤醒与自称):</label>
+            <input type="text" id="cfg-bot-name" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;" placeholder="小猪" />
+          </div>
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">主人尊称 (机器人对您的称呼):</label>
+            <input type="text" id="cfg-user-name" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;" placeholder="胖虎" />
+          </div>
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">单次回复字数模式:</label>
+            <select id="cfg-reply-len" style="width:100%; background:#1c2333; border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;">
+              <option value="35">极简短答 (15~35字，利落干脆，适合纯硬件指令)</option>
+              <option value="200" selected>自适应平衡 (指令极简，笑话故事展开至200字)</option>
+              <option value="500">畅聊故事 (长篇叙事，适合睡前故事和科普)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 标签 2: 视觉注视 -->
+        <div id="tab-vision" class="cfg-pane" style="display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px;">
+            <div>
+              <div style="font-weight:600; font-size:0.9rem;">人脸视觉注视追踪总开关</div>
+              <div style="font-size:0.75rem; color:var(--text-sub);">开启后通过摄像头检测主人人脸，驱动 2.4寸眼球瞳孔与脖子二轴舵机跟随</div>
+            </div>
+            <input type="checkbox" id="cfg-face-tracking" style="width:20px; height:20px; accent-color:var(--cyan); cursor:pointer;" />
+          </div>
+          <div style="font-size:0.78rem; color:#8b949e; line-height:1.5; background:rgba(0, 229, 255, 0.05); padding:10px; border-radius:8px; border-left:3px solid var(--cyan);">
+            💡 <strong>两级拟人生理注视机制说明：</strong><br/>
+            • 小幅度视线微偏 (≤0.22)：脖子保持不动，仅转动眼球瞳孔，极其灵动自然；<br/>
+            • 大幅度走动位移 (>0.22)：眼球锁死在眼眶边缘，随后舵机平滑转动将主人拉回视野正中央。
+          </div>
+        </div>
+
+        <!-- 标签 3: 拾音灵敏度 -->
+        <div id="tab-audio" class="cfg-pane" style="display:none;">
+          <div style="margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+              <span style="font-size:0.82rem;">离线唤醒词阈值 (越低越灵敏):</span>
+              <span id="cfg-thresh-val" style="color:#f59e0b; font-weight:bold;">0.20</span>
+            </div>
+            <input type="range" id="cfg-thresh-slider" min="0.10" max="0.50" step="0.02" value="0.20" style="width:100%; accent-color:#f59e0b;" oninput="document.getElementById('cfg-thresh-val').innerText = this.value" />
+            <div style="font-size:0.72rem; color:var(--text-sub);">安静环境建议 0.20；嘈杂环境建议调高至 0.28 防止误唤醒</div>
+          </div>
+          <div style="margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+              <span style="font-size:0.82rem;">麦克风硬件增益倍数:</span>
+              <span id="cfg-gain-val" style="color:var(--cyan); font-weight:bold;">2.5x</span>
+            </div>
+            <input type="range" id="cfg-gain-slider" min="1.0" max="5.0" step="0.25" value="2.5" style="width:100%; accent-color:var(--cyan);" oninput="document.getElementById('cfg-gain-val').innerText = this.value + 'x'" />
+            <div style="font-size:0.72rem; color:var(--text-sub);">USB 迷你麦克风直插款建议 2.5x~3.5x；若远距离收音小可调至 4.0x</div>
+          </div>
+        </div>
+
+        <!-- 标签 4: 语音音色 -->
+        <div id="tab-voice" class="cfg-pane" style="display:none;">
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">朗读语音音色 (TTS Voice):</label>
+            <select id="cfg-tts-voice" style="width:100%; background:#1c2333; border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;">
+              <option value="冰糖">冰糖 (MiMo 甜美伴侣女声，高拟真度)</option>
+              <option value="zh-CN-XiaoyiNeural">微软 晓伊 (温柔治愈系女声，富有情感)</option>
+              <option value="zh-CN-YunjianNeural">微软 云健 (阳光温暖年轻男声)</option>
+              <option value="zh-CN-YunxiNeural">微软 云希 (活泼机灵男童萌音)</option>
+              <option value="zh-CN-liaoning-XiaobeiNeural">东北老铁 晓北 (幽默风趣幽默腔调)</option>
+              <option value="zh-CN-shaanxi-XiaoniNeural">陕西老乡 晓妮 (朴实亲切陕西方言)</option>
+            </select>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px;">
+            <div>
+              <div style="font-weight:600; font-size:0.9rem;">萌趣非语言音效</div>
+              <div style="font-size:0.75rem; color:var(--text-sub);">在唤醒、被摸头或情绪变化时发出呼噜、轻鸣与叹息音效</div>
+            </div>
+            <input type="checkbox" id="cfg-non-verbal" style="width:20px; height:20px; accent-color:var(--cyan); cursor:pointer;" checked />
+          </div>
+        </div>
+
+        <!-- 标签 5: 主动关怀 -->
+        <div id="tab-care" class="cfg-pane" style="display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px;">
+            <div>
+              <div style="font-weight:600; font-size:0.9rem;">主动关怀守护总开关</div>
+              <div style="font-size:0.75rem; color:var(--text-sub);">晨间醒来首次问候、工位久坐疲劳关怀、深夜伴睡晚安提醒</div>
+            </div>
+            <input type="checkbox" id="cfg-proactive-care" style="width:20px; height:20px; accent-color:#ff4081; cursor:pointer;" checked />
+          </div>
+          <div style="margin-bottom:14px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+              <span style="font-size:0.82rem;">关怀事件最小冷却间隔:</span>
+              <span id="cfg-care-cooldown-val" style="color:#ff4081; font-weight:bold;">2 小时</span>
+            </div>
+            <input type="range" id="cfg-care-cooldown" min="1" max="6" step="1" value="2" style="width:100%; accent-color:#ff4081;" oninput="document.getElementById('cfg-care-cooldown-val').innerText = this.value + ' 小时'" />
+            <div style="font-size:0.72rem; color:var(--text-sub);">防止同一天内过于频繁打扰</div>
+          </div>
+        </div>
+
+        <!-- 标签 6: 大模型大脑 -->
+        <div id="tab-llm" class="cfg-pane" style="display:none;">
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">Base URL (兼容 OpenAI 接口):</label>
+            <input type="text" id="cfg-base-url" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;" placeholder="https://api.xiaomimimo.com/v1" />
+          </div>
+          <div style="margin-bottom:14px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+              <label style="font-size:0.82rem; color:var(--text-sub);">大模型 API Key:</label>
+              <span onclick="toggleApiKeyVisibility()" style="cursor:pointer; color:var(--cyan); font-size:0.75rem;" id="toggle-key-eye">👁️ 显示</span>
+            </div>
+            <input type="password" id="cfg-api-key" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff; font-family:monospace;" placeholder="sk-..." />
+          </div>
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">模型名称 (Model):</label>
+            <input type="text" id="cfg-llm-model" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;" placeholder="mimo-v2.6-flash" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部操作与网络提示栏 -->
+      <div style="background:rgba(0,0,0,0.4); padding:12px 20px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-size:0.72rem; color:var(--text-sub);" id="cfg-ip-hint">
+          🌐 局域网管理地址: <span id="cfg-lan-ip" style="color:var(--cyan); font-weight:600;">http://localhost:8090</span>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button onclick="closeSystemSettingsModal()" style="background:transparent; border:1px solid var(--border-color); color:var(--text-sub); border-radius:8px; padding:6px 14px; font-size:0.82rem; cursor:pointer;">取消</button>
+          <button id="save-cfg-btn" onclick="saveSystemSettings()" style="background:linear-gradient(135deg, #00e5ff, #a371f7); color:#0a0e14; font-weight:bold; border:none; border-radius:8px; padding:6px 18px; font-size:0.82rem; cursor:pointer; box-shadow:0 2px 10px rgba(0, 229, 255, 0.3);">💾 保存并热生效</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- 唤醒灵敏度与麦克风增益浮窗 -->
   <div id="audio-settings-modal" style="display:none; position:fixed; top:54px; right:140px; z-index:9999; background:rgba(18, 22, 34, 0.95); border:1px solid rgba(0, 229, 255, 0.35); border-radius:12px; padding:12px 16px; box-shadow:0 8px 24px rgba(0,0,0,0.6); backdrop-filter:blur(10px); min-width:250px; color:#e0e7ff; font-size:0.8rem;">
@@ -2892,6 +3069,139 @@
         if (icon) icon.title = "⚠️ 当前麦克风输入几乎为0，可能蓝牙音频休眠或静音中";
       } else {
         if (icon) icon.title = "麦克风正在实时采集中";
+      }
+    }
+
+    // ==========================================
+    // ⚙️ 全栈系统设置中心控制器 (System Settings Center)
+    // ==========================================
+    let currentSystemConfig = {};
+
+    function switchCfgTab(tabId) {
+      document.querySelectorAll(".cfg-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".cfg-pane").forEach(p => p.style.display = "none");
+      const btn = document.getElementById("btn-" + tabId);
+      if (btn) btn.classList.add("active");
+      const pane = document.getElementById(tabId);
+      if (pane) pane.style.display = "block";
+    }
+
+    async function openSystemSettingsModal() {
+      recordUserAction();
+      const modal = document.getElementById("systemSettingsModal");
+      modal.style.display = "flex";
+      try {
+        const resp = await fetch("/api/system/config");
+        if (resp.ok) {
+          const cfg = await resp.json();
+          currentSystemConfig = cfg;
+
+          document.getElementById("cfg-bot-name").value = cfg.bot_name || cfg.robot_name || "小猪";
+          document.getElementById("cfg-user-name").value = cfg.user_name || "胖虎";
+          document.getElementById("cfg-reply-len").value = String(cfg.max_reply_length || 200);
+
+          document.getElementById("cfg-face-tracking").checked = !!cfg.face_tracking;
+
+          document.getElementById("cfg-thresh-slider").value = cfg.wakeword_threshold || 0.20;
+          document.getElementById("cfg-thresh-val").innerText = Number(cfg.wakeword_threshold || 0.20).toFixed(2);
+
+          document.getElementById("cfg-gain-slider").value = cfg.mic_gain || 2.5;
+          document.getElementById("cfg-gain-val").innerText = (cfg.mic_gain || 2.5) + "x";
+
+          if (cfg.mimo_voice) {
+            document.getElementById("cfg-tts-voice").value = cfg.mimo_voice;
+          } else if (cfg.tts_voice) {
+            document.getElementById("cfg-tts-voice").value = cfg.tts_voice;
+          }
+          document.getElementById("cfg-non-verbal").checked = cfg.non_verbal_audio !== false;
+
+          document.getElementById("cfg-proactive-care").checked = cfg.proactive_care !== false;
+          document.getElementById("cfg-care-cooldown").value = cfg.proactive_care_cooldown_hours || 2;
+          document.getElementById("cfg-care-cooldown-val").innerText = (cfg.proactive_care_cooldown_hours || 2) + " 小时";
+
+          document.getElementById("cfg-base-url").value = cfg.base_url || "https://api.xiaomimimo.com/v1";
+          document.getElementById("cfg-api-key").value = cfg.api_key || "";
+          document.getElementById("cfg-llm-model").value = cfg.llm_model || "mimo-v2.6-flash";
+
+          if (cfg.system_env) {
+            const env = cfg.system_env;
+            const badge = document.getElementById("cfg-env-badge");
+            badge.innerText = env.is_raspberry_pi ? "🍓 树莓派真机" : "💻 电脑仿真平台";
+            badge.style.background = env.is_raspberry_pi ? "rgba(239, 68, 68, 0.25)" : "rgba(0, 229, 255, 0.2)";
+            badge.style.color = env.is_raspberry_pi ? "#f87171" : "#00e5ff";
+            document.getElementById("cfg-lan-ip").innerText = `http://${env.local_ip}:8090`;
+          }
+        }
+      } catch (e) {
+        console.error("加载系统配置失败:", e);
+      }
+    }
+
+    function closeSystemSettingsModal() {
+      const modal = document.getElementById("systemSettingsModal");
+      if (modal) modal.style.display = "none";
+    }
+
+    function toggleApiKeyVisibility() {
+      const input = document.getElementById("cfg-api-key");
+      const btn = document.getElementById("toggle-key-eye");
+      if (input.type === "password") {
+        input.type = "text";
+        btn.innerText = "🙈 隐藏";
+      } else {
+        input.type = "password";
+        btn.innerText = "👁️ 显示";
+      }
+    }
+
+    async function saveSystemSettings() {
+      const saveBtn = document.getElementById("save-cfg-btn");
+      saveBtn.disabled = true;
+      saveBtn.innerText = "⏳ 正在保存...";
+
+      const payload = {
+        robot_name: document.getElementById("cfg-bot-name").value.trim() || "小猪",
+        bot_name: document.getElementById("cfg-bot-name").value.trim() || "小猪",
+        user_name: document.getElementById("cfg-user-name").value.trim() || "胖虎",
+        max_reply_length: parseInt(document.getElementById("cfg-reply-len").value) || 200,
+        face_tracking: document.getElementById("cfg-face-tracking").checked,
+        wakeword_threshold: parseFloat(document.getElementById("cfg-thresh-slider").value),
+        mic_gain: parseFloat(document.getElementById("cfg-gain-slider").value),
+        mimo_voice: document.getElementById("cfg-tts-voice").value,
+        tts_voice: document.getElementById("cfg-tts-voice").value,
+        non_verbal_audio: document.getElementById("cfg-non-verbal").checked,
+        proactive_care: document.getElementById("cfg-proactive-care").checked,
+        proactive_care_cooldown_hours: parseInt(document.getElementById("cfg-care-cooldown").value),
+        base_url: document.getElementById("cfg-base-url").value.trim(),
+        api_key: document.getElementById("cfg-api-key").value.trim(),
+        llm_model: document.getElementById("cfg-llm-model").value.trim()
+      };
+
+      try {
+        const resp = await fetch("/api/system/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (resp.ok) {
+          saveBtn.innerText = "✅ 保存成功！";
+          playChirp("happy_chirp");
+          setTimeout(() => {
+            closeSystemSettingsModal();
+            saveBtn.disabled = false;
+            saveBtn.innerText = "💾 保存并热生效";
+          }, 800);
+          const memNameEl = document.getElementById("mem-name");
+          if (memNameEl) memNameEl.innerText = payload.user_name;
+        } else {
+          alert("保存失败，请检查网络或后端日志。");
+          saveBtn.disabled = false;
+          saveBtn.innerText = "💾 保存并热生效";
+        }
+      } catch (err) {
+        alert("网络连接异常: " + err.message);
+        saveBtn.disabled = false;
+        saveBtn.innerText = "💾 保存并热生效";
       }
     }
 

@@ -802,6 +802,8 @@ class SkillManager:
             return self.execute_skill("network_diagnostics", **args)
         elif any(w in name.lower() for w in ["pet", "tamagotchi", "feed"]) and "pet_tamagotchi" in self.installed_plugins:
             return self.execute_skill("pet_tamagotchi", **args)
+        elif any(w in name.lower() for w in ["config", "setting", "shezhi", "peizhi", "system_config", "face_tracking", "track"]) and "system_config" in self.installed_plugins:
+            return self.execute_skill("system_config", **args)
         return f"未识别的技能指令: {name}"
 
     def close(self):
