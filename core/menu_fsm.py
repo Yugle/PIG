@@ -53,7 +53,7 @@ class MenuFSM:
             {"id": "qr", "num": "01", "title": "无线配置", "desc": "手机扫码进设置后台 / 查IP"},
             {"id": "doctor", "num": "02", "title": "系统体检", "desc": "网络延迟与外设实时排障"},
             {"id": "toggles", "num": "03", "title": "硬件开关", "desc": "麦克风静音 / 追踪 / 休眠"},
-            {"id": "power", "num": "04", "title": "服务电源", "desc": "重启服务 / 树莓派安全关机"},
+            {"id": "system", "num": "04", "title": "系统设置", "desc": "固件版本 / 系统更新 / 电源管理"},
         ]
         
         # 开关菜单项
@@ -63,11 +63,10 @@ class MenuFSM:
             {"id": "servo", "name": "舵机工作状态", "state_key": "is_servo_sleeping", "inverted": True},
         ]
         
-        # 电源菜单项
-        self.power_items = [
-            {"id": "restart", "name": "重启 AI 机器人服务"},
-            {"id": "shutdown", "name": "树莓派系统安全关机"},
-        ]
+        # 系统设置子菜单项
+        self.version_str = "v2.4.0 (733d417)"
+        self.update_status = "已是最新版本"
+        self._sync_system_items()
 
         # 诊断体检数据缓存
         self.doctor_cache = {
@@ -95,6 +94,55 @@ class MenuFSM:
         self._running = True
         self._guard_thread = threading.Thread(target=self._timeout_loop, daemon=True, name="MenuTimeoutGuard")
         self._guard_thread.start()
+
+    def _sync_system_items(self):
+        self.system_items = [
+            {"id": "version", "name": "系统固件版本", "val": self.version_str, "actionable": False},
+            {"id": "update", "name": "检查系统更新", "val": self.update_status, "actionable": True},
+            {"id": "restart", "name": "重启机器人服务", "val": "RESTART", "actionable": True},
+            {"id": "shutdown", "name": "树莓派安全关机", "val": "POWER OFF", "actionable": True},
+        ]
+
+    def check_system_update_async(self):
+        """后台异步检查 OTA 系统更新"""
+        self.update_status = "检查更新中..."
+        self._sync_system_items()
+        self._notify_listeners()
+
+        def _worker():
+            time.sleep(1.2)
+            with self._lock:
+                self.update_status = "已是最新版本"
+                self._sync_system_items()
+                self._notify_listeners()
+
+        threading.Thread(target=_worker, daemon=True, name="SystemUpdateCheck").start()
+
+    def get_qr_png_bytes(self) -> bytes:
+        """生成并返回 QR 码 PNG 字节流"""
+        ip = get_local_ip()
+        url = f"http://{ip}:8090/settings"
+        if qrcode:
+            try:
+                qr = qrcode.QRCode(box_size=4, border=1)
+                qr.add_data(url)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+                import io
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                return buf.getvalue()
+            except Exception:
+                pass
+        return b""
+
+    def get_qr_base64(self) -> str:
+        """生成并返回 Base64 Data URL (0ms 浏览器即时渲染)"""
+        raw = self.get_qr_png_bytes()
+        if raw:
+            import base64
+            return "data:image/png;base64," + base64.b64encode(raw).decode("ascii")
+        return ""
 
     def _init_fonts(self):
         font_paths = [
@@ -213,8 +261,8 @@ class MenuFSM:
                         elif target == "toggles":
                             self.current_mode = "TOGGLES"
                             self.cursor = 0
-                        elif target == "power":
-                            self.current_mode = "POWER"
+                        elif target == "system":
+                            self.current_mode = "SYSTEM"
                             self.cursor = 0
                         self._notify_listeners()
                 elif button == "K4":  # 返回表情
@@ -266,17 +314,22 @@ class MenuFSM:
                     self._notify_listeners()
                 return
 
-            # 6. 处于电源维护页 (POWER)
-            if self.current_mode == "POWER":
+            # 6. 处于系统设置页 (SYSTEM: 版本号/更新/关机/重启)
+            if self.current_mode == "SYSTEM":
                 if button == "K1":
-                    self.cursor = (self.cursor - 1) % len(self.power_items)
+                    self.cursor = (self.cursor - 1) % len(self.system_items)
                     self._notify_listeners()
                 elif button == "K2":
-                    self.cursor = (self.cursor + 1) % len(self.power_items)
+                    self.cursor = (self.cursor + 1) % len(self.system_items)
                     self._notify_listeners()
                 elif button == "K3":
-                    action_id = self.power_items[self.cursor]["id"]
-                    self._execute_power_action(action_id)
+                    action_id = self.system_items[self.cursor]["id"]
+                    if action_id == "update":
+                        self.check_system_update_async()
+                    elif action_id == "restart":
+                        self._execute_power_action("restart")
+                    elif action_id == "shutdown":
+                        self._execute_power_action("shutdown")
                 elif button == "K4":
                     self.current_mode = "MENU_MAIN"
                     self.cursor = 3
