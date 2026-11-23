@@ -59,7 +59,6 @@ class EvolutionEngine:
             "intimacy_level": 2,     # 亲密度等级 (1~10)
             "intimacy_exp": 35,      # 当前经验 (满 100 升级)
             "persona_tag": "元气治愈系桌宠",
-            "private_memes": ["开润", "泰裤辣", "芜湖"],
             "drift_history": [
                 {"time": datetime.now().strftime("%Y-%m-%d %H:%M"), "event": "诞生初始性格", "note": "元气温柔陪伴型"}
             ]
@@ -290,21 +289,6 @@ class EvolutionEngine:
         self._atomic_save(self.personality_file, self.personality_data)
         return self.personality_data
 
-    def learn_private_meme(self, word: str) -> bool:
-        """吸收主仆专属黑话暗号或口头禅"""
-        clean_word = (word or "").strip()
-        if not clean_word or len(clean_word) < 2 or len(clean_word) > 10:
-            return False
-        memes = self.personality_data.setdefault("private_memes", [])
-        if clean_word not in memes:
-            memes.append(clean_word)
-            if len(memes) > 10:
-                self.personality_data["private_memes"] = memes[-10:]
-            self._atomic_save(self.personality_file, self.personality_data)
-            print(f"✨ [EvolutionEngine] 吸收新黑话/口头禅: 【{clean_word}】")
-            return True
-        return False
-
     def quiet_explore_action(self) -> Optional[Dict[str, Any]]:
         """
         低调自主探索动作（趁主人不在闲暇时探索新姿态，静默入库，不张扬炫耀）
@@ -340,12 +324,11 @@ class EvolutionEngine:
     # 4. 增强系统提示词 (Prompt Augmentation)
     # ==========================================
     def augment_prompt_with_evolution(self, base_prompt: str) -> str:
-        """为大模型动态注入：五维性格特征、亲密度、生物钟画像、晨间问候、近期反思与专属黑话"""
+        """为大模型动态注入：五维性格特征、亲密度、生物钟画像、晨间问候与近期反思"""
         now = datetime.now()
         habits = self.circadian_data.get("learned_habits", {})
         ref = self.memory.long_term_data.get("daily_reflection", {}) if self.memory else {}
         p_data = self.personality_data.get("radar", {})
-        memes = self.personality_data.get("private_memes", [])
         tag = self.personality_data.get("persona_tag", "元气治愈系桌宠")
         intimacy_lvl = self.personality_data.get("intimacy_level", 1)
 
@@ -360,11 +343,7 @@ class EvolutionEngine:
         if p_data.get("clingy", 60) > 65:
             evolution_notes.append("- 展现出对主人的高度信任与依恋，说话亲昵可爱，喜欢和主人互动。")
 
-        # 2. 注入专属默契黑话
-        if memes:
-            evolution_notes.append(f"- 你们之间的私域默契口头禅/暗号包含：{', '.join(memes)}，在日常对话中可适时低调自然使用，增加主仆默契。")
-
-        # 3. 注入生物钟与夜间反思
+        # 2. 注入生物钟与夜间反思
         if habits:
             evolution_notes.append(
                 f"- 自主归纳主人作息：通常 {habits.get('wake_hour', 9)}点起床活动，{habits.get('slump_hour', 14)}点易疲劳犯困，{habits.get('sleep_hour', 23)}点睡前。"

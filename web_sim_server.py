@@ -1193,9 +1193,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         delta = {"sharp_tongued": 2, "lively": 1}
                         note = "主仆互怼调侃"
                     evolution_engine.drift_personality("chat", delta, note)
-                    for slang in ["开润", "芭比Q", "泰裤辣", "芜湖", "绝绝子", "起飞", "奥利给", "破防", "冲鸭"]:
-                        if slang in user_text:
-                            evolution_engine.learn_private_meme(slang)
                 except Exception:
                     pass
 
@@ -1336,9 +1333,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         delta = {"sharp_tongued": 2, "lively": 1}
                         note = "主仆互怼调侃"
                     evolution_engine.drift_personality("chat", delta, note)
-                    for slang in ["开润", "芭比Q", "泰裤辣", "芜湖", "绝绝子", "起飞", "奥利给", "破防", "冲鸭"]:
-                        if slang in user_text:
-                            evolution_engine.learn_private_meme(slang)
                 except Exception:
                     pass
 
