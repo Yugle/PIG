@@ -580,11 +580,23 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 # 确保检测器处于激活状态
                 face_tracker.enabled = True
                 has_face, ox, oy = face_tracker.detect_face(frame)
+
+                # 核心优先级管理：视线注视追踪为最低优先级
+                # 若硬件智能体正在执行动作、思考、语音播报，视线追踪绝对不抢占舵机
+                is_busy = False
+                if hardware_agent:
+                    if hasattr(hardware_agent, "is_action_playing") and hardware_agent.is_action_playing():
+                        is_busy = True
+                    if hardware_agent.state not in ("IDLE", "AFTERGLOW"):
+                        is_busy = True
+
                 res = {
                     "status": "ok",
                     "has_face": bool(has_face),
                     "offset_x": round(float(ox), 3),
-                    "offset_y": round(float(oy), 3)
+                    "offset_y": round(float(oy), 3),
+                    "gaze_suppressed": is_busy,
+                    "suppress_reason": "action_or_speech_priority" if is_busy else "none"
                 }
 
                 if has_face:
@@ -604,7 +616,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                             "h": int(face_tracker.last_box["h"])
                         }
 
-                    hardware_agent.hal.set_angles(float(tp), float(tt))
+                    # 仅在非动作占用时驱动实体舵机 (动作绝对独占原则)
+                    if not is_busy and hardware_agent and hasattr(hardware_agent, "hal") and hardware_agent.hal:
+                        hardware_agent.hal.set_angles(float(tp), float(tt))
 
                 def _safe_json_serialize(obj):
                     if hasattr(obj, "item"):
@@ -976,6 +990,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     reply_data["behaviors"] = react_out["behaviors"]
                     reply_data["skill_result"] = react_out.get("final_skill_res")
                     reply_data["steps"] = react_out.get("steps", [])
+                    if reply_data["behaviors"] and hardware_agent and hasattr(hardware_agent, "mark_action_playing"):
+                        hardware_agent.mark_action_playing(3.0)
                 except Exception as e:
                     print(f"⚠️ [Web-LLM ReAct Loop Error]: {e}")
                     reply_data["reply"] = f"抱歉主人，执行过程遇到异常错误：{e}，未能完成操作。"

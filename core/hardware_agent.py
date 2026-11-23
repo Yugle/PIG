@@ -89,6 +89,9 @@ class HardwareAgent:
         self._worker_thread = None
         self._vision_thread = None
 
+        # 动作执行独占锁与时间戳 (动作优先级高于注视追踪)
+        self._action_busy_until = 0.0
+
         # 人脸视觉注视与两级头部追踪引擎
         self.face_tracker = FaceTracker(enabled=self.cfg.get("face_tracking", False))
 
@@ -367,12 +370,20 @@ class HardwareAgent:
         self._vision_thread.start()
         logger.info("🚀 [HardwareAgent] 后台硬件监听与数字孪生同步引擎已启动")
 
+    def mark_action_playing(self, duration_sec: float = 1.0):
+        """标记当前正在执行动作/表演/播报，舵机由动作独占，视线追踪必须让位"""
+        self._action_busy_until = max(getattr(self, "_action_busy_until", 0.0), time.time() + duration_sec)
+
+    def is_action_playing(self) -> bool:
+        """当前是否有显式动作或技能表演正在执行"""
+        return time.time() < getattr(self, "_action_busy_until", 0.0)
+
     def set_face_tracking(self, enabled: bool):
         """动态启停人脸视觉注视追踪"""
         self.face_tracker.set_enabled(enabled)
 
     def _vision_loop(self):
-        """低功耗人脸视觉注视与两级头部追踪后台循环 (~10FPS)"""
+        """低功耗人脸视觉注视与两级头部追踪后台循环 (~10FPS) - 最低优先级生效"""
         import numpy as np
         try:
             import cv2
@@ -384,10 +395,9 @@ class HardwareAgent:
                 time.sleep(0.5)
                 continue
 
-            # 仅在待机 (IDLE) 或余韵 (AFTERGLOW) 状态下执行视觉注视追踪，避免在思考或播报时发生动作冲突
-            if self.state not in (self.STATE_IDLE, self.STATE_AFTERGLOW):
-                time.sleep(0.1)
-                continue
+            # 核心优先级管理：视线注视追踪为最低优先级
+            # 若当前正在执行肢体动作、思考、语音播报，视线追踪绝对不抢占舵机
+            is_busy = (self.state not in (self.STATE_IDLE, self.STATE_AFTERGLOW)) or self.is_action_playing()
 
             try:
                 img_bytes = self.hal.capture_image()
@@ -399,8 +409,8 @@ class HardwareAgent:
                         cur_p = getattr(self.hal, "cur_pan", 90.0)
                         cur_t = getattr(self.hal, "cur_tilt", 90.0)
                         lx, ly, tp, tt = self.face_tracker.compute_gaze_and_angles(ox, oy, cur_p, cur_t)
-                        # 大幅度移动时舵机跟随
-                        if abs(ox) > 0.22 or abs(oy) > 0.22:
+                        # 仅在非动作占用时，才允许驱动实体舵机 (动作绝对独占原则)
+                        if not is_busy and (abs(ox) > 0.22 or abs(oy) > 0.22):
                             self.hal.set_angles(tp, tt)
                         # 广播视觉注视事件给数字孪生 / Web 前端 (用于前端更新眼球和 3D 头骨)
                         self.emit_event("gaze_track", {
@@ -410,7 +420,9 @@ class HardwareAgent:
                             "look_x": lx,
                             "look_y": ly,
                             "target_pan": tp,
-                            "target_tilt": tt
+                            "target_tilt": tt,
+                            "suppressed": is_busy,
+                            "reason": "action_or_speech_priority" if is_busy else "normal"
                         })
                 time.sleep(0.08)  # 约 10~12 FPS，极低功耗占用
             except Exception:

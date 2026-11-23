@@ -1668,9 +1668,10 @@
       }).catch(() => {});
     }
 
-    // 视窗鼠标移动监听 -> 两级注视追踪
+    // 视窗鼠标移动监听 -> 两级注视追踪 (最低优先级生效，动作与交互优先)
     container.addEventListener("mousemove", (e) => {
-      if (!gazeTrackingEnabled || webcamGazeEnabled || isSpeaking || isThinking) return;
+      const isActionBusy = isActionRunning || (actionSequence && actionSequence.length > 0) || (Date.now() - lastActionEndTime < 800) || isManualAdjusting;
+      if (!gazeTrackingEnabled || webcamGazeEnabled || isSpeaking || isThinking || isActionBusy) return;
       recordUserAction();
       const rect = container.getBoundingClientRect();
       const normX = ((e.clientX - rect.left) / rect.width - 0.5) * 2.0;
@@ -1735,7 +1736,6 @@
           // 启动定时采集，向后端轻量 YuNet 模型发送视频帧 (~10 FPS)
           webcamInterval = setInterval(async () => {
             if (!webcamGazeEnabled || isDetectingFrame) return;
-            if (isSpeaking || isThinking) return;
 
             isDetectingFrame = true;
             try {
@@ -1762,11 +1762,12 @@
                 const ctx = overlay.getContext("2d");
                 ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-                if (data.has_face) {
-                  statusText.innerText = `👁️ 锁定人脸: X:${data.offset_x > 0 ? '+' : ''}${data.offset_x} Y:${data.offset_y > 0 ? '+' : ''}${data.offset_y}`;
-                  statusText.style.color = "var(--cyan)";
+                // 核心优先级裁决：检查是否有更高优先级动作正在运行 (P0: 肢体动作/调姿, P1: 对话播报/思考)
+                const isActionBusy = isActionRunning || (actionSequence && actionSequence.length > 0) || (Date.now() - lastActionEndTime < 800) || isManualAdjusting;
+                const isHigherPriority = isActionBusy || isSpeaking || isThinking || (data.gaze_suppressed === true);
 
-                  // 画人脸定位框 (镜像处理)
+                if (data.has_face) {
+                  // 画人脸定位框 (镜像处理，动作占用时呈琥珀色提示让位)
                   if (data.box) {
                     const scaleX = overlay.width / 320;
                     const scaleY = overlay.height / 240;
@@ -1775,28 +1776,44 @@
                     const bw = data.box.w * scaleX;
                     const bh = data.box.h * scaleY;
 
-                    ctx.strokeStyle = "#00e5ff";
+                    ctx.strokeStyle = isHigherPriority ? "#f59e0b" : "#00e5ff";
                     ctx.lineWidth = 2;
                     ctx.strokeRect(bx, by, bw, bh);
-                    ctx.fillStyle = "rgba(0, 229, 255, 0.15)";
+                    ctx.fillStyle = isHigherPriority ? "rgba(245, 158, 11, 0.15)" : "rgba(0, 229, 255, 0.15)";
                     ctx.fillRect(bx, by, bw, bh);
                   }
 
-                  // 1. 动眼球瞳孔
-                  if (data.look_x !== undefined && data.look_y !== undefined) {
-                    lookOffset.x = data.look_x;
-                    lookOffset.y = data.look_y;
-                    drawEyes(currentEmotion);
-                  }
+                  if (isHigherPriority) {
+                    // 优先级让位：动作或语音会话正在进行中，视线注视不抢占头颈角度
+                    statusText.innerText = isActionBusy ? "🎬 动作执行中 (注视让位优先)" : "🗣️ 会话进行中 (注视让位优先)";
+                    statusText.style.color = "#f59e0b";
+                    // 仅微调眼球瞳孔以维持眼神微动，舵机角度绝对不动
+                    if (data.look_x !== undefined && data.look_y !== undefined) {
+                      lookOffset.x = data.look_x * 0.4;
+                      lookOffset.y = data.look_y * 0.4;
+                      drawEyes(currentEmotion);
+                    }
+                  } else {
+                    // 纯待机闲置状态 (最低优先级生效)：驱动头颈舵机朝向主人
+                    statusText.innerText = `👁️ 锁定人脸: X:${data.offset_x > 0 ? '+' : ''}${data.offset_x} Y:${data.offset_y > 0 ? '+' : ''}${data.offset_y}`;
+                    statusText.style.color = "var(--cyan)";
 
-                  // 2. 动 3D 机械头颈
-                  if (data.target_pan !== undefined && data.target_tilt !== undefined) {
-                    targetPan = data.target_pan;
-                    targetTilt = data.target_tilt;
+                    // 1. 动眼球瞳孔
+                    if (data.look_x !== undefined && data.look_y !== undefined) {
+                      lookOffset.x = data.look_x;
+                      lookOffset.y = data.look_y;
+                      drawEyes(currentEmotion);
+                    }
+
+                    // 2. 动 3D 机械头颈
+                    if (data.target_pan !== undefined && data.target_tilt !== undefined) {
+                      targetPan = data.target_pan;
+                      targetTilt = data.target_tilt;
+                    }
                   }
                 } else {
-                  statusText.innerText = "🔍 寻找主人人脸中...";
-                  statusText.style.color = "var(--text-sub)";
+                  statusText.innerText = isHigherPriority ? "🎬 动作执行中 (注视让位)" : "🔍 寻找主人人脸中...";
+                  statusText.style.color = isHigherPriority ? "#f59e0b" : "var(--text-sub)";
                 }
               }
             } catch (err) {
@@ -1857,11 +1874,13 @@
       idleFsmState = "ACTIVE";
     }
 
-    // 角度控制
+    // 角度控制与动作优先防冲突锁
     let currentPan = 90;
     let currentTilt = 90;
     let targetPan = 90;
     let targetTilt = 90;
+    let isManualAdjusting = false;
+    let manualAdjustTimer = null;
 
     function updateAngles(pan, tilt) {
       targetPan = parseFloat(pan);
@@ -1878,26 +1897,34 @@
     function onPanSlider(val) {
       recordUserAction();
       stopActionSequence();
+      isManualAdjusting = true;
+      if (manualAdjustTimer) clearTimeout(manualAdjustTimer);
+      manualAdjustTimer = setTimeout(() => { isManualAdjusting = false; }, 1200);
       updateAngles(val, targetTilt);
     }
 
     function onTiltSlider(val) {
       recordUserAction();
       stopActionSequence();
+      isManualAdjusting = true;
+      if (manualAdjustTimer) clearTimeout(manualAdjustTimer);
+      manualAdjustTimer = setTimeout(() => { isManualAdjusting = false; }, 1200);
       updateAngles(targetPan, val);
     }
 
     function resetAngles() {
       recordUserAction();
       stopActionSequence();
+      isManualAdjusting = false;
       updateAngles(90, 90);
       setEmotion("NORMAL");
     }
 
-    // 动作动画队列管理
+    // 动作动画队列管理 (最高优先级 P0，动作执行与缓冲期间视线注视绝对让位)
     let actionSequence = [];
     let isActionRunning = false;
     let actionTimer = null;
+    let lastActionEndTime = 0; // 动作结束缓冲时间戳 (800ms 保护期)
 
     function stopActionSequence() {
       if (actionTimer) {
@@ -1906,11 +1933,13 @@
       }
       actionSequence = [];
       isActionRunning = false;
+      lastActionEndTime = Date.now();
     }
 
     function runActionSequence() {
       if (actionSequence.length === 0) {
         isActionRunning = false;
+        lastActionEndTime = Date.now();
         return;
       }
       isActionRunning = true;
@@ -3558,6 +3587,7 @@
       let tiltOffset = 0;
 
       const idleSec = (Date.now() - lastInteractionTime) / 1000;
+      const isActionBusy = isActionRunning || (actionSequence && actionSequence.length > 0) || (Date.now() - lastActionEndTime < 800) || isManualAdjusting;
 
       if (isSpeaking) {
         document.getElementById("overlay-fsm").innerText = "🗣️ 语音同步表达中";
@@ -3568,10 +3598,12 @@
         document.getElementById("overlay-fsm").innerText = "🤔 深度思考动脑";
         tiltOffset = -4 + Math.sin(animClock * 2.0) * 1.0;
         panOffset = 5 + Math.cos(animClock * 1.5) * 0.8;
-      } else if (gazeTrackingEnabled) {
-        document.getElementById("overlay-fsm").innerText = "👁️ 专注视线注视追踪";
-      } else if (isActionRunning || actionSequence.length > 0) {
-        // 动作序列执行中，不做闲置微动，保障动作精确性
+      } else if (isActionBusy) {
+        // 最高优先级 P0：动作序列执行中或刚完成缓冲，独占姿态控制，不做闲置微动和注视冲突
+        document.getElementById("overlay-fsm").innerText = "🎬 肢体动作独占执行";
+      } else if (webcamGazeEnabled || gazeTrackingEnabled) {
+        // 最低优先级 P2：闲置人脸视线注视追踪
+        document.getElementById("overlay-fsm").innerText = "👁️ 待机视线注视追踪";
       } else {
         // P1: 闲置自主生命体征状态机更新 (呼吸微动、无聊发呆、瞌睡沉头)
         if (idleSec > 150) {
