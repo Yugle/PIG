@@ -282,6 +282,36 @@
     .toast.show {
       opacity: 1;
     }
+    .wifi-list {
+      max-height: 180px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #0d0e11;
+      margin-top: 8px;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .wifi-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 12px;
+      border-bottom: 1px solid #1a1c21;
+      font-size: 0.84rem;
+      cursor: pointer;
+    }
+    .wifi-item:hover, .wifi-item:active {
+      background: #18191f;
+    }
+    .wifi-item:last-child {
+      border-bottom: none;
+    }
+    .wifi-sig {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
   </style>
 </head>
 <body>
@@ -296,6 +326,51 @@
     </div>
     <div class="status-badge" id="onlineBadge">ONLINE</div>
   </header>
+
+  <!-- 0. Wi-Fi 配网与网络管理 -->
+  <section class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:0;">00 / WIFI PROVISIONING</div>
+      <span id="wifiStatusBadge" style="font-size:0.72rem; padding:2px 8px; border-radius:4px; background:#181a1f; color:#10b981; border:1px solid #23252a;">已连接</span>
+    </div>
+    
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <button class="btn btn-secondary" id="btnScanWifi" style="flex:1;" onclick="scanWifiNetworks()">扫描周边 Wi-Fi</button>
+      <button class="btn btn-secondary" id="btnToggleAp" style="flex:1;" onclick="toggleSoftAp()">切换 AP 配网热点</button>
+    </div>
+
+    <div class="wifi-list" id="wifiScanList"></div>
+
+    <div class="form-group">
+      <label>Wi-Fi 名称 (SSID)</label>
+      <input type="text" id="wifiSsidInput" placeholder="点击上方扫描列表或手动输入" />
+    </div>
+
+    <div class="form-group">
+      <label>Wi-Fi 密码</label>
+      <div class="password-wrap">
+        <input type="password" id="wifiPasswordInput" placeholder="输入无线网络密码" />
+        <button class="toggle-pwd" type="button" onclick="toggleWifiPwdVisibility()">SHOW</button>
+      </div>
+    </div>
+
+    <button class="btn" id="btnConnectWifi" onclick="connectWifi()">连接配网</button>
+  </section>
+
+  <!-- 1. 米家智能生态直连 (屏幕弹窗授权) -->
+  <section class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:0;">01 / MI HOME ECOSYSTEM</div>
+      <span id="mijiaStatusBadge" style="font-size:0.72rem; padding:2px 8px; border-radius:4px; background:#181a1f; color:#f59e0b; border:1px solid #23252a;">未绑定</span>
+    </div>
+    <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">
+      无需在手机浏览器内授权。点击下方按钮后，小猪将在自身 2.4 寸屏幕上直接弹窗显示米家官方二维码，请用米家 App 扫码即可。
+    </p>
+    <button class="btn" style="background:#ff6700; color:#fff;" onclick="triggerMijiaScreenQr()">在小猪屏幕上显示绑定二维码</button>
+    <div id="xiaomiScreenTip" style="display:none; padding:10px; background:#17221b; border:1px solid #10b981; border-radius:8px; font-size:0.8rem; color:#10b981; margin-top:12px; line-height:1.4;">
+      🟢 已在小猪屏幕上弹出米家授权二维码！请使用手机【米家 App】右上角「扫一扫」直接对准小猪屏幕完成授权。
+    </div>
+  </section>
 
   <!-- 1. API Token 与大模型配置 -->
   <section class="card">
@@ -561,7 +636,171 @@
       }
     }
 
+    function toggleWifiPwdVisibility() {
+      const inp = document.getElementById("wifiPasswordInput");
+      const btn = event.target;
+      inp.type = inp.type === "password" ? "text" : "password";
+      btn.innerText = inp.type === "password" ? "SHOW" : "HIDE";
+    }
+
+    async function scanWifiNetworks() {
+      const btn = document.getElementById("btnScanWifi");
+      const listEl = document.getElementById("wifiScanList");
+      btn.innerText = "扫描中...";
+      listEl.style.display = "block";
+      listEl.innerHTML = '<div style="padding:10px; color:#888; text-align:center; font-size:0.8rem;">正在扫描周围无线热点...</div>';
+      try {
+        const res = await fetch("/api/wifi/scan");
+        if (res.ok) {
+          const data = await res.json();
+          const nets = data.networks || [];
+          if (nets.length === 0) {
+            listEl.innerHTML = '<div style="padding:10px; color:#888; text-align:center; font-size:0.8rem;">未扫描到周围热点</div>';
+          } else {
+            listEl.innerHTML = "";
+            nets.forEach(n => {
+              const item = document.createElement("div");
+              item.className = "wifi-item";
+              item.onclick = () => selectWifiSsid(n.ssid);
+              item.innerHTML = `
+                <div>
+                  <strong>${n.ssid}</strong>
+                  ${n.is_current ? '<span style="color:#10b981; font-size:0.7rem; margin-left:6px;">[当前]</span>' : ''}
+                </div>
+                <div class="wifi-sig">${n.security} · ${n.signal}%</div>
+              `;
+              listEl.appendChild(item);
+            });
+          }
+        }
+      } catch (e) {
+        listEl.innerHTML = `<div style="padding:10px; color:#ef4444; text-align:center; font-size:0.8rem;">扫描异常: ${e}</div>`;
+      } finally {
+        btn.innerText = "扫描周边 Wi-Fi";
+      }
+    }
+
+    function selectWifiSsid(ssid) {
+      document.getElementById("wifiSsidInput").value = ssid;
+      document.getElementById("wifiPasswordInput").focus();
+      showToast(`已选择: ${ssid}`);
+    }
+
+    async function connectWifi() {
+      const ssid = document.getElementById("wifiSsidInput").value.trim();
+      const pwd = document.getElementById("wifiPasswordInput").value.trim();
+      if (!ssid) {
+        alert("请输入或选择目标 Wi-Fi 名称");
+        return;
+      }
+      const btn = document.getElementById("btnConnectWifi");
+      btn.innerText = "正在连接并测试配网...";
+      btn.disabled = true;
+      try {
+        const res = await fetch("/api/wifi/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ssid, password: pwd })
+        });
+        if (res.ok) {
+          const d = await res.json();
+          showToast(`已连接至 ${d.ssid || ssid}`);
+          refreshWifiStatus();
+        } else {
+          alert("连接失败");
+        }
+      } catch (e) {
+        alert("连接异常: " + e);
+      } finally {
+        btn.innerText = "连接配网";
+        btn.disabled = false;
+      }
+    }
+
+    async function toggleSoftAp() {
+      const badge = document.getElementById("wifiStatusBadge");
+      const isAp = badge.innerText.includes("AP");
+      try {
+        const res = await fetch("/api/wifi/ap_mode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enable: !isAp })
+        });
+        if (res.ok) {
+          showToast(isAp ? "已切回常态网络" : "已开启配网热点 (PIG-Setup-8090)");
+          refreshWifiStatus();
+        }
+      } catch (e) {
+        alert("切换热点失败: " + e);
+      }
+    }
+
+    async function refreshWifiStatus() {
+      try {
+        const res = await fetch("/api/wifi/status");
+        if (res.ok) {
+          const d = await res.json();
+          const badge = document.getElementById("wifiStatusBadge");
+          if (d.ap_mode) {
+            badge.innerText = "AP热点配网模式";
+            badge.style.color = "#f59e0b";
+          } else if (d.connected) {
+            badge.innerText = `已连接 (${d.ssid})`;
+            badge.style.color = "#10b981";
+          } else {
+            badge.innerText = "未连接";
+            badge.style.color = "#ef4444";
+          }
+          if (d.ssid && !document.getElementById("wifiSsidInput").value) {
+            document.getElementById("wifiSsidInput").value = d.ssid;
+          }
+        }
+      } catch (e) {}
+    }
+
+    let mijiaPollTimer = null;
+    async function triggerMijiaScreenQr() {
+      const tip = document.getElementById("xiaomiScreenTip");
+      tip.style.display = "block";
+      tip.innerHTML = "🟢 正在通知小猪在屏幕上弹出米家官方二维码... 请对准小猪屏幕扫码！";
+      
+      try {
+        const res = await fetch("/api/xiaomi/qr_start_screen", { method: "POST" });
+        if (res.ok) {
+          showToast("已在小猪屏幕显示米家二维码");
+          startPollingMijia();
+        }
+      } catch (e) {
+        tip.innerHTML = "❌ 唤起屏幕二维码失败: " + e;
+      }
+    }
+
+    function startPollingMijia() {
+      if (mijiaPollTimer) clearInterval(mijiaPollTimer);
+      mijiaPollTimer = setInterval(async () => {
+        try {
+          const res = await fetch("/api/xiaomi/qr_status");
+          if (res.ok) {
+            const data = await res.json();
+            const tip = document.getElementById("xiaomiScreenTip");
+            const badge = document.getElementById("mijiaStatusBadge");
+            if (data.status === "success") {
+              tip.innerHTML = `🎉 绑定成功！已为小猪自动同步 ${data.device_count || 0} 台米家设备。可直接语音控制台灯/水壶啦！`;
+              badge.innerText = `已绑定 (${data.device_count || 0}台)`;
+              badge.style.color = "#10b981";
+              clearInterval(mijiaPollTimer);
+              showToast("米家设备绑定成功！");
+            } else if (data.status === "expired") {
+              tip.innerHTML = "⚠️ 二维码已超时，请重新点击按钮唤起二维码。";
+              clearInterval(mijiaPollTimer);
+            }
+          }
+        } catch (e) {}
+      }, 2000);
+    }
+
     loadSettings();
+    refreshWifiStatus();
   </script>
 </body>
 </html>

@@ -12,6 +12,7 @@ import socket
 import threading
 from typing import Dict, Any, Optional, Callable, List
 from PIL import Image, ImageDraw, ImageFont
+from core.wifi_manager import wifi_manager
 
 try:
     import qrcode
@@ -50,7 +51,7 @@ class MenuFSM:
         
         # 主菜单定义 (工业极简风，杜绝劣质 AI Emojis)
         self.main_menu_items = [
-            {"id": "qr", "num": "01", "title": "无线配置", "desc": "手机扫码进设置后台 / 查IP"},
+            {"id": "qr", "num": "01", "title": "无线与配网", "desc": "AP热点配网 / 查IP / 手机设置"},
             {"id": "doctor", "num": "02", "title": "系统体检", "desc": "网络延迟与外设实时排障"},
             {"id": "toggles", "num": "03", "title": "硬件开关", "desc": "麦克风静音 / 追踪 / 休眠"},
             {"id": "system", "num": "04", "title": "系统设置", "desc": "固件版本 / 系统更新 / 电源管理"},
@@ -79,6 +80,10 @@ class MenuFSM:
             "check_time": 0
         }
         
+        # 米家屏幕弹窗状态
+        self.xiaomi_status_text = "等待米家App扫码授权..."
+        self.xiaomi_device_count = 0
+
         # 锁与监听器
         self._lock = threading.Lock()
         self.state_change_listeners: List[Callable[[Dict[str, Any]], None]] = []
@@ -102,11 +107,68 @@ class MenuFSM:
     def _sync_system_items(self):
         self.system_items = [
             {"id": "face_id", "name": "录入主人面容", "val": "SCAN 拍照绑定", "actionable": True},
+            {"id": "mijia", "name": "米家扫码绑定", "val": "屏幕弹窗", "actionable": True},
             {"id": "version", "name": "系统固件版本", "val": self.version_str, "actionable": False},
             {"id": "update", "name": "检查系统更新", "val": self.update_status, "actionable": True},
             {"id": "restart", "name": "重启机器人服务", "val": "RESTART", "actionable": True},
             {"id": "shutdown", "name": "树莓派安全关机", "val": "POWER OFF", "actionable": True},
         ]
+
+    def show_xiaomi_qr_on_screen(self):
+        """在机器人 2.4 寸屏幕上直接弹窗显示米家登录/授权二维码 (无浏览器弹窗)"""
+        print("📱 [MenuFSM] 触发屏幕弹窗显示米家绑定二维码")
+        with self._lock:
+            self.current_mode = "XIAOMI_QR"
+            self.xiaomi_status_text = "获取米家二维码中..."
+            self.xiaomi_device_count = 0
+            self.last_interaction_time = time.time()
+            self._notify_listeners()
+
+        def _auth_worker():
+            try:
+                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
+                res = qr_auth_manager.start_qr_session()
+                if res.get("status") == "waiting":
+                    with self._lock:
+                        self.xiaomi_status_text = "请打开米家App扫码授权"
+                        self._notify_listeners()
+
+                    while self.current_mode == "XIAOMI_QR":
+                        time.sleep(0.8)
+                        st = qr_auth_manager.status
+                        if st == "success":
+                            dev_cnt = len(qr_auth_manager.synced_devices)
+                            with self._lock:
+                                self.xiaomi_status_text = f"绑定成功！已同步 {dev_cnt} 台设备"
+                                self.xiaomi_device_count = dev_cnt
+                                self._notify_listeners()
+                            time.sleep(2.5)
+                            with self._lock:
+                                if self.current_mode == "XIAOMI_QR":
+                                    self.current_mode = "FACE"
+                                    self._notify_listeners()
+                            break
+                        elif st in ["expired", "error"]:
+                            with self._lock:
+                                self.xiaomi_status_text = "二维码已超时，按 [OK] 刷新"
+                                self._notify_listeners()
+                            break
+                else:
+                    with self._lock:
+                        self.xiaomi_status_text = res.get("error", "获取二维码失败")
+                        self._notify_listeners()
+            except Exception as e:
+                with self._lock:
+                    self.xiaomi_status_text = f"米家认证异常: {e}"
+                    self._notify_listeners()
+
+        threading.Thread(target=_auth_worker, daemon=True, name="XiaomiScreenQR").start()
+
+    def close_xiaomi_qr(self):
+        """关闭屏幕米家二维码弹窗返回"""
+        with self._lock:
+            self.current_mode = "FACE"
+            self._notify_listeners()
 
     def trigger_face_id_enrollment(self):
         """进入人脸录入倒计时模式并在 3 秒后抓拍认主"""
@@ -178,9 +240,25 @@ class MenuFSM:
         threading.Thread(target=_worker, daemon=True, name="SystemUpdateCheck").start()
 
     def get_qr_png_bytes(self) -> bytes:
-        """生成并返回 QR 码 PNG 字节流"""
-        ip = get_local_ip()
-        url = f"http://{ip}:8090/settings"
+        """生成并返回当前模式匹配的 QR 码 PNG 字节流"""
+        # 1. 处于米家扫码绑定弹窗
+        if self.current_mode == "XIAOMI_QR":
+            try:
+                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
+                raw = qr_auth_manager.get_qr_png_bytes()
+                if raw:
+                    return raw
+            except Exception:
+                pass
+
+        # 2. 处于无线与配网页 (QR_CODE)
+        if wifi_manager.ap_mode:
+            # AP 热点配网：直接编码手机连 Wi-Fi 二维码协议
+            url = wifi_manager.get_status().get("wifi_qr", f"WIFI:T:WPA;S:{wifi_manager.ap_ssid};P:{wifi_manager.ap_password};;")
+        else:
+            ip = get_local_ip()
+            url = f"http://{ip}:8090/settings"
+
         if qrcode:
             try:
                 qr = qrcode.QRCode(box_size=4, border=1)
@@ -297,11 +375,11 @@ class MenuFSM:
 
             # 2. 处于主菜单 (MENU_MAIN)
             if self.current_mode == "MENU_MAIN":
-                if button == "K1":  # 上
-                    self.cursor = (self.cursor - 1) % len(self.main_menu_items)
+                if button == "K1":  # 上 (边界安全钳制，绝不回绕跳顶)
+                    self.cursor = max(0, self.cursor - 1)
                     self._notify_listeners()
-                elif button == "K2":  # 下
-                    self.cursor = (self.cursor + 1) % len(self.main_menu_items)
+                elif button == "K2":  # 下 (触底保持，绝不跳顶)
+                    self.cursor = min(len(self.main_menu_items) - 1, self.cursor + 1)
                     self._notify_listeners()
                 elif button == "K3":
                     if event_type == "long_press":
@@ -330,9 +408,24 @@ class MenuFSM:
                     self._notify_listeners()
                 return
 
-            # 3. 处于二维码展示页 (QR_CODE)
+            # 2.5 处于米家屏幕弹窗 (XIAOMI_QR)
+            if self.current_mode == "XIAOMI_QR":
+                if button in ["K4", "ESC"]:
+                    self.close_xiaomi_qr()
+                elif button in ["K3", "ENTER"]:
+                    self.show_xiaomi_qr_on_screen()
+                return
+
+            # 3. 处于无线与配网展示页 (QR_CODE)
             if self.current_mode == "QR_CODE":
-                if button in ["K4", "K3"]:
+                if button in ["K3", "ENTER"]:
+                    # 按 OK 切换 AP 配网热点模式 / 正常模式
+                    if wifi_manager.ap_mode:
+                        wifi_manager.stop_softap()
+                    else:
+                        wifi_manager.start_softap()
+                    self._notify_listeners()
+                elif button in ["K4", "ESC"]:
                     self.current_mode = "MENU_MAIN"
                     self._notify_listeners()
                 return
@@ -351,10 +444,10 @@ class MenuFSM:
             # 5. 处于硬件开关页 (TOGGLES)
             if self.current_mode == "TOGGLES":
                 if button == "K1":
-                    self.cursor = (self.cursor - 1) % len(self.toggle_items)
+                    self.cursor = max(0, self.cursor - 1)
                     self._notify_listeners()
                 elif button == "K2":
-                    self.cursor = (self.cursor + 1) % len(self.toggle_items)
+                    self.cursor = min(len(self.toggle_items) - 1, self.cursor + 1)
                     self._notify_listeners()
                 elif button == "K3":
                     # 切换当前项开关
@@ -376,15 +469,17 @@ class MenuFSM:
             # 6. 处于系统设置页 (SYSTEM: 认主/版本号/更新/关机/重启)
             if self.current_mode == "SYSTEM":
                 if button == "K1":
-                    self.cursor = (self.cursor - 1) % len(self.system_items)
+                    self.cursor = max(0, self.cursor - 1)
                     self._notify_listeners()
                 elif button == "K2":
-                    self.cursor = (self.cursor + 1) % len(self.system_items)
+                    self.cursor = min(len(self.system_items) - 1, self.cursor + 1)
                     self._notify_listeners()
                 elif button == "K3":
                     action_id = self.system_items[self.cursor]["id"]
                     if action_id == "face_id":
                         self.trigger_face_id_enrollment()
+                    elif action_id == "mijia":
+                        self.show_xiaomi_qr_on_screen()
                     elif action_id == "update":
                         self.check_system_update_async()
                     elif action_id == "restart":
@@ -507,6 +602,12 @@ class MenuFSM:
             "version": self.version_str,
             "update_status": self.update_status,
             "doctor": self.doctor_cache,
+            "wifi": wifi_manager.get_status(),
+            "xiaomi_qr": {
+                "active": (self.current_mode == "XIAOMI_QR"),
+                "status": self.xiaomi_status_text,
+                "device_count": self.xiaomi_device_count
+            },
             "settings_url": f"http://{ip}:8090/settings",
             "qr_base64": self.get_qr_base64(),
             "is_mic_muted": self.is_mic_muted,
@@ -568,34 +669,44 @@ class MenuFSM:
             draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
             draw.text((24, 298), "[▲▼] 移动    [OK] 确认    [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
-        # B. 扫码手机配置界面
+        # B. 扫码手机配置界面 (支持 AP 配网热点与已连接模式)
         elif self.current_mode == "QR_CODE":
-            draw.text((16, 16), "01 / CONNECT", fill=(150, 150, 155), font=self.font_small)
-            draw.text((188, 16), "WIFI WEB", fill=(110, 110, 115), font=self.font_small)
+            wf_st = wifi_manager.get_status()
+            if wf_st["ap_mode"]:
+                draw.text((16, 16), "01 / AP PROVISION", fill=(255, 180, 0), font=self.font_small)
+                draw.text((188, 16), "HOTSPOT", fill=(110, 110, 115), font=self.font_small)
 
-            ip = get_local_ip()
-            url = f"http://{ip}:8090/settings"
-
-            # 居中纯白卡片放二维码
-            draw.rounded_rectangle([42, 46, 198, 202], radius=10, fill=(255, 255, 255))
-            if qrcode:
-                try:
-                    qr = qrcode.QRCode(box_size=4, border=1)
-                    qr.add_data(url)
-                    qr.make(fit=True)
-                    qr_pil = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-                    qr_pil = qr_pil.resize((144, 144), Image.Resampling.NEAREST)
+                draw.rounded_rectangle([42, 46, 198, 202], radius=10, fill=(255, 255, 255))
+                qr_bytes = self.get_qr_png_bytes()
+                if qr_bytes:
+                    import io
+                    qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
                     img.paste(qr_pil, (48, 52))
-                except Exception as e:
-                    draw.text((50, 110), f"Error: {e}", fill=(0, 0, 0), font=self.font_small)
 
-            # 清爽单色网址排版
-            draw.text((24, 218), "IP 地址", fill=(120, 120, 125), font=self.font_small)
-            draw.text((24, 236), f"{ip}:8090", fill=(255, 255, 255), font=self.font_bold)
-            draw.text((24, 260), "手机连相同 WiFi 扫码访问设置页", fill=(140, 140, 145), font=self.font_small)
+                draw.text((24, 218), f"热点: {wf_st['ap_ssid']}", fill=(255, 255, 255), font=self.font_bold)
+                draw.text((24, 238), f"密码: {wf_st['ap_password']}  (手机扫码直连)", fill=(130, 130, 135), font=self.font_small)
+                draw.text((24, 258), f"后台: {wf_st['ap_ip']}:8090/settings", fill=(100, 100, 105), font=self.font_small)
 
-            draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
-            draw.text((56, 298), "按任意键或 [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
+                draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
+                draw.text((24, 298), "[OK] 退出热点        [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
+            else:
+                draw.text((16, 16), "01 / NETWORK", fill=(150, 150, 155), font=self.font_small)
+                draw.text((188, 16), "ONLINE", fill=(34, 197, 94), font=self.font_small)
+
+                ip = wf_st.get("ip", get_local_ip())
+                draw.rounded_rectangle([42, 46, 198, 202], radius=10, fill=(255, 255, 255))
+                qr_bytes = self.get_qr_png_bytes()
+                if qr_bytes:
+                    import io
+                    qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
+                    img.paste(qr_pil, (48, 52))
+
+                draw.text((24, 218), f"已连接: {wf_st.get('ssid', 'WiFi')}", fill=(255, 255, 255), font=self.font_bold)
+                draw.text((24, 238), f"本机 IP: {ip}:8090", fill=(130, 130, 135), font=self.font_small)
+                draw.text((24, 258), "手机扫码进后台配网或改配置", fill=(100, 100, 105), font=self.font_small)
+
+                draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
+                draw.text((24, 298), "[OK] 开启AP配网热点   [ESC] 返回", fill=(100, 100, 105), font=self.font_small)
 
         # C. 一键体检诊断界面
         elif self.current_mode == "DOCTOR":
@@ -705,6 +816,32 @@ class MenuFSM:
             draw.text((28, 230), self.face_enroll_msg, fill=(255, 255, 255), font=self.font_bold)
             draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
             draw.text((24, 298), "[ESC] 取消返回", fill=(100, 100, 105), font=self.font_small)
+
+        # G. 米家生态授权弹窗 (XIAOMI_QR: 屏幕居中渲染米家二维码)
+        elif self.current_mode == "XIAOMI_QR":
+            draw.text((16, 16), "MI HOME / AUTH", fill=(255, 103, 0), font=self.font_bold)
+            draw.text((188, 16), "BINDING", fill=(150, 150, 155), font=self.font_small)
+
+            # 居中纯白卡片放二维码
+            draw.rounded_rectangle([42, 46, 198, 202], radius=10, fill=(255, 255, 255))
+            try:
+                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
+                qr_bytes = qr_auth_manager.get_qr_png_bytes()
+                if qr_bytes:
+                    import io
+                    qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
+                    img.paste(qr_pil, (48, 52))
+                else:
+                    draw.text((56, 114), "获取米家码中...", fill=(0, 0, 0), font=self.font_small)
+            except Exception as e:
+                draw.text((50, 110), f"Error: {e}", fill=(0, 0, 0), font=self.font_small)
+
+            draw.text((24, 218), "打开米家App 扫码授权", fill=(255, 255, 255), font=self.font_bold)
+            draw.text((24, 240), self.xiaomi_status_text, fill=(255, 153, 0) if "成功" not in self.xiaomi_status_text else (34, 197, 94), font=self.font_small)
+            draw.text((24, 262), "绑定后可直接语音控制台灯/水壶等", fill=(120, 120, 125), font=self.font_small)
+
+            draw.line([(16, 288), (224, 288)], fill=(32, 32, 36), width=1)
+            draw.text((24, 298), "[OK] 刷新二维码       [ESC] 取消", fill=(100, 100, 105), font=self.font_small)
 
         return img
 

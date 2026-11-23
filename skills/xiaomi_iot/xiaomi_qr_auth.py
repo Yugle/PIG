@@ -331,5 +331,39 @@ class XiaomiQRAuth:
             return "摄像机"
         return name or "智能设备"
 
+    def get_qr_png_bytes(self) -> bytes:
+        """获取米家扫码绑定二维码的 PNG 字节流"""
+        # 1. 优先读取已缓存的图片
+        qr_file = self.config_path.parent / "xiaomi_qr.png"
+        if qr_file.exists():
+            try:
+                with open(qr_file, "rb") as f:
+                    return f.read()
+            except Exception:
+                pass
+
+        # 2. 从 login_url 或默认 URL 生成
+        target_url = self.login_url or self.qr_url or "https://account.xiaomi.com/fe/service/login/qrcode?sid=xiaomiio"
+        try:
+            import qrcode
+            import io
+            qr = qrcode.QRCode(box_size=4, border=1)
+            qr.add_data(target_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            return buf.getvalue()
+        except Exception:
+            return b""
+
+    def get_qr_base64(self) -> str:
+        """获取米家二维码的 Base64 Data-URI"""
+        png_bytes = self.get_qr_png_bytes()
+        if png_bytes:
+            b64 = base64.b64encode(png_bytes).decode("ascii")
+            return f"data:image/png;base64,{b64}"
+        return ""
+
 # 全局单例
 qr_auth_manager = XiaomiQRAuth()

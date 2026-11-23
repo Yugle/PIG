@@ -19,6 +19,7 @@ from core.agent_reasoner import AgentReasoner
 from core.prompt_builder import PromptBuilder
 from core.hardware_agent import HardwareAgent
 from core.proactive_care import ProactiveCareManager
+from core.wifi_manager import wifi_manager
 
 PORT = 8090
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -268,6 +269,25 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps(menu_fsm.doctor_cache, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # Wi-Fi 状态查询 API
+        if self.path == "/api/wifi/status":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(wifi_manager.get_status(), ensure_ascii=False).encode("utf-8"))
+            return
+
+        # Wi-Fi 周边扫描 API
+        if self.path == "/api/wifi/scan":
+            nets = wifi_manager.scan_networks()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({"networks": nets}, ensure_ascii=False).encode("utf-8"))
             return
 
         # 视觉抓拍快照静态访问接口 (供对话框实时查看小猪眼前捕获的真实现实瞬间)
@@ -661,6 +681,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 body = json.loads(post_data.decode("utf-8")) if post_data else {}
                 btn = body.get("button", "K3")
                 evt = body.get("event", "click")
+                seq = body.get("seq", 0)
                 if hardware_agent and hardware_agent.hal:
                     hardware_agent.hal.trigger_button(btn, evt)
                 else:
@@ -668,7 +689,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "ok", "menu_state": menu_fsm.get_state()}, ensure_ascii=False).encode("utf-8"))
+                self.wfile.write(json.dumps({"status": "ok", "seq": seq, "menu_state": menu_fsm.get_state()}, ensure_ascii=False).encode("utf-8"))
             except Exception as e:
                 self.send_error(500, str(e))
             return
@@ -809,15 +830,67 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "shutting_down"}, ensure_ascii=False).encode("utf-8"))
             return
 
-        # 小米米家发起扫码绑定
-        if self.path == "/api/xiaomi/qr_start":
+        # Wi-Fi 配网连接
+        if self.path == "/api/wifi/connect":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
             try:
-                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
-                res = qr_auth_manager.start_qr_session()
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                ssid = body.get("ssid", "")
+                pwd = body.get("password", "")
+                res = wifi_manager.connect(ssid, pwd)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        # Wi-Fi 开启/关闭 SoftAP 配网热点
+        if self.path == "/api/wifi/ap_mode":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                enable = body.get("enable", True)
+                res = wifi_manager.start_softap() if enable else wifi_manager.stop_softap()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        # 小米米家直接在屏幕弹窗显示绑定二维码 (不走浏览器弹窗)
+        if self.path in ["/api/xiaomi/qr_start_screen", "/api/xiaomi/qr_start"]:
+            try:
+                menu_fsm.show_xiaomi_qr_on_screen()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "status": "waiting",
+                    "action": "displayed_on_robot_screen",
+                    "message": "已在小猪屏幕上显示米家授权二维码"
+                }, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        # 关闭屏幕上的米家弹窗
+        if self.path == "/api/xiaomi/qr_dismiss_screen":
+            try:
+                menu_fsm.close_xiaomi_qr()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok"}, ensure_ascii=False).encode("utf-8"))
             except Exception as e:
                 self.send_error(500, str(e))
             return

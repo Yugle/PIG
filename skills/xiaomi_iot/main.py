@@ -78,19 +78,12 @@ def run(device="台灯", action="打开", value=""):
             names = [d.get("name") for d in qr_auth_manager.synced_devices if d.get("name")]
             return f"米家 App 扫码授权已成功！当前已为你自动同步 {len(names)} 个设备：{', '.join(names[:5])}。所有局域网 Token 与 IP 均已就绪，可直接语音控制！"
 
-        res = qr_auth_manager.start_qr_session()
-        if res.get("status") == "waiting":
-            qr_url = res.get("qr_url")
-            login_url = res.get("login_url")
-            return (
-                f"【米家 App 一键扫码授权】\n\n"
-                f"已为你生成米家登录二维码，请打开手机【米家 App】右上角「+」->「扫一扫」直接扫描下方二维码完成授权：\n\n"
-                f"![米家扫码登录]({qr_url})\n\n"
-                f"👉 授权完成后系统将自动同步全家米家设备局域网 Token！\n"
-                f"（备用网页登录链接：{login_url}）"
-            )
-        else:
-            return f"获取米家扫码二维码失败: {res.get('error', '未知错误')}"
+        try:
+            from core.menu_fsm import menu_fsm
+            menu_fsm.show_xiaomi_qr_on_screen()
+        except Exception:
+            pass
+        return "好嘞！已在我的屏幕上弹出米家授权二维码啦，请打开手机【米家 App】扫码授权，完成后我将自动同步你的所有智能设备！"
 
     # 1. 判断是否为「扫描/查询设备列表」意图 (排除将设备名“扫地机”误判为查询)
     is_query = (

@@ -1628,12 +1628,14 @@
       update_status: "已是最新版本",
       qr_base64: "",
       main_menu_items: [
-        { num: "01", title: "无线配置", desc: "手机扫码进设置后台 / 查IP" },
+        { num: "01", title: "无线与配网", desc: "AP热点配网 / 查IP / 手机设置" },
         { num: "02", title: "系统体检", desc: "网络延迟与外设实时排障" },
         { num: "03", title: "硬件开关", desc: "麦克风静音 / 追踪 / 休眠" },
         { num: "04", title: "系统设置", desc: "固件版本 / 系统更新 / 电源管理" }
       ],
       system_items: [
+        { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定" },
+        { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗" },
         { id: "version", name: "系统固件版本", val: "v2.4.0" },
         { id: "update", name: "检查系统更新", val: "已是最新版本" },
         { id: "restart", name: "重启机器人服务", val: "平滑重载" },
@@ -1645,6 +1647,20 @@
         camera_status: "正常 (OK)",
         mic_status: "收音中 (OK)",
         cpu_temp: "45°C"
+      },
+      wifi: {
+        connected: true,
+        ssid: "PIG-WiFi-Net",
+        ip: location.hostname || "127.0.0.1",
+        ap_mode: false,
+        ap_ssid: "PIG-Setup-8090",
+        ap_password: "88888888",
+        ap_ip: "192.168.4.1"
+      },
+      xiaomi_qr: {
+        active: false,
+        status: "等待扫码授权中...",
+        device_count: 0
       }
     };
 
@@ -1676,8 +1692,53 @@
       })
       .catch(() => {});
 
-    async function sendHwButton(button, eventType = "click") {
-      // 1. 本地极速响应
+    // ---------------- 物理与虚拟 4 键导航状态管理 (队列化 + 边界钳制 + 防抖防跳) ----------------
+    let hwButtonQueue = [];
+    let isProcessingHwButton = false;
+    let localActionSeq = 0;
+    let lastLocalNavTime = 0;
+
+    async function processHwButtonQueue() {
+      if (isProcessingHwButton || hwButtonQueue.length === 0) return;
+      isProcessingHwButton = true;
+
+      while (hwButtonQueue.length > 0) {
+        const item = hwButtonQueue.shift();
+        try {
+          const res = await fetch("/api/hardware/button", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ button: item.button, event: item.eventType, seq: item.seq })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.menu_state) {
+              // 关键保护：如果用户在请求在途期间又点击了按键，或者队列中还有未处理按键，绝不覆盖本地 cursor！
+              if (item.seq < localActionSeq || hwButtonQueue.length > 0) {
+                const { cursor, ...rest } = data.menu_state;
+                menuState = Object.assign(menuState, rest);
+              } else {
+                menuState = Object.assign(menuState, data.menu_state);
+              }
+              if (menuState.qr_base64 && qrCodeImg && !qrCodeLoaded) {
+                qrCodeImg.src = menuState.qr_base64;
+                qrCodeLoaded = true;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("按键发送后端异常:", e);
+        }
+      }
+
+      isProcessingHwButton = false;
+    }
+
+    function sendHwButton(button, eventType = "click") {
+      lastLocalNavTime = Date.now();
+      const currentSeq = ++localActionSeq;
+
+      // 1. 本地极速 0ms 响应 (绝对安全边界钳制 Clamping，彻底根除快速连续按造成的跳顶与反复跳)
       if (menuState.mode === "FACE") {
         if (button === "K3" && eventType === "long_press") {
           menuState.mode = "MENU_MAIN";
@@ -1692,9 +1753,15 @@
             fetch("/api/barge_in", { method: "POST" }).catch(() => {});
           }
         }
+      } else if (menuState.mode === "XIAOMI_QR") {
+        if (button === "K4" || button === "K3") {
+          menuState.mode = "FACE";
+          fetch("/api/xiaomi/qr_dismiss_screen", { method: "POST" }).catch(() => {});
+        }
       } else if (menuState.mode === "MENU_MAIN") {
-        if (button === "K1") menuState.cursor = (menuState.cursor - 1 + 4) % 4;
-        else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % 4;
+        const mainLen = (menuState.main_menu_items && menuState.main_menu_items.length) || 4;
+        if (button === "K1") menuState.cursor = Math.max(0, menuState.cursor - 1);
+        else if (button === "K2") menuState.cursor = Math.min(mainLen - 1, menuState.cursor + 1);
         else if (button === "K4") menuState.mode = "FACE";
         else if (button === "K3") {
           if (menuState.cursor === 0) {
@@ -1711,11 +1778,26 @@
             menuState.cursor = 0;
           }
         }
-      } else if (menuState.mode === "QR_CODE" || menuState.mode === "DOCTOR") {
+      } else if (menuState.mode === "QR_CODE") {
+        if (button === "K3") {
+          const curAp = Boolean(menuState.wifi && menuState.wifi.ap_mode);
+          fetch("/api/wifi/ap_mode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enable: !curAp })
+          }).then(r => r.json()).then(d => {
+            if (menuState.wifi) menuState.wifi.ap_mode = !curAp;
+            preloadQrCode();
+          }).catch(() => {});
+        } else if (button === "K4") {
+          menuState.mode = "MENU_MAIN";
+        }
+      } else if (menuState.mode === "DOCTOR") {
         if (button === "K4" || button === "K3") menuState.mode = "MENU_MAIN";
       } else if (menuState.mode === "TOGGLES") {
-        if (button === "K1") menuState.cursor = (menuState.cursor - 1 + 3) % 3;
-        else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % 3;
+        const togLen = (menuState.toggle_items && menuState.toggle_items.length) || 3;
+        if (button === "K1") menuState.cursor = Math.max(0, menuState.cursor - 1);
+        else if (button === "K2") menuState.cursor = Math.min(togLen - 1, menuState.cursor + 1);
         else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 2; }
         else if (button === "K3") {
           if (menuState.cursor === 0) menuState.is_mic_muted = !menuState.is_mic_muted;
@@ -1723,13 +1805,20 @@
           else if (menuState.cursor === 2) menuState.servo_sleeping = !menuState.servo_sleeping;
         }
       } else if (menuState.mode === "SYSTEM") {
-        const sysLen = (menuState.system_items && menuState.system_items.length) || 4;
-        if (button === "K1") menuState.cursor = (menuState.cursor - 1 + sysLen) % sysLen;
-        else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % sysLen;
+        const sysLen = (menuState.system_items && menuState.system_items.length) || 5;
+        if (button === "K1") menuState.cursor = Math.max(0, menuState.cursor - 1);
+        else if (button === "K2") menuState.cursor = Math.min(sysLen - 1, menuState.cursor + 1);
         else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 3; }
         else if (button === "K3") {
           const cur = (menuState.system_items && menuState.system_items[menuState.cursor]) || {};
-          if (cur.id === "update") {
+          if (cur.id === "face_id") {
+            menuState.mode = "FACE_ENROLL";
+            menuState.face_enroll_msg = "请正对摄像头 (3s)";
+            menuState.face_enroll_step = 3;
+          } else if (cur.id === "mijia") {
+            menuState.mode = "XIAOMI_QR";
+            fetch("/api/xiaomi/qr_start_screen", { method: "POST" }).catch(() => {});
+          } else if (cur.id === "update") {
             cur.val = "检查更新中...";
             fetch("/api/system/update_check", { method: "POST" })
               .then(r => r.json())
@@ -1748,34 +1837,29 @@
             fetch("/api/system/shutdown", { method: "POST" }).catch(() => {});
           }
         }
+      } else if (menuState.mode === "FACE_ENROLL") {
+        if (button === "K4") {
+          menuState.mode = "SYSTEM";
+          menuState.cursor = 0;
+        }
       }
 
-      // 2. 发送给 Python 后端同步
-      try {
-        const res = await fetch("/api/hardware/button", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ button, event: eventType })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.menu_state) {
-            menuState = Object.assign(menuState, data.menu_state);
-            if (menuState.qr_base64 && qrCodeImg && !qrCodeLoaded) {
-              qrCodeImg.src = menuState.qr_base64;
-              qrCodeLoaded = true;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("按键发送后端异常:", e);
-      }
+      // 2. 将事件加入防抖执行队列，排队向后端同步
+      hwButtonQueue.push({ button, eventType, seq: currentSeq });
+      processHwButtonQueue();
     }
 
-    // 键盘全局快捷键监听 (W/S/Enter/M/Esc)
+    // 键盘全局快捷键监听 (W/S/Enter/M/Esc，包含长按自动重复节流保护)
+    let lastKeyRepeatTime = 0;
     window.addEventListener("keydown", (e) => {
       const activeEl = document.activeElement;
       if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) return;
+
+      if (e.repeat && Date.now() - lastKeyRepeatTime < 110) {
+        e.preventDefault();
+        return;
+      }
+      lastKeyRepeatTime = Date.now();
 
       if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") {
         e.preventDefault();
@@ -1885,13 +1969,16 @@
         ctx.fillText("[▲▼] 移动    [OK] 确认    [ESC] 返回", 24, 306);
 
       } else if (menuState.mode === "QR_CODE") {
-        ctx.fillStyle = "#94949b";
-        ctx.font = "bold 11px monospace";
-        ctx.fillText("01 / CONNECT", 16, 24);
-        ctx.fillStyle = "#686870";
-        ctx.fillText("WIFI WEB", 180, 24);
+        const wf = menuState.wifi || {};
+        const isAp = Boolean(wf.ap_mode);
+        const ip = wf.ip || menuState.local_ip || location.hostname;
 
-        const ip = menuState.local_ip || location.hostname;
+        ctx.fillStyle = isAp ? "#f59e0b" : "#94949b";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText(isAp ? "01 / AP SETUP" : "01 / NETWORK", 16, 24);
+        ctx.fillStyle = isAp ? "#f59e0b" : "#10b981";
+        ctx.fillText(isAp ? "HOTSPOT" : "ONLINE", 180, 24);
+
         // 居中极简白底卡片
         ctx.fillStyle = "#ffffff";
         roundRect(ctx, 42, 46, 156, 156, 10, true);
@@ -1915,15 +2002,87 @@
           ctx.fillText("二维码载入中...", 76, 128);
         }
 
+        if (isAp) {
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 13px sans-serif";
+          ctx.fillText(`热点: ${wf.ap_ssid || 'PIG-Setup-8090'}`, 24, 222);
+          ctx.fillStyle = "#8e8e93";
+          ctx.font = "11px monospace";
+          ctx.fillText(`密码: ${wf.ap_password || '88888888'} (手机扫码直连)`, 24, 242);
+          ctx.fillStyle = "#787880";
+          ctx.font = "11px sans-serif";
+          ctx.fillText(`后台: ${wf.ap_ip || '192.168.4.1'}:8090/settings`, 24, 264);
+
+          ctx.strokeStyle = "#222226";
+          ctx.beginPath();
+          ctx.moveTo(16, 288);
+          ctx.lineTo(224, 288);
+          ctx.stroke();
+          ctx.fillStyle = "#66666e";
+          ctx.font = "10px sans-serif";
+          ctx.fillText("[OK] 切换常态网络       [ESC] 返回", 24, 306);
+        } else {
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 13px sans-serif";
+          ctx.fillText(`已连接: ${wf.ssid || 'WiFi 网络'}`, 24, 222);
+          ctx.fillStyle = "#8e8e93";
+          ctx.font = "11px monospace";
+          ctx.fillText(`IP: ${ip}:8090`, 24, 242);
+          ctx.fillStyle = "#787880";
+          ctx.font = "11px sans-serif";
+          ctx.fillText("手机扫码进入设置后台配网或改设", 24, 264);
+
+          ctx.strokeStyle = "#222226";
+          ctx.beginPath();
+          ctx.moveTo(16, 288);
+          ctx.lineTo(224, 288);
+          ctx.stroke();
+          ctx.fillStyle = "#66666e";
+          ctx.font = "10px sans-serif";
+          ctx.fillText("[OK] 开启AP配网热点    [ESC] 返回", 24, 306);
+        }
+
+      } else if (menuState.mode === "XIAOMI_QR") {
+        ctx.fillStyle = "#ff6700";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText("MI HOME / AUTH", 16, 24);
+        ctx.fillStyle = "#94949b";
+        ctx.fillText("BINDING", 188, 24);
+
+        ctx.fillStyle = "#ffffff";
+        roundRect(ctx, 42, 46, 156, 156, 10, true);
+
+        if (!qrCodeImg) preloadQrCode();
+        if (menuState.qr_base64 && qrCodeImg && qrCodeImg.src !== menuState.qr_base64) {
+          qrCodeImg.src = menuState.qr_base64;
+          qrCodeLoaded = true;
+        }
+        if (qrCodeLoaded && qrCodeImg && (qrCodeImg.complete || menuState.qr_base64)) {
+          try {
+            ctx.drawImage(qrCodeImg, 48, 52, 144, 144);
+          } catch (e) {
+            ctx.fillStyle = "#000000";
+            ctx.font = "11px sans-serif";
+            ctx.fillText("二维码载入中...", 76, 128);
+          }
+        } else {
+          ctx.fillStyle = "#000000";
+          ctx.font = "11px sans-serif";
+          ctx.fillText("二维码载入中...", 76, 128);
+        }
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 13px sans-serif";
+        ctx.fillText("打开米家App 扫码授权", 24, 222);
+
+        const xSt = (menuState.xiaomi_qr && menuState.xiaomi_qr.status) || "等待扫码中...";
+        ctx.fillStyle = xSt.includes("成功") ? "#10b981" : "#f59e0b";
+        ctx.font = "11px monospace";
+        ctx.fillText(xSt, 24, 242);
+
         ctx.fillStyle = "#787880";
         ctx.font = "11px sans-serif";
-        ctx.fillText("IP 地址", 24, 222);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 15px monospace";
-        ctx.fillText(`${ip}:8090`, 24, 242);
-        ctx.fillStyle = "#9999a0";
-        ctx.font = "11px sans-serif";
-        ctx.fillText("手机连相同 WiFi 扫码访问设置页", 24, 266);
+        ctx.fillText("绑定后可直接语音控制米家台灯/插座", 24, 264);
 
         ctx.strokeStyle = "#222226";
         ctx.beginPath();
@@ -1932,7 +2091,7 @@
         ctx.stroke();
         ctx.fillStyle = "#66666e";
         ctx.font = "10px sans-serif";
-        ctx.fillText("按任意键或 [ESC] 返回", 58, 306);
+        ctx.fillText("[OK] 刷新二维码       [ESC] 取消返回", 28, 306);
 
       } else if (menuState.mode === "DOCTOR") {
         ctx.fillStyle = "#94949b";
@@ -3998,7 +4157,13 @@
       if (!ev || !ev.type) return;
 
       if (ev.type === "menu_state" && ev.data) {
-        menuState = Object.assign(menuState, ev.data);
+        // 当本地在 500ms 内操作过菜单，或者按键队列未清空时，保护本地高亮 cursor 不被网络延迟包冲刷覆盖
+        if (Date.now() - lastLocalNavTime < 500 || hwButtonQueue.length > 0 || isProcessingHwButton) {
+          const { cursor, ...rest } = ev.data;
+          menuState = Object.assign(menuState, rest);
+        } else {
+          menuState = Object.assign(menuState, ev.data);
+        }
         return;
       }
 
