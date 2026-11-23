@@ -1311,8 +1311,8 @@
         saccadeOffset.y = (Math.random() - 0.5) * 5;
         nextSaccadeTime = now + 2500 + Math.random() * 2500;
       }
-      lookOffset.x += (targetLookOffset.x + saccadeOffset.x - lookOffset.x) * 0.2;
-      lookOffset.y += (targetLookOffset.y + saccadeOffset.y - lookOffset.y) * 0.2;
+      lookOffset.x += (targetLookOffset.x + saccadeOffset.x - lookOffset.x) * 0.55;
+      lookOffset.y += (targetLookOffset.y + saccadeOffset.y - lookOffset.y) * 0.55;
 
       // 4. 清除与绘制底色
       eyeCtx.fillStyle = "#0a0e14";
@@ -2004,7 +2004,7 @@
             } finally {
               isDetectingFrame = false;
             }
-          }, 100);
+          }, 60);
 
         } catch (err) {
           console.error("无法打开本地摄像头:", err);
@@ -2285,7 +2285,7 @@
             setEmotion("NORMAL");
             updateAngles(90, 90);
             document.getElementById("overlay-action").innerText = "待机 (IDLE)";
-          }, 100);
+          }, 60);
         }
         afterglowTimer = null;
       }, 2000);
@@ -4019,8 +4019,8 @@
       // 平滑插值转动 (基准角度 + 附加微动)
       const desiredPan = Math.max(10, Math.min(170, targetPan + panOffset));
       const desiredTilt = Math.max(50, Math.min(130, targetTilt + tiltOffset));
-      currentPan += (desiredPan - currentPan) * 0.14;
-      currentTilt += (desiredTilt - currentTilt) * 0.14;
+      currentPan += (desiredPan - currentPan) * 0.22;
+      currentTilt += (desiredTilt - currentTilt) * 0.22;
 
       // 实时同步当前物理角度到 HUD 显控面板
       const elOverlayPan = document.getElementById("overlay-pan");

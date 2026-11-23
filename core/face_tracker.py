@@ -103,14 +103,25 @@ class FaceTracker:
                     }
                     cx = float((box[0] + box[2] / 2.0) / self.input_size[0])
                     cy = float((box[1] + box[3] / 2.0) / self.input_size[1])
-                    raw_offset_x = float((cx - 0.5) * 2.0)
+                    # 镜像映射到用户镜像视口空间 (Mirror View Space):
+                    # 用户向右移动 (屏幕向右) -> cx < 0.5 -> raw_offset_x 为正
+                    # 用户向左移动 (屏幕向左) -> cx > 0.5 -> raw_offset_x 为负
+                    raw_offset_x = -float((cx - 0.5) * 2.0)
                     raw_offset_y = float((cy - 0.5) * 2.0)
 
-                    # 像素级微噪过滤：若人脸微小抖动小于阈值，不扰动主平滑滤波
-                    if abs(raw_offset_x - self.smooth_offset_x) > self.noise_threshold:
-                        self.smooth_offset_x = float(self.smooth_offset_x * (1 - self.alpha) + raw_offset_x * self.alpha)
-                    if abs(raw_offset_y - self.smooth_offset_y) > self.noise_threshold:
-                        self.smooth_offset_y = float(self.smooth_offset_y * (1 - self.alpha) + raw_offset_y * self.alpha)
+                    # 敏捷自适应滤波 (动态响应: 动作发生时 85% 权重即刻跟进，静止时死区完全锁定防抖)
+                    diff_x = abs(raw_offset_x - self.smooth_offset_x)
+                    if diff_x > 0.035:
+                        self.smooth_offset_x = float(self.smooth_offset_x * 0.15 + raw_offset_x * 0.85)
+                    elif diff_x > 0.015:
+                        self.smooth_offset_x = float(self.smooth_offset_x * 0.70 + raw_offset_x * 0.30)
+
+                    diff_y = abs(raw_offset_y - self.smooth_offset_y)
+                    if diff_y > 0.035:
+                        self.smooth_offset_y = float(self.smooth_offset_y * 0.15 + raw_offset_y * 0.85)
+                    elif diff_y > 0.015:
+                        self.smooth_offset_y = float(self.smooth_offset_y * 0.70 + raw_offset_y * 0.30)
+
                     return True, self.smooth_offset_x, self.smooth_offset_y
             except Exception:
                 pass
@@ -130,14 +141,21 @@ class FaceTracker:
                     }
                     cx = float((x + fw / 2.0) / self.input_size[0])
                     cy = float((y + fh / 2.0) / self.input_size[1])
-                    raw_offset_x = float((cx - 0.5) * 2.0)
+                    raw_offset_x = -float((cx - 0.5) * 2.0)
                     raw_offset_y = float((cy - 0.5) * 2.0)
 
-                    # 像素级微噪过滤：若人脸微小抖动小于阈值，不扰动主平滑滤波
-                    if abs(raw_offset_x - self.smooth_offset_x) > self.noise_threshold:
-                        self.smooth_offset_x = float(self.smooth_offset_x * (1 - self.alpha) + raw_offset_x * self.alpha)
-                    if abs(raw_offset_y - self.smooth_offset_y) > self.noise_threshold:
-                        self.smooth_offset_y = float(self.smooth_offset_y * (1 - self.alpha) + raw_offset_y * self.alpha)
+                    diff_x = abs(raw_offset_x - self.smooth_offset_x)
+                    if diff_x > 0.035:
+                        self.smooth_offset_x = float(self.smooth_offset_x * 0.15 + raw_offset_x * 0.85)
+                    elif diff_x > 0.015:
+                        self.smooth_offset_x = float(self.smooth_offset_x * 0.70 + raw_offset_x * 0.30)
+
+                    diff_y = abs(raw_offset_y - self.smooth_offset_y)
+                    if diff_y > 0.035:
+                        self.smooth_offset_y = float(self.smooth_offset_y * 0.15 + raw_offset_y * 0.85)
+                    elif diff_y > 0.015:
+                        self.smooth_offset_y = float(self.smooth_offset_y * 0.70 + raw_offset_y * 0.30)
+
                     return True, self.smooth_offset_x, self.smooth_offset_y
             except Exception:
                 pass
@@ -157,57 +175,64 @@ class FaceTracker:
         :param mode: 跟踪模式 "9grid" (九向离散，推荐) 或 "continuous" (连续防抖)
         :return: (look_x, look_y, target_pan, target_tilt)
         """
-        # 1. 瞳孔视线注视偏移 (带 2 像素迟滞死区，彻底消除眼球微频震颤)
-        raw_lx = int(-offset_x * 24.0)
+        # 1. 瞳孔视线注视偏移 (灵敏零延迟跟进，1px 死区过滤像素噪点)
+        # offset_x > 0 (用户在右侧) -> 眼珠向右 (look_x > 0)
+        # offset_x < 0 (用户在左侧) -> 眼珠向左 (look_x < 0)
+        raw_lx = int(offset_x * 24.0)
         raw_ly = int(offset_y * 18.0)
-        if abs(raw_lx - self.last_look_x) >= 2:
+        if abs(raw_lx - self.last_look_x) >= 1:
             self.last_look_x = raw_lx
-        if abs(raw_ly - self.last_look_y) >= 2:
+        if abs(raw_ly - self.last_look_y) >= 1:
             self.last_look_y = raw_ly
         look_x = self.last_look_x
         look_y = self.last_look_y
 
-        # 2. 动架摄像头 (真机额头摄像头闭环 P 控制，带 2.5 度死区)
+        # 2. 动架摄像头 (真机额头摄像头闭环 P 控制，带 1.5 度死区)
         if is_moving_camera:
             target_pan = cur_pan
             target_tilt = cur_tilt
-            if abs(offset_x) > 0.22:
-                delta_pan = offset_x * 3.5
-                if abs(delta_pan) >= 2.5:
+            if abs(offset_x) > 0.15:
+                delta_pan = -offset_x * 3.5
+                if abs(delta_pan) >= 1.5:
                     target_pan = max(30.0, min(150.0, cur_pan + delta_pan))
-            if abs(offset_y) > 0.22:
+            if abs(offset_y) > 0.15:
                 delta_tilt = offset_y * 2.5
-                if abs(delta_tilt) >= 2.5:
+                if abs(delta_tilt) >= 1.5:
                     target_tilt = max(68.0, min(112.0, cur_tilt + delta_tilt))
             return look_x, look_y, target_pan, target_tilt
 
         # 3. 定架摄像头 (电脑屏幕 / 网页仿真 Sim-to-Real)
         if mode == "9grid":
-            # 方案一：九向离散防抖注视 (9-Sector Discretized Gaze)
-            # 引入双向迟滞死区 (Hysteresis): 离开 CENTER 需 > 0.26，返回 CENTER 需 < 0.16，杜绝分界线反复横跳！
-            is_center_x = abs(offset_x) < (0.16 if self.cur_sector != "CENTER" else 0.26)
-            is_center_y = abs(offset_y) < (0.16 if self.cur_sector != "CENTER" else 0.26)
+            # 方案一：九向离散注视 (9-Sector Discretized Gaze)
+            # 敏捷紧凑迟滞死区 (Hysteresis):
+            # 离开 CENTER 只需偏离 > 0.18 (极度灵敏响应)，返回 CENTER 需回到 < 0.10 (稳定不跳频)
+            is_center_x = abs(offset_x) < (0.10 if self.cur_sector != "CENTER" else 0.18)
+            is_center_y = abs(offset_y) < (0.10 if self.cur_sector != "CENTER" else 0.18)
 
             if is_center_x and is_center_y:
                 self.cur_sector = "CENTER"
                 target_pan, target_tilt = 90.0, 90.0
             else:
-                # 水平向左向右判定 (偏左向左看 116°，偏右向右看 64°)
-                if offset_x < -0.24:
-                    pan = 116.0
-                    dir_x = "LEFT"
-                elif offset_x > 0.24:
+                # 水平向左向右判定 (偏右凝视 64°，偏左凝视 116°)
+                # 用户在右侧 (offset_x > 0.15) -> RIGHT, 舵机向右转动至 64°
+                # 用户在左侧 (offset_x < -0.15) -> LEFT, 舵机向左转动至 116°
+                if offset_x > 0.15:
                     pan = 64.0
                     dir_x = "RIGHT"
+                elif offset_x < -0.15:
+                    pan = 116.0
+                    dir_x = "LEFT"
                 else:
                     pan = 90.0
                     dir_x = "MID"
 
                 # 垂直向上向下判定 (上方抬头 76°，下方低头 104°)
-                if offset_y < -0.24:
+                # 用户在上方 (offset_y < -0.15) -> UP, 舵机抬头仰望 76°
+                # 用户在下方 (offset_y > 0.15) -> DOWN, 舵机低头俯视 104°
+                if offset_y < -0.15:
                     tilt = 76.0
                     dir_y = "UP"
-                elif offset_y > 0.24:
+                elif offset_y > 0.15:
                     tilt = 104.0
                     dir_y = "DOWN"
                 else:
@@ -221,20 +246,20 @@ class FaceTracker:
             self.last_target_tilt = target_tilt
             return look_x, look_y, target_pan, target_tilt
         else:
-            # 方案二：连续平滑注视带 3.0° 角度死区滤波
-            if abs(offset_x) > 0.24:
-                calc_pan = round(max(35.0, min(145.0, 90.0 + offset_x * 38.0)), 1)
+            # 方案二：连续平滑注视带 1.5° 角度死区滤波 (高灵敏迅捷)
+            if abs(offset_x) > 0.15:
+                calc_pan = round(max(35.0, min(145.0, 90.0 - offset_x * 38.0)), 1)
             else:
                 calc_pan = 90.0
 
-            if abs(offset_y) > 0.24:
+            if abs(offset_y) > 0.15:
                 calc_tilt = round(max(68.0, min(112.0, 90.0 + offset_y * 24.0)), 1)
             else:
                 calc_tilt = 90.0
 
-            if abs(calc_pan - self.last_target_pan) >= 3.0:
+            if abs(calc_pan - self.last_target_pan) >= 1.5:
                 self.last_target_pan = calc_pan
-            if abs(calc_tilt - self.last_target_tilt) >= 3.0:
+            if abs(calc_tilt - self.last_target_tilt) >= 1.5:
                 self.last_target_tilt = calc_tilt
 
             return look_x, look_y, self.last_target_pan, self.last_target_tilt
