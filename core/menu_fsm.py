@@ -196,20 +196,27 @@ class MenuFSM:
                 elif button == "K2":  # 下
                     self.cursor = (self.cursor + 1) % len(self.main_menu_items)
                     self._notify_listeners()
-                elif button == "K3":  # 确认进入
-                    target = self.main_menu_items[self.cursor]["id"]
-                    if target == "qr":
-                        self.current_mode = "QR_CODE"
-                    elif target == "doctor":
-                        self.current_mode = "DOCTOR"
-                        self.refresh_doctor_data_async()
-                    elif target == "toggles":
-                        self.current_mode = "TOGGLES"
+                elif button == "K3":
+                    if event_type == "long_press":
+                        # 长按确认 -> 快速关闭菜单返回表情
+                        self.current_mode = "FACE"
                         self.cursor = 0
-                    elif target == "power":
-                        self.current_mode = "POWER"
-                        self.cursor = 0
-                    self._notify_listeners()
+                        self._notify_listeners()
+                    else:
+                        # 短按确认 -> 进入选中项
+                        target = self.main_menu_items[self.cursor]["id"]
+                        if target == "qr":
+                            self.current_mode = "QR_CODE"
+                        elif target == "doctor":
+                            self.current_mode = "DOCTOR"
+                            self.refresh_doctor_data_async()
+                        elif target == "toggles":
+                            self.current_mode = "TOGGLES"
+                            self.cursor = 0
+                        elif target == "power":
+                            self.current_mode = "POWER"
+                            self.cursor = 0
+                        self._notify_listeners()
                 elif button == "K4":  # 返回表情
                     self.current_mode = "FACE"
                     self.cursor = 0
