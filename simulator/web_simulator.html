@@ -431,18 +431,31 @@
       padding: 4px 12px !important;
     }
 
+    #chatPanelContainer.chat-fullscreen .chat-input-wrap {
+      padding: 12px 18px 16px 18px !important;
+    }
+
     #chatPanelContainer.chat-fullscreen .chat-input-bar {
-      height: 52px !important;
+      border-radius: 26px !important;
+      padding: 6px 8px 6px 16px !important;
     }
 
     #chatPanelContainer.chat-fullscreen .chat-input-bar input {
       font-size: 0.95rem !important;
-      padding: 0 18px !important;
+      padding: 8px 6px !important;
     }
 
-    #chatPanelContainer.chat-fullscreen .chat-input-bar button {
-      font-size: 0.92rem !important;
-      padding: 0 20px !important;
+    #chatPanelContainer.chat-fullscreen .chat-btn-mic {
+      width: 38px !important;
+      height: 38px !important;
+      font-size: 1.1rem !important;
+    }
+
+    #chatPanelContainer.chat-fullscreen .chat-btn-send {
+      height: 38px !important;
+      padding: 0 18px !important;
+      font-size: 0.9rem !important;
+      border-radius: 19px !important;
     }
 
     .quick-chips-container {
@@ -521,35 +534,107 @@
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
 
+    .chat-input-wrap {
+      padding: 8px 10px 10px 10px;
+      background: #161b22;
+      border-top: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+
     .chat-input-bar {
       display: flex;
-      border-top: 1px solid var(--border-color);
-      background: #161b22;
+      align-items: center;
+      gap: 6px;
+      background: #0d1117;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 22px;
+      padding: 4px 6px 4px 12px;
+      transition: all 0.2s ease;
+    }
+
+    .chat-input-bar:focus-within {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.18);
     }
 
     .chat-input-bar input {
       flex: 1;
       background: transparent;
       border: none;
-      padding: 10px 12px;
       color: var(--text-main);
       outline: none;
-      font-size: 0.82rem;
+      font-size: 0.84rem;
+      padding: 6px 4px;
+      min-width: 0;
     }
 
-    .chat-input-bar button {
+    .chat-input-bar input::placeholder {
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 0.8rem;
+    }
+
+    .chat-btn-mic {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #21262d;
+      color: var(--cyan);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.95rem;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .chat-btn-mic:hover {
+      background: #30363d;
+      border-color: var(--cyan);
+      transform: scale(1.05);
+    }
+
+    .chat-btn-mic.recording {
+      background: rgba(255, 77, 79, 0.2) !important;
+      border-color: #ff4d4f !important;
+      color: #ff4d4f !important;
+      animation: mic-pulse 1.2s infinite;
+    }
+
+    @keyframes mic-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.6); }
+      70% { box-shadow: 0 0 0 8px rgba(255, 77, 79, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0); }
+    }
+
+    .chat-btn-send {
+      height: 32px;
+      padding: 0 14px;
+      border-radius: 16px;
       background: var(--cyan);
       color: #0d1117;
       border: none;
-      padding: 0 14px;
-      font-weight: bold;
-      cursor: pointer;
+      font-weight: 600;
       font-size: 0.82rem;
-      transition: background 0.2s ease;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+      user-select: none;
     }
 
-    .chat-input-bar button:hover {
+    .chat-btn-send:hover {
       background: #33ebff;
+      box-shadow: 0 2px 8px rgba(0, 229, 255, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .chat-btn-send:active {
+      transform: translateY(0);
     }
 
     @keyframes blink {
@@ -1054,6 +1139,7 @@
       <div class="chat-panel-body">
         <!-- 快捷场景提问气泡 (单行横向丝滑滑动，释放对话纵向高度) -->
         <div class="quick-chips-container">
+          <div class="quick-chip" onclick="sendQuickChip('小猪，你看一下我衣服什么颜色的')" style="border-color: rgba(0, 229, 255, 0.4); color: var(--cyan);">👕 看我衣服</div>
           <div class="quick-chip" onclick="sendQuickChip('看看我手里拿的什么')" style="border-color: rgba(0, 229, 255, 0.4); color: var(--cyan);">👁️ 看看手里</div>
           <div class="quick-chip" onclick="sendQuickChip('今天天气怎么样？')">🌦️ 天气</div>
           <div class="quick-chip" onclick="sendQuickChip('10秒后提醒我关火')">⏰ 倒计时</div>
@@ -1069,12 +1155,12 @@
           <div class="chat-messages" id="chatLogs">
             <div class="msg bot">你好！我是 PIG。你可以跟我聊天，我会根据你说的话做出肢体动作和表情哦！</div>
           </div>
-          <div class="chat-input-bar">
-            <input type="file" id="simPhotoInput" accept="image/*" style="display:none;" onchange="handleSimPhotoSelected(event)">
-            <button id="photoUploadBtn" onclick="document.getElementById('simPhotoInput').click()" style="background:#21262d; border-right:1px solid var(--border-color); color:#a371f7; padding:0 10px; cursor:pointer; font-size:0.78rem;" title="传一张照片给小猪看 (测试多模态视觉之眼)">📷 传图</button>
-            <input type="text" id="chatInput" placeholder="输入文字，或点击麦克风说话..." onkeydown="if(event.key==='Enter') sendChat()">
-            <button id="micBtn" onclick="toggleMic()" style="background:#21262d; border-right:1px solid var(--border-color); color:var(--cyan); padding:0 12px; cursor:pointer;" title="点击开始/停止录音 (MiMo ASR 转写)">🎙️ 语音</button>
-            <button onclick="sendChat()">发送</button>
+          <div class="chat-input-wrap">
+            <div class="chat-input-bar">
+              <input type="text" id="chatInput" placeholder="输入消息，或点击麦克风说话..." onkeydown="if(event.key==='Enter') sendChat()">
+              <button id="micBtn" class="chat-btn-mic" onclick="toggleMic()" title="点击开始/停止语音输入 (MiMo ASR 转写)">🎙️</button>
+              <button class="chat-btn-send" onclick="sendChat()">发送</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1715,7 +1801,7 @@
         try {
           btn.innerText = "⏳ 正在连接摄像头...";
           webcamStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 320, height: 240, facingMode: "user" }
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }
           });
           video.srcObject = webcamStream;
           await video.play();
@@ -1730,8 +1816,8 @@
 
           if (!offscreenCanvas) {
             offscreenCanvas = document.createElement("canvas");
-            offscreenCanvas.width = 320;
-            offscreenCanvas.height = 240;
+            offscreenCanvas.width = 480;
+            offscreenCanvas.height = 360;
             offscreenCtx = offscreenCanvas.getContext("2d");
           }
 
@@ -1744,8 +1830,8 @@
 
             isDetectingFrame = true;
             try {
-              offscreenCtx.drawImage(video, 0, 0, 320, 240);
-              const dataUrl = offscreenCanvas.toDataURL("image/jpeg", 0.60);
+              offscreenCtx.drawImage(video, 0, 0, 480, 360);
+              const dataUrl = offscreenCanvas.toDataURL("image/jpeg", 0.75);
 
               const resp = await fetch("/api/vision/face_detect", {
                 method: "POST",
@@ -3405,32 +3491,6 @@
       }
     }
 
-    function handleSimPhotoSelected(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async function(evt) {
-        const dataUrl = evt.target.result;
-        try {
-          const res = await fetch("/api/vision/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: dataUrl })
-          });
-          if (res.ok) {
-            console.log("📷 图片已成功同步给小猪的眼睛 (/tmp/pig_latest_frame.jpg)");
-            const chatInput = document.getElementById("chatInput");
-            if (chatInput) {
-              chatInput.value = "看看我给你看的这张图是什么？";
-              sendChat();
-            }
-          }
-        } catch (err) {
-          console.error("图片上传失败:", err);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
 
     async function fetchHardwareStatus() {
       try {
@@ -3591,8 +3651,9 @@
             if (e.data.size > 0) audioChunks.push(e.data);
           };
           mediaRecorder.onstop = async () => {
-            micBtn.innerText = "⏳ 识别中";
-            micBtn.style.color = "#ffb020";
+            micBtn.classList.remove("recording");
+            micBtn.innerHTML = "⏳";
+            micBtn.title = "正在转写语音...";
 
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             try {
@@ -3611,17 +3672,17 @@
               console.error("ASR 请求异常:", err);
               alert("语音识别服务请求失败: " + err.message);
             } finally {
-              micBtn.innerText = "🎙️ 语音";
-              micBtn.style.color = "var(--cyan)";
-              micBtn.style.background = "#21262d";
+              micBtn.innerHTML = "🎙️";
+              micBtn.title = "点击开始语音输入 (MiMo ASR)";
+              micBtn.classList.remove("recording");
             }
           };
 
           mediaRecorder.start();
           isRecording = true;
-          micBtn.innerText = "⏹️ 停止";
-          micBtn.style.color = "#ff4d4f";
-          micBtn.style.background = "rgba(255, 77, 79, 0.2)";
+          micBtn.classList.add("recording");
+          micBtn.innerHTML = "⏹️";
+          micBtn.title = "正在录音... 点击停止并发送";
         } catch (err) {
           console.error("无法访问麦克风:", err);
           alert("无法访问麦克风，请在浏览器地址栏允许麦克风权限！");

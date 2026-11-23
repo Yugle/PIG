@@ -32,6 +32,7 @@ class SimulationRobotHAL(BaseRobotHAL):
         self.cur_pan = 90.0
         self.cur_tilt = 90.0
         self.touch_listeners = []
+        self.button_listeners = []
         self.headless = headless or not bool(os.environ.get("DISPLAY"))
         self.has_mujoco = False
         self.model = None
@@ -99,9 +100,36 @@ class SimulationRobotHAL(BaseRobotHAL):
             pass
 
     def capture_image(self) -> bytes:
+        # 1. 优先获取数字孪生/Web 仿真端传入的真实摄像头画面 (/tmp/pig_latest_frame.jpg)
+        tmp_path = "/tmp/pig_latest_frame.jpg"
+        if os.path.exists(tmp_path):
+            try:
+                with open(tmp_path, "rb") as f:
+                    content = f.read()
+                    if len(content) > 100:
+                        return content
+            except Exception:
+                pass
+
+        main_mod = sys.modules.get("__main__")
+        if main_mod:
+            if hasattr(main_mod, "get_latest_vision_frame"):
+                try:
+                    f = main_mod.get_latest_vision_frame()
+                    if f and len(f) > 100:
+                        return f
+                except Exception:
+                    pass
+            if hasattr(main_mod, "_latest_webcam_frame") and main_mod._latest_webcam_frame:
+                return main_mod._latest_webcam_frame
+
         if cv2 is not None:
+            # Linux 环境下若不存在 /dev/video0，直接返回，避免触发 OpenCV V4L2 报警
+            if sys.platform.startswith("linux") and not os.path.exists("/dev/video0"):
+                return b""
+
             now = time.time()
-            # 仿真环境下避免高频轮询不存在的宿主机 /dev/video0
+            # 仿真环境下避免高频轮询不存在的宿主机摄像头
             if getattr(self, "_cam_unavailable", False) and (now - getattr(self, "_last_cam_check", 0) < 10.0):
                 return b""
             try:
@@ -136,6 +164,19 @@ class SimulationRobotHAL(BaseRobotHAL):
                 cb()
             except Exception as e:
                 print(f"⚠️ [HAL-Sim] 触摸回调执行异常: {e}")
+
+    def add_button_listener(self, callback):
+        """注册仿真按键事件回调"""
+        if callback not in self.button_listeners:
+            self.button_listeners.append(callback)
+
+    def trigger_button(self, button_name: str, event_type: str = "click"):
+        """仿真触发实体按键事件 (K1, K2, K3, K4)"""
+        for cb in list(self.button_listeners):
+            try:
+                cb(button_name, event_type)
+            except Exception as e:
+                print(f"⚠️ [HAL-Sim] 按键回调执行异常: {e}")
 
     def close(self):
         if hasattr(self, "_cam") and self._cam is not None:

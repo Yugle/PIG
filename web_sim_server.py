@@ -35,8 +35,17 @@ _latest_webcam_frame = None
 def get_latest_vision_frame():
     """获取最新视觉帧字节流 (优先网页/客户端摄像头，其次硬件 HAL)"""
     global _latest_webcam_frame
-    if _latest_webcam_frame:
+    if _latest_webcam_frame and len(_latest_webcam_frame) > 100:
         return _latest_webcam_frame
+    tmp_path = "/tmp/pig_latest_frame.jpg"
+    if os.path.exists(tmp_path):
+        try:
+            with open(tmp_path, "rb") as f:
+                c = f.read()
+                if len(c) > 100:
+                    return c
+        except Exception:
+            pass
     if hardware_agent and hardware_agent.hal:
         try:
             return hardware_agent.hal.capture_image()
@@ -438,6 +447,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        global _latest_webcam_frame
         # 调整唤醒词灵敏度阈值与麦克风软件增益
         if self.path == "/api/wakeword/config":
             content_length = int(self.headers.get("Content-Length", 0))
@@ -630,7 +640,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 if "," in img_data:
                     img_data = img_data.split(",", 1)[1]
                 img_bytes = base64.b64decode(img_data)
-                global _latest_webcam_frame
                 _latest_webcam_frame = img_bytes
                 with open("/tmp/pig_latest_frame.jpg", "wb") as f:
                     f.write(img_bytes)
@@ -653,7 +662,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 if "," in img_data:
                     img_data = img_data.split(",", 1)[1]
                 img_bytes = base64.b64decode(img_data)
-                global _latest_webcam_frame
                 _latest_webcam_frame = img_bytes
                 try:
                     with open("/tmp/pig_latest_frame.jpg", "wb") as f:

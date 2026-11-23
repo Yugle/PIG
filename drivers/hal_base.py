@@ -52,3 +52,18 @@ class BaseRobotHAL(ABC):
         手动或仿真触发一次触摸事件。
         """
         pass
+
+    def add_button_listener(self, callback):
+        """
+        注册实体独立按键 (K1~K4) 事件监听回调。
+        :param callback: 接受 (button_name: str, event_type: str) 的回调函数
+        button_name: 'K1' | 'K2' | 'K3' | 'K4'
+        event_type: 'click' | 'long_press'
+        """
+        pass
+
+    def trigger_button(self, button_name: str, event_type: str = "click"):
+        """
+        手动或仿真触发一次按键事件。
+        """
+        pass
