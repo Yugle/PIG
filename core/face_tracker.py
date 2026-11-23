@@ -28,6 +28,7 @@ class FaceTracker:
         self.smooth_offset_x = 0.0
         self.smooth_offset_y = 0.0
         self.alpha = 0.35  # 平滑系数
+        self.last_box = None  # 最近一次检测到的人脸边界框 {"x", "y", "w", "h"}
 
     def _init_detector(self):
         if cv2 is None:
@@ -86,6 +87,12 @@ class FaceTracker:
                 if faces is not None and len(faces) > 0:
                     face = faces[0]
                     box = face[0:4]
+                    self.last_box = {
+                        "x": int(box[0]),
+                        "y": int(box[1]),
+                        "w": int(box[2]),
+                        "h": int(box[3])
+                    }
                     cx = (box[0] + box[2] / 2.0) / self.input_size[0]
                     cy = (box[1] + box[3] / 2.0) / self.input_size[1]
                     raw_offset_x = (cx - 0.5) * 2.0
@@ -104,6 +111,12 @@ class FaceTracker:
                 faces = self.cascade_detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
                 if len(faces) > 0:
                     x, y, fw, fh = faces[0]
+                    self.last_box = {
+                        "x": int(x),
+                        "y": int(y),
+                        "w": int(fw),
+                        "h": int(fh)
+                    }
                     cx = (x + fw / 2.0) / self.input_size[0]
                     cy = (y + fh / 2.0) / self.input_size[1]
                     raw_offset_x = (cx - 0.5) * 2.0
@@ -115,6 +128,7 @@ class FaceTracker:
             except Exception:
                 pass
 
+        self.last_box = None
         return False, 0.0, 0.0
 
     def compute_gaze_and_angles(self, offset_x: float, offset_y: float, cur_pan: float, cur_tilt: float):

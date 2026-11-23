@@ -768,9 +768,23 @@
         </div>
 
         <div class="viewport-controls-bar">
-          <button class="view-btn" id="gazeToggleBtn" onclick="toggleGazeTracking()" title="开启后，机器人头部与眼球将跟随您的鼠标/人脸两级视线注视">👁️ 注视追踪: 关</button>
+          <button class="view-btn" id="gazeToggleBtn" onclick="toggleGazeTracking()" title="开启后，机器人头部与眼球将跟随您的鼠标两级视线注视">👁️ 鼠标注视: 关</button>
+          <button class="view-btn" id="webcamGazeBtn" onclick="toggleWebcamGaze()" title="开启电脑真实摄像头，通过轻量级 YuNet 人脸检测实时驱动 3D 机器人头颈注视跟随">📷 电脑摄像头追踪: 关</button>
           <button class="view-btn" onclick="setCameraView('close')">🎯 正面特写</button>
           <button class="view-btn" onclick="setCameraView('front')">🔄 伴侣全景</button>
+        </div>
+
+        <!-- 📷 电脑真实摄像头实时人脸注视追踪 HUD 监视小窗 -->
+        <div id="webcamHudModal" style="display:none; position:absolute; bottom:65px; left:20px; width:160px; background:rgba(13, 17, 23, 0.92); border:1px solid var(--cyan); border-radius:8px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:30; backdrop-filter:blur(6px);">
+          <div style="background:rgba(0, 229, 255, 0.15); padding:4px 8px; font-size:0.75rem; color:var(--cyan); font-weight:600; display:flex; justify-content:space-between; align-items:center;">
+            <span>📷 视觉注视 HUD</span>
+            <span id="webcamFpsBadge" style="font-size:0.7rem; color:#7ee787;">0 FPS</span>
+          </div>
+          <div style="position:relative; width:160px; height:120px; background:#000;">
+            <video id="webcamVideo" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; transform:scaleX(-1);"></video>
+            <canvas id="webcamOverlayCanvas" width="160" height="120" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></canvas>
+          </div>
+          <div id="webcamStatusText" style="padding:4px 6px; font-size:0.7rem; color:var(--text-sub); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">正在捕获人脸...</div>
         </div>
 
         <!-- 🔔 具身主动打断提醒弹窗 -->
@@ -1404,13 +1418,13 @@
       gazeTrackingEnabled = !gazeTrackingEnabled;
       const btn = document.getElementById("gazeToggleBtn");
       if (gazeTrackingEnabled) {
-        btn.innerText = "👁️ 注视追踪: 开";
+        btn.innerText = "👁️ 鼠标注视: 开";
         btn.style.color = "var(--cyan)";
         btn.style.borderColor = "var(--cyan)";
         btn.style.background = "rgba(0, 229, 255, 0.15)";
         playChirp("wake_chime");
       } else {
-        btn.innerText = "👁️ 注视追踪: 关";
+        btn.innerText = "👁️ 鼠标注视: 关";
         btn.style.color = "var(--text-sub)";
         btn.style.borderColor = "var(--border-color)";
         btn.style.background = "rgba(13, 17, 23, 0.8)";
@@ -1428,7 +1442,7 @@
 
     // 视窗鼠标移动监听 -> 两级注视追踪
     container.addEventListener("mousemove", (e) => {
-      if (!gazeTrackingEnabled || isSpeaking || isThinking) return;
+      if (!gazeTrackingEnabled || webcamGazeEnabled || isSpeaking || isThinking) return;
       recordUserAction();
       const rect = container.getBoundingClientRect();
       const normX = ((e.clientX - rect.left) / rect.width - 0.5) * 2.0;
@@ -1445,6 +1459,157 @@
         targetTilt = Math.max(68, Math.min(112, 90 + normY * 22));
       }
     });
+
+    // 📷 电脑真实摄像头人脸注视追踪 (Sim-to-Real PC Webcam Integration)
+    let webcamGazeEnabled = false;
+    let webcamStream = null;
+    let webcamInterval = null;
+    let offscreenCanvas = null;
+    let offscreenCtx = null;
+    let isDetectingFrame = false;
+
+    async function toggleWebcamGaze() {
+      recordUserAction();
+      const btn = document.getElementById("webcamGazeBtn");
+      const hud = document.getElementById("webcamHudModal");
+      const video = document.getElementById("webcamVideo");
+      const overlay = document.getElementById("webcamOverlayCanvas");
+      const statusText = document.getElementById("webcamStatusText");
+      const fpsBadge = document.getElementById("webcamFpsBadge");
+
+      if (!webcamGazeEnabled) {
+        try {
+          btn.innerText = "⏳ 正在连接摄像头...";
+          webcamStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 320, height: 240, facingMode: "user" }
+          });
+          video.srcObject = webcamStream;
+          await video.play();
+
+          webcamGazeEnabled = true;
+          btn.innerText = "📷 电脑摄像头追踪: 开";
+          btn.style.color = "var(--cyan)";
+          btn.style.borderColor = "var(--cyan)";
+          btn.style.background = "rgba(0, 229, 255, 0.15)";
+          hud.style.display = "block";
+          playChirp("wake_chime");
+
+          if (!offscreenCanvas) {
+            offscreenCanvas = document.createElement("canvas");
+            offscreenCanvas.width = 320;
+            offscreenCanvas.height = 240;
+            offscreenCtx = offscreenCanvas.getContext("2d");
+          }
+
+          let lastTime = Date.now();
+          let frameCount = 0;
+
+          // 启动定时采集，向后端轻量 YuNet 模型发送视频帧 (~10 FPS)
+          webcamInterval = setInterval(async () => {
+            if (!webcamGazeEnabled || isDetectingFrame) return;
+            if (isSpeaking || isThinking) return;
+
+            isDetectingFrame = true;
+            try {
+              offscreenCtx.drawImage(video, 0, 0, 320, 240);
+              const dataUrl = offscreenCanvas.toDataURL("image/jpeg", 0.60);
+
+              const resp = await fetch("/api/vision/face_detect", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: dataUrl })
+              });
+
+              if (resp.ok) {
+                const data = await resp.json();
+                frameCount++;
+                const now = Date.now();
+                if (now - lastTime >= 1000) {
+                  const fps = Math.round((frameCount * 1000) / (now - lastTime));
+                  fpsBadge.innerText = `${fps} FPS`;
+                  frameCount = 0;
+                  lastTime = now;
+                }
+
+                const ctx = overlay.getContext("2d");
+                ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+                if (data.has_face) {
+                  statusText.innerText = `👁️ 锁定人脸: X:${data.offset_x > 0 ? '+' : ''}${data.offset_x} Y:${data.offset_y > 0 ? '+' : ''}${data.offset_y}`;
+                  statusText.style.color = "var(--cyan)";
+
+                  // 画人脸定位框 (镜像处理)
+                  if (data.box) {
+                    const scaleX = overlay.width / 320;
+                    const scaleY = overlay.height / 240;
+                    const bx = overlay.width - (data.box.x + data.box.w) * scaleX;
+                    const by = data.box.y * scaleY;
+                    const bw = data.box.w * scaleX;
+                    const bh = data.box.h * scaleY;
+
+                    ctx.strokeStyle = "#00e5ff";
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(bx, by, bw, bh);
+                    ctx.fillStyle = "rgba(0, 229, 255, 0.15)";
+                    ctx.fillRect(bx, by, bw, bh);
+                  }
+
+                  // 1. 动眼球瞳孔
+                  if (data.look_x !== undefined && data.look_y !== undefined) {
+                    lookOffset.x = data.look_x;
+                    lookOffset.y = data.look_y;
+                    drawEyes(currentEmotion);
+                  }
+
+                  // 2. 动 3D 机械头颈
+                  if (data.target_pan !== undefined && data.target_tilt !== undefined) {
+                    targetPan = data.target_pan;
+                    targetTilt = data.target_tilt;
+                  }
+                } else {
+                  statusText.innerText = "🔍 寻找主人人脸中...";
+                  statusText.style.color = "var(--text-sub)";
+                }
+              }
+            } catch (err) {
+              // 容忍偶尔网络微小波动
+            } finally {
+              isDetectingFrame = false;
+            }
+          }, 100);
+
+        } catch (err) {
+          console.error("无法打开本地摄像头:", err);
+          alert("无法访问电脑摄像头，请检查浏览器权限设置，或确认是否有其他应用占用了摄像头。");
+          btn.innerText = "📷 电脑摄像头追踪: 关";
+          btn.style.color = "var(--text-sub)";
+          btn.style.borderColor = "var(--border-color)";
+          btn.style.background = "rgba(13, 17, 23, 0.8)";
+          webcamGazeEnabled = false;
+        }
+      } else {
+        // 关闭摄像头追踪
+        webcamGazeEnabled = false;
+        btn.innerText = "📷 电脑摄像头追踪: 关";
+        btn.style.color = "var(--text-sub)";
+        btn.style.borderColor = "var(--border-color)";
+        btn.style.background = "rgba(13, 17, 23, 0.8)";
+        hud.style.display = "none";
+
+        if (webcamInterval) {
+          clearInterval(webcamInterval);
+          webcamInterval = null;
+        }
+        if (webcamStream) {
+          webcamStream.getTracks().forEach(t => t.stop());
+          webcamStream = null;
+        }
+        lookOffset.x = 0;
+        lookOffset.y = 0;
+        updateAngles(90, 90);
+        drawEyes(currentEmotion);
+      }
+    }
 
     // P1: 闲置状态机时间戳与交互记录
     let lastInteractionTime = Date.now();

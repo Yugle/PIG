@@ -489,6 +489,54 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(400, str(e))
             return
 
+        # 电脑真实摄像头视觉注视帧处理接口 (Sim-to-Real PC Webcam)
+        if self.path == "/api/vision/face_detect":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8"))
+                img_data = body.get("image", "")
+                if "," in img_data:
+                    img_data = img_data.split(",", 1)[1]
+                img_bytes = base64.b64decode(img_data)
+                import numpy as np
+                import cv2
+                nparr = np.frombuffer(img_bytes, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+                # 确保检测器处于激活状态
+                face_tracker.enabled = True
+                has_face, ox, oy = face_tracker.detect_face(frame)
+                res = {
+                    "status": "ok",
+                    "has_face": bool(has_face),
+                    "offset_x": round(ox, 3),
+                    "offset_y": round(oy, 3)
+                }
+
+                if has_face:
+                    cur_p = getattr(hardware_agent.hal, "cur_pan", 90.0)
+                    cur_t = getattr(hardware_agent.hal, "cur_tilt", 90.0)
+                    lx, ly, tp, tt = face_tracker.compute_gaze_and_angles(ox, oy, cur_p, cur_t)
+                    res["look_x"] = lx
+                    res["look_y"] = ly
+                    res["target_pan"] = round(tp, 1)
+                    res["target_tilt"] = round(tt, 1)
+
+                    if face_tracker.last_box:
+                        res["box"] = face_tracker.last_box
+
+                    if abs(ox) > 0.22 or abs(oy) > 0.22:
+                        hardware_agent.hal.set_angles(tp, tt)
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps(res).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
         # 主动关怀开关与配置切换
         if self.path == "/api/proactive_care":
             content_length = int(self.headers.get("Content-Length", 0))
