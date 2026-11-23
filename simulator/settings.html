@@ -494,6 +494,42 @@
     <button class="btn btn-secondary" style="margin-top:12px;" onclick="runDoctorCheck()">重新检测</button>
   </section>
 
+  <!-- 6. 飞书机器人与远程通知 (多 Session 隔离) -->
+  <section class="card">
+    <div class="card-title">06 / FEISHU BOT & REMOTE NOTIFICATIONS</div>
+    <p style="font-size:0.75rem; color:#888; margin-top:-6px; margin-bottom:12px; line-height:1.4;">
+      配置飞书机器人后，机器人异常报警、深夜自进化日记将自动推送至飞书群或私聊，并支持多通道独立会话与指令交互。
+    </p>
+
+    <div class="form-group">
+      <label>飞书群机器人 Webhook 地址 (极速简单模式)</label>
+      <input type="text" id="feishuWebhookInput" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." style="font-size:0.8rem; font-family:monospace;">
+      <span style="font-size:0.7rem; color:#666; display:block; margin-top:3px;">在飞书任意群聊设置中添加【自定义机器人】，复制 Webhook 粘贴在此即可接收富文本卡片通知</span>
+    </div>
+
+    <div class="form-row" style="margin-top:10px;">
+      <div class="form-group" style="flex:1;">
+        <label>App ID (双向聊天/企业自建应用)</label>
+        <input type="text" id="feishuAppIdInput" placeholder="cli_a..." style="font-size:0.8rem; font-family:monospace;">
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label>App Secret</label>
+        <input type="password" id="feishuAppSecretInput" placeholder="App Secret" style="font-size:0.8rem; font-family:monospace;">
+      </div>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button class="btn" style="flex:1;" onclick="saveFeishuConfig()">保存飞书配置</button>
+      <button class="btn btn-secondary" style="flex:1;" onclick="testFeishuAlert()">🔔 发送测试告警卡片</button>
+      <button class="btn btn-secondary" style="flex:1;" onclick="testFeishuDiary()">🌙 发送进化日记</button>
+    </div>
+
+    <div style="margin-top:14px; padding-top:10px; border-top:1px solid #222; font-size:0.72rem; color:#888; display:flex; justify-content:space-between; align-items:center;">
+      <span>活跃会话通道 (多 Session 隔离):</span>
+      <span id="activeSessionsDisplay" style="font-family:monospace; color:#10b981; font-weight:600;">device (实体机)</span>
+    </div>
+  </section>
+
   <div class="toast" id="toast">已保存</div>
 
   <script>
@@ -529,6 +565,13 @@
           document.getElementById("diagIp").innerText = data.local_ip || location.hostname;
           document.getElementById("diagTemp").innerText = data.cpu_temp || "45°C";
           document.getElementById("diagMimo").innerText = data.mimo_status || "正常 (OK)";
+
+          if (data.feishu) {
+            if (data.feishu.webhook_url) document.getElementById("feishuWebhookInput").value = data.feishu.webhook_url;
+            if (data.feishu.app_id) document.getElementById("feishuAppIdInput").value = data.feishu.app_id;
+            if (data.feishu.app_secret) document.getElementById("feishuAppSecretInput").value = data.feishu.app_secret;
+          }
+          refreshFeishuStatus();
         }
       } catch (e) {
         console.error("加载配置失败:", e);
@@ -797,6 +840,91 @@
           }
         } catch (e) {}
       }, 2000);
+    }
+
+    async function refreshFeishuStatus() {
+      try {
+        const res = await fetch("/api/feishu/status");
+        if (res.ok) {
+          const d = await res.json();
+          const disp = document.getElementById("activeSessionsDisplay");
+          if (d.active_sessions && Object.keys(d.active_sessions).length > 0) {
+            const keys = Object.keys(d.active_sessions);
+            disp.innerText = keys.join(", ");
+          } else {
+            disp.innerText = "device (实体机)";
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function saveFeishuConfig() {
+      const webhook_url = document.getElementById("feishuWebhookInput").value.trim();
+      const app_id = document.getElementById("feishuAppIdInput").value.trim();
+      const app_secret = document.getElementById("feishuAppSecretInput").value.trim();
+      try {
+        const res = await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            feishu: { webhook_url, app_id, app_secret }
+          })
+        });
+        if (res.ok) {
+          showToast("飞书配置已保存");
+          refreshFeishuStatus();
+        } else {
+          alert("保存失败");
+        }
+      } catch (e) {
+        alert("保存失败: " + e);
+      }
+    }
+
+    async function testFeishuAlert() {
+      try {
+        showToast("正在发送测试告警...");
+        const res = await fetch("/api/feishu/test_notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "alert",
+            title: "PIG 机器人测试告警",
+            content: "这是一条来自小猪机器人管理后台的手动触发测试告警卡片。硬件与多通道服务一切正常！"
+          })
+        });
+        const d = await res.json();
+        if (d.status === "ok") {
+          showToast("飞书告警卡片已送达！");
+        } else {
+          alert("发送失败: " + (d.error || (d.result && d.result.message) || "请检查 Webhook 配置"));
+        }
+      } catch (e) {
+        alert("请求失败: " + e);
+      }
+    }
+
+    async function testFeishuDiary() {
+      try {
+        showToast("正在发送进化日记...");
+        const res = await fetch("/api/feishu/test_notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "diary",
+            title: "PIG 每日进化日记 (测试)",
+            content: "今天主人跟我进行了多次互动。在听到主人叹气时，我自创了轻柔歪头陪伴动作；亲密度稳步成长，五维共情度提升！"
+          })
+        });
+        const d = await res.json();
+        if (d.status === "ok") {
+          showToast("自进化日记卡片已送达！");
+        } else {
+          alert("发送失败: " + (d.error || (d.result && d.result.message) || "请检查 Webhook 配置"));
+        }
+      } catch (e) {
+        alert("请求失败: " + e);
+      }
     }
 
     loadSettings();

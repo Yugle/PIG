@@ -1,0 +1,21 @@
+{
+  "id": "feishu_bot",
+  "name": "飞书智能助理与报警中心",
+  "version": "1.0.0",
+  "description": "连接飞书 (Lark)：支持将异常报警、夜间自进化日记、状态卡片推送到飞书群或私聊，并支持双向指令交互与多 Session 隔离",
+  "author": "PIG Team",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "执行动作：send_alert (发送报警卡片), send_diary (发送自进化日记), send_status (发送状态卡片), send_text (发送纯文本)"
+    },
+    "title": {
+      "type": "string",
+      "description": "卡片标题"
+    },
+    "content": {
+      "type": "string",
+      "description": "详细内容或文本描述"
+    }
+  }
+}

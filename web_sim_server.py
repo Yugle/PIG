@@ -63,6 +63,10 @@ def load_config():
     return {}
 
 server_cfg = load_config()
+from skills.feishu_bot.feishu_client import feishu_client
+if "feishu" in server_cfg:
+    feishu_client.update_config(server_cfg["feishu"])
+
 proactive_care = ProactiveCareManager(
     storage_dir=DATA_DIR,
     memory_manager=mem,
@@ -234,12 +238,27 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "servo_sleeping": menu_fsm.is_servo_sleeping,
                 "local_ip": state["local_ip"],
                 "cpu_temp": state["doctor"].get("cpu_temp", "45°C"),
-                "mimo_status": state["doctor"].get("mimo_status", "正常 (OK)")
+                "mimo_status": state["doctor"].get("mimo_status", "正常 (OK)"),
+                "feishu": cur_cfg.get("feishu", {})
             }
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps(response_data, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 飞书机器人状态与多 Session 活跃列表 API
+        if self.path == "/api/feishu/status":
+            from skills.feishu_bot.feishu_client import feishu_client
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "configured": feishu_client.is_configured,
+                "has_webhook": bool(feishu_client.webhook_url),
+                "has_app": bool(feishu_client.app_id and feishu_client.app_secret),
+                "active_sessions": mem.list_active_sessions() if mem else {}
+            }, ensure_ascii=False).encode("utf-8"))
             return
 
         # 五维性格与亲密度状态查询 API
@@ -675,6 +694,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 if "servo_sleeping" in body:
                     menu_fsm.is_servo_sleeping = bool(body["servo_sleeping"])
                     menu_fsm._apply_servo_sleep(menu_fsm.is_servo_sleeping)
+                if "feishu" in body and isinstance(body["feishu"], dict):
+                    cur_cfg.setdefault("feishu", {}).update(body["feishu"])
+                    from skills.feishu_bot.feishu_client import feishu_client
+                    feishu_client.update_config(cur_cfg["feishu"])
 
                 with open(cfg_file, "w", encoding="utf-8") as f:
                     json.dump(cur_cfg, f, ensure_ascii=False, indent=2)
@@ -683,6 +706,109 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(json.dumps({"status": "ok", "state": menu_fsm.get_state()}).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        # 飞书事件回调 Webhook (URL 校验 + 消息接收与多 Session 隔离闭环)
+        if self.path == "/api/feishu/webhook":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+
+                # 1. 飞书开放平台 URL 校验 (Challenge Verification)
+                if body.get("type") == "url_verification":
+                    challenge = body.get("challenge", "")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"challenge": challenge}).encode("utf-8"))
+                    return
+
+                # 2. 飞书事件消息推送 (im.message.receive_v1)
+                event = body.get("event", {})
+                if event:
+                    msg = event.get("message", {})
+                    msg_type = msg.get("message_type")
+                    if msg_type == "text":
+                        content_json = json.loads(msg.get("content", "{}"))
+                        user_raw_text = content_json.get("text", "")
+                        import re
+                        clean_text = re.sub(r"@_user_\d+\s*", "", user_raw_text).strip()
+                        sender = event.get("sender", {}).get("sender_id", {})
+                        open_id = sender.get("open_id", "")
+                        chat_id = msg.get("chat_id", "")
+
+                        if clean_text:
+                            def _handle_feishu_chat():
+                                from skills.feishu_bot.feishu_client import feishu_client
+                                from core.agent_reasoner import AgentReasoner
+                                from core.prompt_builder import PromptBuilder
+
+                                c_cfg = load_config()
+                                reasoner = AgentReasoner(
+                                    api_key=c_cfg.get("api_key") or c_cfg.get("mimo_api_key") or "",
+                                    base_url=c_cfg.get("base_url") or "https://api.xiaomimimo.com/v1",
+                                    model=c_cfg.get("llm_model") or "mimo-v2.6-flash",
+                                    max_steps=4,
+                                    enable_thinking=c_cfg.get("llm_thinking", False)
+                                )
+                                sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=300, skill_manager=skill_mgr)
+                                sid = f"feishu_{chat_id or open_id}"
+
+                                res = reasoner.run_react_loop(
+                                    user_text=clean_text,
+                                    base_sys_prompt=sys_prompt,
+                                    memory_manager=mem,
+                                    skill_manager=skill_mgr,
+                                    evolution_engine=evolution_engine,
+                                    session_id=sid,
+                                    silent=True  # 远程静默执行，绝不触发本地舵机转动与大声发音！
+                                )
+                                reply_text = res.get("reply", "小猪收到啦！")
+                                target_id = chat_id if chat_id else open_id
+                                id_type = "chat_id" if chat_id else "open_id"
+                                feishu_client.send_im_message(target_id, "text", {"text": reply_text}, receive_id_type=id_type)
+
+                            threading.Thread(target=_handle_feishu_chat, daemon=True, name="FeishuMsgWorker").start()
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        # 发送测试飞书告警/日记卡片 API
+        if self.path == "/api/feishu/test_notify":
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                post_data = self.rfile.read(content_length) if content_length > 0 else b"{}"
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                msg_type = body.get("type", "alert")
+                title = body.get("title", "PIG 机器人测试告警")
+                content = body.get("content", "这是一条来自树莓派 PIG 的测试推送！飞书告警与通知通道已打通。")
+
+                from skills.feishu_bot.feishu_client import feishu_client
+                if msg_type == "diary":
+                    p_data = evolution_engine.get_personality() if evolution_engine else {}
+                    radar = p_data.get("radar", {})
+                    lvl = p_data.get("intimacy_level", 2)
+                    tag = p_data.get("persona_tag", "元气治愈系桌宠")
+                    res = feishu_client.send_evolution_card(
+                        diary_text=content,
+                        radar_dict=radar,
+                        intimacy_level=lvl,
+                        persona_tag=tag
+                    )
+                else:
+                    res = feishu_client.send_alert_card(title, content, detail="硬件健康正常 | 多 Session 架构就绪")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "result": res}, ensure_ascii=False).encode("utf-8"))
             except Exception as e:
                 self.send_error(500, str(e))
             return

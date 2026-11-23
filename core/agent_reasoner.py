@@ -105,10 +105,14 @@ class AgentReasoner:
         base_sys_prompt: str,
         memory_manager,
         skill_manager,
-        evolution_engine=None
+        evolution_engine=None,
+        session_id: str = "device",
+        silent: bool = False
     ) -> Dict[str, Any]:
         """
         核心 ReAct 自主执行循环
+        :param session_id: 会话通道 ("device" 树莓派实体, "feishu_xxx" 飞书私聊/群聊, "web" 网页端)
+        :param silent: 是否静默执行 (远程会话禁用实体舵机动作)
         :return: {
             "reply": str,                     # 最终对主人说的话
             "behaviors": List[dict],          # 机械头部与眼球动作时序
@@ -128,12 +132,12 @@ class AgentReasoner:
         tools_prompt = skill_manager.get_skills_tools_prompt()
         full_sys_prompt = augmented_sys + "\n" + tools_prompt + "\n" + PromptBuilder.get_react_guidelines_prompt()
 
-        # 构造包含短期上下文的基础消息链
-        messages = memory_manager.get_messages_for_llm(user_text, full_sys_prompt)
+        # 构造包含短期上下文的基础消息链 (支持多 Session 隔离)
+        messages = memory_manager.get_messages_for_llm(user_text, full_sys_prompt, session_id=session_id)
 
         steps_log: List[Dict[str, Any]] = []
         final_reply = None
-        final_behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
+        final_behaviors = [] if silent else [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
         last_observation = None
         first_turn_ack = ""
 
@@ -292,17 +296,21 @@ class AgentReasoner:
             else:
                 final_reply = "抱歉主人，未能成功执行该操作，请重试。"
 
-        # 检查是否匹配用户自创的已知舞蹈动作
-        known_actions = skill_manager.list_evolved_actions()
-        for k, v in known_actions.items():
-            short_desc = v.get("description", "").split("：")[0].replace("舞", "")
-            if k in user_text.upper() or (short_desc and short_desc in user_text):
-                if v.get("keyframes"):
-                    final_behaviors = v["keyframes"]
-                    break
+        # 静默模式 (如飞书等远程通信通道) 不触发本地实体舵机与眼球动作
+        if silent:
+            final_behaviors = []
+        else:
+            # 检查是否匹配用户自创的已知舞蹈动作
+            known_actions = skill_manager.list_evolved_actions()
+            for k, v in known_actions.items():
+                short_desc = v.get("description", "").split("：")[0].replace("舞", "")
+                if k in user_text.upper() or (short_desc and short_desc in user_text):
+                    if v.get("keyframes"):
+                        final_behaviors = v["keyframes"]
+                        break
 
-        # 写入持久化长短期记忆
-        memory_manager.record_turn(user_text, final_reply)
+        # 写入持久化长短期记忆 (支持多通道 Session 隔离)
+        memory_manager.record_turn(user_text, final_reply, session_id=session_id)
 
         has_visual_qa = any(s.get("action") == "visual_qa" for s in steps_log) or (last_observation and "【小猪视觉观察】" in str(last_observation))
         ret = {
@@ -321,12 +329,16 @@ class AgentReasoner:
         base_sys_prompt: str,
         memory_manager,
         skill_manager,
-        evolution_engine=None
+        evolution_engine=None,
+        session_id: str = "device",
+        silent: bool = False
     ) -> Generator[Dict[str, Any], None, None]:
         """
         高响应流式 ReAct 自主执行循环：
         当命中最终口语答复时，实时边吐字边断句发射，驱动 TTS 抢先发声；
         当命中工具调用时，无缝衔接执行与下一步观察。
+        :param session_id: 会话通道 ("device" 树莓派实体, "feishu_xxx" 飞书私聊/群聊, "web" 网页端)
+        :param silent: 是否静默模式 (不驱动物理动作)
         """
         from core.streaming_pipeline import StreamingJsonReplyExtractor
 
@@ -339,11 +351,11 @@ class AgentReasoner:
         from core.prompt_builder import PromptBuilder
         tools_prompt = skill_manager.get_skills_tools_prompt()
         full_sys_prompt = augmented_sys + "\n" + tools_prompt + "\n" + PromptBuilder.get_react_guidelines_prompt()
-        messages = memory_manager.get_messages_for_llm(user_text, full_sys_prompt)
+        messages = memory_manager.get_messages_for_llm(user_text, full_sys_prompt, session_id=session_id)
 
         steps_log: List[Dict[str, Any]] = []
         final_reply = None
-        final_behaviors = [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
+        final_behaviors = [] if silent else [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
         last_observation = None
         first_turn_ack = ""
 
@@ -526,15 +538,18 @@ class AgentReasoner:
             else:
                 final_reply = "抱歉主人，未能成功执行该操作，请重试。"
 
-        known_actions = skill_manager.list_evolved_actions()
-        for k, v in known_actions.items():
-            short_desc = v.get("description", "").split("：")[0].replace("舞", "")
-            if k in user_text.upper() or (short_desc and short_desc in user_text):
-                if v.get("keyframes"):
-                    final_behaviors = v["keyframes"]
-                    break
+        if silent:
+            final_behaviors = []
+        else:
+            known_actions = skill_manager.list_evolved_actions()
+            for k, v in known_actions.items():
+                short_desc = v.get("description", "").split("：")[0].replace("舞", "")
+                if k in user_text.upper() or (short_desc and short_desc in user_text):
+                    if v.get("keyframes"):
+                        final_behaviors = v["keyframes"]
+                        break
 
-        memory_manager.record_turn(user_text, final_reply)
+        memory_manager.record_turn(user_text, final_reply, session_id=session_id)
 
         has_visual_qa = any(s.get("action") == "visual_qa" for s in steps_log) or (last_observation and "【小猪视觉观察】" in str(last_observation))
         done_payload = {

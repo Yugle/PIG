@@ -17,10 +17,13 @@ class MemoryManager:
         self.memory_file = memory_file
         self.max_history_turns = max_history_turns
 
-        # 短期滑动窗口内存缓冲区
-        self.short_term_history = []
+        # 多通道会话管理 (Multi-Session: "device" 为树莓派实体, "feishu_xxx" 为飞书私聊/群聊)
+        self.sessions = {
+            "device": {"history": [], "last_active": time.time()}
+        }
+        self.session_timeout = 7200  # 2小时无交互的 Session 自动重置上下文
 
-        # 长期记忆结构
+        # 长期记忆结构 (跨通道全局共享灵魂)
         self.long_term_data = {
             "bot_name": "PIG",
             "user_name": "主人",
@@ -32,6 +35,48 @@ class MemoryManager:
         }
 
         self.load()
+
+    @property
+    def short_term_history(self):
+        """兼容老代码单 Session 调用"""
+        return self.get_session_history("device")
+
+    @short_term_history.setter
+    def short_term_history(self, val):
+        self.set_session_history("device", val)
+
+    def get_session_history(self, session_id: str = "device") -> list:
+        """获取指定通道的短期上下文 (超时自动清理)"""
+        sid = session_id or "device"
+        now = time.time()
+        if sid not in self.sessions:
+            self.sessions[sid] = {"history": [], "last_active": now}
+        else:
+            if now - self.sessions[sid].get("last_active", now) > self.session_timeout:
+                self.sessions[sid] = {"history": [], "last_active": now}
+        self.sessions[sid]["last_active"] = now
+        return self.sessions[sid]["history"]
+
+    def set_session_history(self, session_id: str, history: list):
+        """设置指定通道的短期上下文"""
+        sid = session_id or "device"
+        self.sessions[sid] = {"history": history, "last_active": time.time()}
+
+    def clear_session(self, session_id: str = "device"):
+        """清空指定通道的短期上下文"""
+        sid = session_id or "device"
+        if sid in self.sessions:
+            self.sessions[sid] = {"history": [], "last_active": time.time()}
+
+    def list_active_sessions(self) -> dict:
+        """列出当前所有活跃通道及其轮数"""
+        return {
+            sid: {
+                "turns": len(data["history"]) // 2,
+                "last_active": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(data["last_active"]))
+            }
+            for sid, data in self.sessions.items()
+        }
 
     def load(self):
         """从本地磁盘加载长期记忆"""
@@ -55,8 +100,10 @@ class MemoryManager:
             print(f"⚠️ [Memory] 保存 memory.json 失败: {e}")
 
     def clear(self):
-        """清空短期与长期记忆"""
-        self.short_term_history = []
+        """清空所有通道短期会话与长期记忆"""
+        self.sessions = {
+            "device": {"history": [], "last_active": time.time()}
+        }
         self.long_term_data = {
             "bot_name": "PIG",
             "user_name": "主人",
@@ -189,31 +236,34 @@ class MemoryManager:
 """
         return base_system_prompt + memory_section
 
-    def get_messages_for_llm(self, user_text: str, base_system_prompt: str) -> list:
-        """组装完整的 [System + 短期历史 + 当前用户输入] 消息链"""
+    def get_messages_for_llm(self, user_text: str, base_system_prompt: str, session_id: str = "device") -> list:
+        """组装完整的 [System + 指定通道短期历史 + 当前用户输入] 消息链"""
         augmented_sys = self.build_prompt_with_memory(base_system_prompt, user_text=user_text)
         messages = [{"role": "system", "content": augmented_sys}]
 
-        # 附带短期滑动窗口对话
-        for turn in self.short_term_history:
+        # 附带当前 Session 短期滑动窗口对话
+        history = self.get_session_history(session_id)
+        for turn in history:
             messages.append(turn)
 
         # 加入当前用户提问
         messages.append({"role": "user", "content": user_text})
         return messages
 
-    def record_turn(self, user_text: str, bot_reply_text: str):
-        """记录本轮对话，更新亲密度并持久化"""
-        # 1. 记入短期上下文
-        self.short_term_history.append({"role": "user", "content": user_text})
-        self.short_term_history.append({"role": "assistant", "content": bot_reply_text})
+    def record_turn(self, user_text: str, bot_reply_text: str, session_id: str = "device"):
+        """记录指定通道的本轮对话，更新亲密度与事实画像并持久化"""
+        # 1. 记入当前 Session 的短期上下文
+        sid = session_id or "device"
+        history = self.get_session_history(sid)
+        history.append({"role": "user", "content": user_text})
+        history.append({"role": "assistant", "content": bot_reply_text})
 
         # 滑动窗口截断 (每轮 2 条消息: user + assistant)
         max_messages = self.max_history_turns * 2
-        if len(self.short_term_history) > max_messages:
-            self.short_term_history = self.short_term_history[-max_messages:]
+        if len(history) > max_messages:
+            self.sessions[sid]["history"] = history[-max_messages:]
 
-        # 2. 更新长期画像与亲密度
+        # 2. 更新长期画像与亲密度 (跨通道全局共享灵魂累积)
         self._extract_facts(user_text)
         self.long_term_data["interaction_count"] += 1
 

@@ -227,6 +227,22 @@ class EvolutionEngine:
                 }
                 self.memory.save()
                 print(f"✨ [EvolutionEngine] 海马体夜间反思完成: {result.get('reflection_summary')}")
+
+                # 尝试将进化日记推送至飞书群/私聊 (如果配置了飞书机器人)
+                try:
+                    from skills.feishu_bot.feishu_client import feishu_client
+                    if feishu_client.is_configured:
+                        p_tag = self.personality_data.get("persona_tag", "元气治愈系桌宠")
+                        intimacy = self.personality_data.get("intimacy_level", 1)
+                        radar = self.personality_data.get("radar", {})
+                        feishu_client.send_evolution_card(
+                            diary_text=result.get("reflection_summary", "今日陪伴打卡"),
+                            radar_dict=radar,
+                            intimacy_level=intimacy,
+                            persona_tag=p_tag
+                        )
+                except Exception as feishu_err:
+                    print(f"⚠️ [EvolutionEngine] 飞书日记推送跳过: {feishu_err}")
                 return {"status": "ok", "result": result}
             else:
                 return {"status": "error", "msg": f"LLM API 状态码 {resp.status_code}"}
