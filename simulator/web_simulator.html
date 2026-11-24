@@ -903,7 +903,9 @@
 
       <!-- 核心控制按钮组 -->
       <div style="display: flex; align-items: center; gap: 6px;">
+        <button id="radar-toggle-btn" onclick="toggleSimRadar()" style="background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" title="点击切换毫米波人体雷达感应状态 (有人靠近 / 无人离席自动休眠)">📡 雷达: 有人</button>
         <button id="touch-head-btn" onclick="triggerTouchHead()" style="background: linear-gradient(135deg, #ec4899, #f43f5e); color: white; border: none; border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(236, 72, 153, 0.35); transition: all 0.2s;" title="手掌轻抚机器人头顶 (摸头杀/语音打断)">🥰 摸摸头</button>
+
         <button id="barge-in-btn" onclick="triggerBargeIn()" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" title="立即掐断当前正在进行的语音播报 (全双工打断)">🛑 打断播报</button>
         <button id="manual-wake-btn" onclick="triggerManualWake()" style="background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; border: none; border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35); transition: all 0.2s;" title="跳过唤醒词检测，直接手动唤醒机器人">⚡ 一键唤醒</button>
         <button id="toggleConsoleBtn" onclick="toggleLeftPanel()" style="background: rgba(255, 255, 255, 0.06); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" title="展开/收起左侧调试控制台 (释放沉浸式 3D 视野)">🎛️ 调试面板</button>
@@ -4758,6 +4760,25 @@
         return;
       }
 
+      if (ev.type === "radar_presence") {
+        isRadarDetected = !!ev.detected;
+        const rBtn = document.getElementById("radar-toggle-btn");
+        if (rBtn) {
+          if (isRadarDetected) {
+            rBtn.innerHTML = "📡 雷达: 有人";
+            rBtn.style.background = "rgba(16, 185, 129, 0.18)";
+            rBtn.style.color = "#34d399";
+            rBtn.style.borderColor = "rgba(16, 185, 129, 0.4)";
+          } else {
+            rBtn.innerHTML = "📡 雷达: 无人";
+            rBtn.style.background = "rgba(239, 68, 68, 0.15)";
+            rBtn.style.color = "#f87171";
+            rBtn.style.borderColor = "rgba(239, 68, 68, 0.4)";
+          }
+        }
+        return;
+      }
+
       if (ev.type === "gaze_track") {
         if (!isSpeaking && !isThinking) {
           if (ev.look_x !== undefined && ev.look_y !== undefined) {
@@ -5240,6 +5261,38 @@
             btn.innerText = "⚡ 一键唤醒";
           }
         }, 2000);
+      }
+    }
+
+    let isRadarDetected = true;
+    async function toggleSimRadar() {
+      isRadarDetected = !isRadarDetected;
+      const btn = document.getElementById("radar-toggle-btn");
+      if (btn) {
+        btn.style.transform = "scale(0.92)";
+        setTimeout(() => { btn.style.transform = "none"; }, 200);
+        if (isRadarDetected) {
+          btn.innerHTML = "📡 雷达: 有人";
+          btn.style.background = "rgba(16, 185, 129, 0.18)";
+          btn.style.color = "#34d399";
+          btn.style.borderColor = "rgba(16, 185, 129, 0.4)";
+        } else {
+          btn.innerHTML = "📡 雷达: 无人";
+          btn.style.background = "rgba(239, 68, 68, 0.15)";
+          btn.style.color = "#f87171";
+          btn.style.borderColor = "rgba(239, 68, 68, 0.4)";
+        }
+      }
+      try {
+        const resp = await fetch("/api/radar/trigger", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ detected: isRadarDetected })
+        });
+        const res = await resp.json();
+        console.log("📡 毫米波雷达模拟切换完成:", res);
+      } catch (e) {
+        console.error("毫米波雷达触发失败:", e);
       }
     }
 

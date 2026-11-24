@@ -248,7 +248,9 @@ class TTSEngine:
             else:
                 model = "mimo-v2.5-tts"
                 user_prompt = "自然、亲切、生动的日常对话语气"
-                audio_voice = voice or self.mimo_voice or "冰糖"
+                v = voice or self.mimo_voice or "冰糖"
+                audio_voice = v if v in ["mimo_default", "冰糖", "茉莉"] else "冰糖"
+
 
             payload = {
                 "model": model,

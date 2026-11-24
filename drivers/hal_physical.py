@@ -103,6 +103,29 @@ class PhysicalRobotHAL(BaseRobotHAL):
             except Exception as e:
                 print(f"⚠️ [HAL-Physical] 按键 {b_name} (GPIO {b_pin}) 初始化跳过: {e}")
 
+        # 初始化 HLK-LD2402 24GHz 毫米波人体存在感应模块 (Pin 37 / GPIO 26)
+        # OUT 默认高电平=有人/微动，低电平=无人
+        self.radar_pin = kwargs.get("radar_pin", 26)
+        self.radar_listeners = []
+        self._radar_cb_handle = None
+        self.radar_detected = True
+
+        if self.radar_pin is not None:
+            try:
+                self.pi.set_mode(self.radar_pin, pigpio.INPUT)
+                self.pi.set_pull_up_down(self.radar_pin, pigpio.PUD_DOWN)
+                self.pi.set_glitch_filter(self.radar_pin, 50000)  # 50ms 硬件消抖
+                self.radar_detected = bool(self.pi.read(self.radar_pin))
+                self._radar_cb_handle = self.pi.callback(
+                    self.radar_pin,
+                    pigpio.EITHER_EDGE,
+                    self._on_gpio_radar
+                )
+                print(f"📡 [HAL-Physical] HLK-LD2402 毫米波人体雷达已就绪 (GPIO {self.radar_pin}, 初始状态: {'有人' if self.radar_detected else '无人'})")
+            except Exception as e:
+                print(f"⚠️ [HAL-Physical] 毫米波雷达初始化跳过: {e}")
+
+
         # 初始化 ST7789 2.4 寸 SPI 彩屏 (240x320)
         self.screen = None
         if spi is not None and st7789 is not None:
@@ -160,6 +183,31 @@ class PhysicalRobotHAL(BaseRobotHAL):
                 cb(button_name, event_type)
             except Exception as e:
                 print(f"⚠️ [HAL-Physical] 按键回调执行异常: {e}")
+
+    def _on_gpio_radar(self, gpio, level, tick):
+        """GPIO 毫米波雷达中断回调 (1=有人靠近/在场, 0=无人离席)"""
+        detected = (level == 1)
+        self.radar_detected = detected
+        self.trigger_radar(detected)
+
+    def add_radar_listener(self, callback):
+        """注册毫米波雷达人体存在事件回调"""
+        if callback not in self.radar_listeners:
+            self.radar_listeners.append(callback)
+
+    def trigger_radar(self, detected: bool):
+        """触发毫米波雷达人体事件广播"""
+        self.radar_detected = bool(detected)
+        for cb in list(self.radar_listeners):
+            try:
+                cb(self.radar_detected)
+            except Exception as e:
+                print(f"⚠️ [HAL-Physical] 毫米波雷达回调执行异常: {e}")
+
+    def is_radar_detected(self) -> bool:
+        """获取当前雷达感知状态"""
+        return bool(self.radar_detected)
+
 
     def _angle_to_pulse(self, angle: float) -> int:
         """

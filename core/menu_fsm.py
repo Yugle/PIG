@@ -438,11 +438,14 @@ class MenuFSM:
         gaze_txt = "九宫格" if gaze_mode == "9grid" else "连续跟随"
         proactive_on = c_cfg.get("proactive_care", True)
         sfx_on = c_cfg.get("non_verbal_audio", True)
+        radar_on = c_cfg.get("radar_presence_wake", True)
+        radar_status_txt = "检测有人" if getattr(self, "radar_detected", True) else "无人离席"
         
         self.hardware_items = [
             {"id": "servo_center", "icon": "servo", "name": "舵机居中归位", "val": getattr(self, "servo_center_status", "回正校准"), "type": "action"},
             {"id": "servo_test", "icon": "spark", "name": "舵机动作自检", "val": getattr(self, "servo_test_status", "自检通过"), "type": "action"},
             {"id": "servo_sleep", "icon": "lock", "name": "舵机保持通电", "val": "", "type": "toggle", "state": not self.is_servo_sleeping},
+            {"id": "radar", "icon": "spark", "name": "毫米波人体感应", "val": radar_status_txt, "type": "toggle", "state": radar_on},
             {"id": "mic", "icon": "mic", "name": "麦克风收音", "val": "", "type": "toggle", "state": not self.is_mic_muted},
             {"id": "track", "icon": "eye", "name": "人脸视线跟随", "val": "", "type": "toggle", "state": self.face_tracking_enabled},
             {"id": "gaze_mode", "icon": "grid", "name": "视线算法模式", "val": gaze_txt, "type": "cycle"},
@@ -986,6 +989,11 @@ class MenuFSM:
                         self.is_servo_sleeping = not self.is_servo_sleeping
                         self._apply_servo_sleep(self.is_servo_sleeping)
                         self._sync_hardware_items()
+                    elif item_id == "radar":
+                        c = self._load_cfg()
+                        cur_r = c.get("radar_presence_wake", True)
+                        self._save_cfg_key("radar_presence_wake", not cur_r)
+                        self._sync_hardware_items()
                     elif item_id == "mic":
                         self.is_mic_muted = not self.is_mic_muted
                         self._sync_hardware_items()
@@ -1095,6 +1103,21 @@ class MenuFSM:
             SoundEffects.play_barge_in()
         except Exception:
             pass
+
+    def handle_radar(self, detected: bool):
+        """处理 HLK-LD2402 毫米波人体雷达状态变化"""
+        c = self._load_cfg()
+        if not c.get("radar_presence_wake", True):
+            return
+
+        self.radar_detected = bool(detected)
+        if detected:
+            self.last_interaction_time = time.time()
+            if self.is_servo_sleeping:
+                self.is_servo_sleeping = False
+                self._apply_servo_sleep(False)
+        self._sync_hardware_items()
+        self._notify_listeners()
 
     def _apply_servo_sleep(self, sleep: bool):
         """舵机低头休眠与切断脉冲"""

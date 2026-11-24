@@ -119,6 +119,13 @@ class HardwareAgent:
         if hasattr(self.hal, "add_touch_listener"):
             self.hal.add_touch_listener(self._on_touch_event)
 
+        # 注册 HLK-LD2402 24GHz 毫米波雷达监听回调 (人来唤醒 / 人走自动休眠)
+        self.radar_detected = True
+        self.radar_listeners = []
+        if hasattr(self.hal, "add_radar_listener"):
+            self.hal.add_radar_listener(self._on_radar_event)
+
+
     def _init_hal(self):
         """初始化物理驱动或轻量级仿真驱动"""
         sim_forced = self.cfg.get("simulation", not IS_RASPBERRY_PI)
@@ -259,6 +266,7 @@ class HardwareAgent:
             "mic_gain": float(self.cfg.get("mic_gain", 2.5)),
             "cur_pan": getattr(self.hal, "cur_pan", 90.0),
             "cur_tilt": getattr(self.hal, "cur_tilt", 90.0),
+            "radar_detected": getattr(self, "radar_detected", True),
             "last_waking_time": self.last_waking_time
         }
 
@@ -400,6 +408,42 @@ class HardwareAgent:
                     self.hal.set_angles(90, 90)
 
         threading.Thread(target=_recover, daemon=True).start()
+
+    def add_radar_listener(self, callback):
+        """注册外层毫米波雷达事件监听器"""
+        if callback not in self.radar_listeners:
+            self.radar_listeners.append(callback)
+
+    def _on_radar_event(self, detected: bool):
+        """处理 HLK-LD2402 毫米波人体雷达信号跳变 (True=有人, False=无人)"""
+        was_detected = self.radar_detected
+        self.radar_detected = bool(detected)
+        logger.info(f"📡 [Radar] 毫米波雷达感应状态: {'有人靠近/在场 (HIGH)' if detected else '无人离席 (LOW)'}")
+
+        # 广播给前端数字孪生大屏与事件订阅者
+        self.emit_event("radar_presence", {
+            "detected": self.radar_detected,
+            "message": "📡 毫米波雷达：检测到人体在场" if detected else "📡 毫米波雷达：检测到人已离席"
+        })
+
+        if detected and not was_detected:
+            # 🚀 人来 0.1s 极速硬件中断唤醒：
+            # 若待机中且无独占动作，立即抬头睁眼待命
+            if self.state in (self.STATE_IDLE, self.STATE_AFTERGLOW) and not self.is_action_playing():
+                self.emit_event("pose_sync", {"pan": 90, "tilt": 85, "emotion": "HAPPY"})
+                if self.hal:
+                    self.hal.set_angles(90, 85)
+                # 播放轻微清脆的欢迎音效
+                import core.sound_effects as sound_effects
+                sound_effects.play_sound("happy_chirp", async_play=True)
+
+        # 广播给外层监听器 (例如 idle_fsm / menu_fsm)
+        for cb in list(self.radar_listeners):
+            try:
+                cb(self.radar_detected)
+            except Exception as e:
+                logger.warning(f"雷达外层回调异常: {e}")
+
 
     def trigger_proactive_care_payload(self, payload: Dict[str, Any]):
         """执行主动关怀载荷 (广播事件、移动姿态、播放音效与异步语音)"""

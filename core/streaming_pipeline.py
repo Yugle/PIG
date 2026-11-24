@@ -292,7 +292,10 @@ class AsyncMiMoTTSStreamer:
             else:
                 model = "mimo-v2.5-tts"
                 user_prompt = "自然、亲切、生动的日常对话语气"
-                audio_voice = self.voice
+                # 校验发音人，无效时安全回退至官方内置标准发音人 "冰糖"
+                valid_voices = ["mimo_default", "冰糖", "茉莉"]
+                audio_voice = self.voice if self.voice in valid_voices else "冰糖"
+
 
             payload = {
                 "model": model,

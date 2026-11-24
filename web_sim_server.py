@@ -342,6 +342,19 @@ menu_fsm.add_listener(on_menu_state_broadcast)
 if hardware_agent and hardware_agent.hal:
     hardware_agent.hal.add_button_listener(menu_fsm.handle_key)
 
+    # 📡 联动 HLK-LD2402 毫米波人体雷达：人来极速唤醒、人走自动休眠
+    def _on_radar_event_link(detected: bool):
+        idle_fsm.notify_radar(detected)
+        menu_fsm.handle_radar(detected)
+        on_agent_event_broadcast({
+            "type": "radar_presence",
+            "detected": detected,
+            "message": "📡 毫米波雷达：检测到人体在场" if detected else "📡 毫米波雷达：检测到人已离席"
+        })
+
+    hardware_agent.add_radar_listener(_on_radar_event_link)
+
+
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -677,6 +690,30 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "action": "touch_triggered"}, ensure_ascii=False).encode("utf-8"))
             return
+
+        # 获取毫米波雷达状态 (HLK-LD2402 24GHz FMCW)
+        if self.path in ["/api/radar", "/api/radar/status"]:
+            is_detected = True
+            if hardware_agent and hasattr(hardware_agent.hal, "is_radar_detected"):
+                is_detected = hardware_agent.hal.is_radar_detected()
+            elif hardware_agent:
+                is_detected = getattr(hardware_agent, "radar_detected", True)
+
+            cfg = menu_fsm._load_cfg()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "ok",
+                "detected": is_detected,
+                "sensor_model": "HLK-LD2402 24GHz FMCW",
+                "pin_gpio": 26,
+                "pin_physical": 37,
+                "enabled": cfg.get("radar_presence_wake", True),
+                "away_sleep_timeout_sec": idle_fsm.away_sleep_timeout_sec
+            }, ensure_ascii=False).encode("utf-8"))
+            return
+
 
         if self.path in ["/api/stop", "/api/barge_in"]:
             if hardware_agent:
@@ -1292,6 +1329,34 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "action": "touch_triggered"}, ensure_ascii=False).encode("utf-8"))
             return
+
+        # 毫米波人体雷达仿真触发接口 (POST: {"detected": true/false})
+        if self.path in ["/api/radar", "/api/radar/trigger"]:
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length) if content_length > 0 else b""
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+            except Exception:
+                body = {}
+            detected = bool(body.get("detected", True))
+            if hardware_agent and hasattr(hardware_agent.hal, "trigger_radar"):
+                hardware_agent.hal.trigger_radar(detected)
+            elif hardware_agent:
+                hardware_agent._on_radar_event(detected)
+            idle_fsm.notify_radar(detected)
+            menu_fsm.handle_radar(detected)
+
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "ok",
+                "detected": detected,
+                "message": f"毫米波雷达状态已切换为: {'有人在场 (0.1s极速中断唤醒)' if detected else '无人离席 (启动自动低功耗休眠倒计时)'}"
+            }, ensure_ascii=False).encode("utf-8"))
+            return
+
 
         if self.path in ["/api/stop", "/api/barge_in"]:
             if hardware_agent:

@@ -20,12 +20,17 @@ class IdleState:
     ACTIVE = "ACTIVE"
 
 class IdleFSM:
-    def __init__(self, bored_timeout_sec=120, dozing_timeout_sec=300):
+    def __init__(self, bored_timeout_sec=120, dozing_timeout_sec=300, away_sleep_timeout_sec=30):
         self.state = IdleState.IDLE
         self.last_active_time = time.time()
         self.bored_timeout_sec = bored_timeout_sec
         self.dozing_timeout_sec = dozing_timeout_sec
+        self.away_sleep_timeout_sec = away_sleep_timeout_sec
         self.start_time = time.time()
+
+        # 毫米波雷达 (HLK-LD2402) 人体存在状态
+        self.radar_present = True
+        self.last_radar_change_time = time.time()
 
         # 主动关怀提醒库
         self.proactive_phrases = [
@@ -36,7 +41,29 @@ class IdleFSM:
         ]
         self.last_proactive_time = time.time()
 
+    def notify_radar(self, detected: bool):
+        """
+        接收毫米波雷达 (HLK-LD2402) 电平跳变通知：
+        :param detected: True (人靠近/在场), False (人走/离席)
+        """
+        was_present = self.radar_present
+        self.radar_present = bool(detected)
+        now = time.time()
+        self.last_radar_change_time = now
+
+        if detected and not was_present:
+            # 🚀 人来极速唤醒：如果之前正在瞌睡或无聊，立即触发惊醒反弹抬头
+            if self.state in (IdleState.DOZING, IdleState.BORED):
+                self.state = IdleState.WAKING
+            else:
+                self.state = IdleState.ACTIVE
+            self.last_active_time = now
+        elif not detected and was_present:
+            # 人离开瞬间记录时间戳，开启离席休眠倒计时
+            pass
+
     def notify_active(self):
+
         """重置交互活跃时间戳（例如用户说话、发送消息、点击操作）"""
         if self.state == IdleState.DOZING:
             # 如果正在瞌睡，触发惊醒反弹状态
@@ -74,7 +101,10 @@ class IdleFSM:
                 self.state = IdleState.ACTIVE
 
         elif self.state != IdleState.ACTIVE:
-            if idle_duration > self.dozing_timeout_sec:
+            # 🚀 毫米波离席判定：若雷达检测到人已走开，且持续无人在场超过 away_sleep_timeout_sec (如 30 秒)，快速进入瞌睡/低功耗
+            if not self.radar_present and (now - self.last_radar_change_time) > self.away_sleep_timeout_sec:
+                self.state = IdleState.DOZING
+            elif idle_duration > self.dozing_timeout_sec:
                 self.state = IdleState.DOZING
             elif idle_duration > self.bored_timeout_sec:
                 self.state = IdleState.BORED

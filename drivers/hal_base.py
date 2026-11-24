@@ -67,3 +67,24 @@ class BaseRobotHAL(ABC):
         手动或仿真触发一次按键事件。
         """
         pass
+
+    def add_radar_listener(self, callback):
+        """
+        注册 HLK-LD2402 24GHz 毫米波人体存在雷达事件监听回调。
+        :param callback: 接受 (detected: bool) 的回调函数
+        detected: True (有人靠近/在场), False (人走/无人离席)
+        """
+        pass
+
+    def trigger_radar(self, detected: bool):
+        """
+        手动或仿真触发一次毫米波雷达人体状态变化事件。
+        """
+        pass
+
+    def is_radar_detected(self) -> bool:
+        """
+        获取当前毫米波雷达感知的人体存在状态。
+        """
+        return True
+

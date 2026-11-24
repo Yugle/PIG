@@ -34,6 +34,8 @@ class SimulationRobotHAL(BaseRobotHAL):
         self.cur_tilt = 90.0
         self.touch_listeners = []
         self.button_listeners = []
+        self.radar_listeners = []
+        self.radar_detected = True
         self.headless = headless or not bool(os.environ.get("DISPLAY"))
         self.has_mujoco = False
         self.model = None
@@ -222,6 +224,26 @@ class SimulationRobotHAL(BaseRobotHAL):
                 cb(button_name, event_type)
             except Exception as e:
                 print(f"⚠️ [HAL-Sim] 按键回调执行异常: {e}")
+
+    def add_radar_listener(self, callback):
+        """注册仿真毫米波雷达事件回调"""
+        if callback not in self.radar_listeners:
+            self.radar_listeners.append(callback)
+
+    def trigger_radar(self, detected: bool):
+        """仿真触发毫米波人体雷达状态跳变 (True=有人, False=无人)"""
+        self.radar_detected = bool(detected)
+        print(f"📡 [HAL-Sim] 毫米波雷达人体状态更新: {'有人靠近/在场' if self.radar_detected else '无人离席/休眠'}")
+        for cb in list(self.radar_listeners):
+            try:
+                cb(self.radar_detected)
+            except Exception as e:
+                print(f"⚠️ [HAL-Sim] 毫米波雷达回调执行异常: {e}")
+
+    def is_radar_detected(self) -> bool:
+        """获取当前毫米波人体雷达检测状态"""
+        return bool(self.radar_detected)
+
 
     def close(self):
         if hasattr(self, "_cam") and self._cam is not None:
