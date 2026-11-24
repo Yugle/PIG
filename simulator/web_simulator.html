@@ -1955,7 +1955,7 @@
         if (button === "K1") {
           menuState.easter_egg_scroll = Math.max(0, (menuState.easter_egg_scroll || 0) - 26);
         } else if (button === "K2") {
-          menuState.easter_egg_scroll = Math.min(270, (menuState.easter_egg_scroll || 0) + 26);
+          menuState.easter_egg_scroll = Math.min(230, (menuState.easter_egg_scroll || 0) + 26);
         } else if (button === "K4" || button === "K3") {
           menuState.mode = "SYSTEM";
           menuState.easter_egg_scroll = 0;
@@ -2730,19 +2730,19 @@
         }
       } else if (menuState.mode === "EASTER_EGG") {
         const scrollY = menuState.easter_egg_scroll || 0;
-        const maxScroll = 270;
+        const maxScroll = 230;
 
-        // 1. 卡片底板 (系统多主题 Material Design 3 风格，无过度粉色)
+        // 1. 卡片底板 (全高度扩展至底部，纯净极简，无粗体)
         ctx.fillStyle = MD3.surfaceContainer || "#1d2424";
-        roundRect(ctx, 10, 42, 220, 246, 10, true);
+        roundRect(ctx, 10, 42, 220, 266, 10, true);
         ctx.strokeStyle = MD3.outline || "#374442";
         ctx.lineWidth = 1;
-        roundRect(ctx, 10, 42, 220, 246, 10, false);
+        roundRect(ctx, 10, 42, 220, 266, 10, false);
 
-        // 2. 限制在视口内的正文内容 (带平滑滚动与美观排版)
+        // 2. 限制在视口内的正文内容 (带平滑滚动与美观排版，全部常规字重，绝不加粗)
         ctx.save();
         ctx.beginPath();
-        ctx.rect(10, 44, 220, 242);
+        ctx.rect(10, 44, 220, 262);
         ctx.clip();
 
         const letterItems = [
@@ -2772,7 +2772,7 @@
           { type: "highlight", text: "就像 PIG 会不断迭代。" },
           { type: "space", val: 8 },
           { type: "quote", text: "而且他，真的很想念他的白菜 🥬。" },
-          { type: "space", val: 12 }
+          { type: "space", val: 16 }
         ];
 
         let curY = 66 - scrollY;
@@ -2781,18 +2781,16 @@
             curY += item.val;
             continue;
           }
-          if (curY >= 30 && curY <= 295) {
+          if (curY >= 30 && curY <= 315) {
+            ctx.font = "13px sans-serif";
             if (item.type === "highlight") {
               ctx.fillStyle = MD3.primary;
-              ctx.font = "bold 13px sans-serif";
               ctx.fillText(item.text, 20, curY);
             } else if (item.type === "quote") {
               ctx.fillStyle = MD3.onSurface || "#e3e3e3";
-              ctx.font = "13px sans-serif";
               ctx.fillText(item.text, 20, curY);
             } else {
               ctx.fillStyle = MD3.onSurface || "#e3e3e3";
-              ctx.font = "13px sans-serif";
               ctx.fillText(item.text, 20, curY);
             }
           }
@@ -2800,30 +2798,27 @@
         }
         ctx.restore();
 
-        // 3. 顶部导航与遮罩 (系统标准顶栏：左箭头 + "关于 PIG" + "ABOUT")
+        // 3. 顶部导航与遮罩 (常规字重，绝不加粗)
         ctx.fillStyle = MD3.surface || "#121414";
         ctx.fillRect(0, 0, 240, 42);
         ctx.strokeStyle = MD3.primary;
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
         ctx.fillStyle = MD3.onSurface || "#e3e3e3";
-        ctx.font = "bold 14px sans-serif";
+        ctx.font = "14px sans-serif";
         ctx.fillText("关于 PIG", 26, 31);
         ctx.fillStyle = MD3.onSurfaceVariant || "#8a8f98";
         ctx.font = "11px sans-serif";
         ctx.fillText("ABOUT", 188, 30);
 
-        // 4. 底部状态指示与遮罩 (固定在下方)
+        // 4. 底部微遮罩 (保证边缘干净，绝无任何“翻页/返回”文字提示)
         ctx.fillStyle = MD3.surface || "#121414";
-        ctx.fillRect(0, 288, 240, 32);
-        ctx.fillStyle = MD3.onSurfaceVariant || "#8a8f98";
-        ctx.font = "11px sans-serif";
-        ctx.fillText("▲▼ 滚轮/按键翻页 | 点击返回", 42, 308);
+        ctx.fillRect(0, 310, 240, 10);
 
         // 5. 动态右侧滚动条
-        const trackY1 = 48, trackY2 = 280;
+        const trackY1 = 48, trackY2 = 302;
         const trackH = trackY2 - trackY1;
-        const thumbH = Math.max(24, Math.round((200 / 480) * trackH));
+        const thumbH = Math.max(24, Math.round((240 / 480) * trackH));
         const thumbY = trackY1 + Math.round((Math.max(0, Math.min(scrollY, maxScroll)) / maxScroll) * (trackH - thumbH));
         ctx.fillStyle = MD3.primary;
         roundRect(ctx, 226, thumbY, 3, thumbH, 1.5, true);

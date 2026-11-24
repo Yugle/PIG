@@ -385,7 +385,7 @@ class MenuFSM:
         self.version_click_count = 0
         self.last_version_click_time = 0.0
         self.easter_egg_scroll_y = 0
-        self.easter_egg_max_scroll = 270
+        self.easter_egg_max_scroll = 230
 
         # 锁与监听器
         self._lock = threading.RLock()
@@ -1444,17 +1444,17 @@ class MenuFSM:
             draw.text((24, 248), self.xiaomi_status_text, fill=p_col if "成功" in self.xiaomi_status_text else (255, 180, 0), font=self.font_small)
             draw.text((24, 270), "绑定后可直接语音控制台灯/水壶等", fill=on_surf_var, font=self.font_small)
 
-        # H. 彩蛋模式 (EASTER_EGG: 关于 PIG 的自述与介绍，整体风格与系统保持统一，无过度粉色)
+        # H. 彩蛋模式 (EASTER_EGG: 关于 PIG 的自述与介绍，全常规字体，无粗体，无底部翻页提示)
         elif self.current_mode == "EASTER_EGG":
-            font_t = getattr(self, "font_bold", self.font_main)
+            font_title = getattr(self, "font_main", self.font_main)
             font_body = getattr(self, "font_letter", self.font_main)
             font_sub = getattr(self, "font_letter_sub", self.font_small)
 
             card_bg = theme.get("surface_container", (26, 32, 32))
             card_outline = theme.get("outline", (55, 68, 66))
 
-            # 1. 绘制正文卡片底框 (跟随系统多主题调色板)
-            draw.rounded_rectangle([10, 42, 222, 286], radius=10, fill=card_bg, outline=card_outline, width=1)
+            # 1. 绘制正文卡片底框 (扩展到底部，取消多余提示栏，纯净极简)
+            draw.rounded_rectangle([10, 42, 222, 308], radius=10, fill=card_bg, outline=card_outline, width=1)
 
             letter_items = [
                 ("text", "本项目只是一名老程序员"),
@@ -1473,7 +1473,7 @@ class MenuFSM:
                 ("space", 10),
                 ("highlight", "叫 PIG 是因为："),
                 ("text", "首先是基于 PI 的，"),
-                ("quote", "其次做 PIG 的人是一只猪。"),
+                ("quote", "其次做 PIG 的人是一只 🐖。"),
                 ("space", 10),
                 ("text", "此时此刻，"),
                 ("text", "写下这段话的老程序员"),
@@ -1482,18 +1482,18 @@ class MenuFSM:
                 ("highlight", "但他坚信一切都有解决办法，"),
                 ("highlight", "就像 PIG 会不断迭代。"),
                 ("space", 8),
-                ("quote", "而且他，真的很想念他的白菜。"),
-                ("space", 12)
+                ("quote", "而且他，真的很想念他的白菜 🥬。"),
+                ("space", 16)
             ]
 
-            # 2. 绘制滚动正文内容 (只在卡片视口内 44 <= y <= 268 绘制可见行)
+            # 2. 绘制滚动正文内容 (只在卡片视口内 44 <= y <= 300 绘制可见行，全部常规字重，无粗体)
             cur_y = 56 - self.easter_egg_scroll_y
             for it_type, val in letter_items:
                 if it_type == "space":
                     cur_y += val
                     continue
 
-                if 44 <= cur_y <= 268:
+                if 44 <= cur_y <= 300:
                     if it_type == "highlight":
                         draw.text((20, cur_y), val, fill=p_col, font=font_body)
                     elif it_type == "quote":
@@ -1502,23 +1502,22 @@ class MenuFSM:
                         draw.text((20, cur_y), val, fill=on_surf, font=font_body)
                 cur_y += 19
 
-            # 3. 绘制顶部遮罩与顶栏 (纯净系统风格：左箭头 + "关于 PIG" + "ABOUT")
+            # 3. 绘制顶部遮罩与顶栏 (纯净系统风格：左箭头 + "关于 PIG" + "ABOUT"，常规字重)
             draw.rectangle([0, 0, 240, 42], fill=surf_col)
             draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
             draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), "关于 PIG", fill=on_surf, font=font_t)
+            draw.text((26, 17), "关于 PIG", fill=on_surf, font=font_title)
             draw.text((184, 21), "ABOUT", fill=on_surf_var, font=font_sub)
 
-            # 4. 绘制底部遮罩与提示栏
-            draw.rectangle([0, 288, 240, 320], fill=surf_col)
-            draw.text((46, 296), "▲▼ 滚动翻页 | K4 返回", fill=on_surf_var, font=font_sub)
+            # 4. 底部微遮罩 (保证视口底部纯净，绝无任何“翻页/返回”文字提示)
+            draw.rectangle([0, 310, 240, 320], fill=surf_col)
 
             # 5. 绘制右侧滚动条
             total_h = cur_y + self.easter_egg_scroll_y - 56
             max_s = max(1, self.easter_egg_max_scroll)
-            track_y1, track_y2 = 48, 280
+            track_y1, track_y2 = 48, 302
             track_h = track_y2 - track_y1
-            thumb_h = max(24, int((200 / max(1, total_h)) * track_h))
+            thumb_h = max(24, int((240 / max(1, total_h)) * track_h))
             thumb_y = track_y1 + int((self.easter_egg_scroll_y / max_s) * (track_h - thumb_h))
             draw.rounded_rectangle([228, thumb_y, 231, thumb_y + thumb_h], radius=1, fill=p_col)
 
