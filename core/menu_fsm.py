@@ -33,40 +33,73 @@ def get_local_ip() -> str:
         return "127.0.0.1"
 
 
-def _draw_pil_switch(draw, x: int, y: int, width: int, height: int, is_on: bool, is_selected: bool):
+# ========================================================
+# Material Design 3 (Pixel Mint Theme) 调色板与组件绘制
+# ========================================================
+MD3_SURFACE = (18, 20, 20)           # #121414 基础暗色表面
+MD3_SURF_CONT = (29, 36, 36)         # #1d2424 卡片容器表面
+MD3_OUTLINE = (61, 73, 71)           # #3d4947 边框轮廓线
+MD3_PRIMARY = (123, 208, 193)        # #7bd0c1 Pixel Mint 强调主色
+MD3_ON_PRIMARY = (0, 55, 49)         # #003731 强调色上深松绿主文字
+MD3_ON_PRIMARY_SUB = (14, 82, 73)    # #0e5249 强调色下次要文字
+MD3_ON_SURFACE = (225, 227, 227)     # #e1e3e3 表面主文字
+MD3_ON_SURF_VAR = (151, 163, 160)    # #97a3a0 表面次要文字
+MD3_BADGE_BG = (40, 59, 56)          # #283b38 未选中徽标背景
+
+def _draw_pil_switch(draw, x: int, y: int, is_on: bool, is_selected: bool, width: int = 42, height: int = 24):
+    """
+    绘制 Material Design 3 风格开关：
+    - 42x24px 药丸形轨道
+    - 选中项（薄荷绿背景上）：
+      - 开：深松绿轨道 (0, 72, 64)，纯白大滑块（直径18px）
+      - 关：柔和松绿轨道 (58, 130, 118)，深松绿小滑块（直径12px）
+    - 未选中项（深灰暗卡片上）：
+      - 开：薄荷绿轨道 (123, 208, 193)，深松绿大滑块（直径18px）
+      - 关：深暗灰轨道 (45, 56, 55)，灰边框 (61, 73, 71)，浅灰小滑块（直径12px）
+    """
     r = height // 2
-    if is_on:
-        draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(16, 185, 129))
-        kx = x + width - r
-        ky = y + r
-        kr = r - 2
-        draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(255, 255, 255))
-    else:
-        if is_selected:
-            draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(228, 228, 231), outline=(209, 213, 219), width=1)
-            kx = x + r
+    if is_selected:
+        if is_on:
+            draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(0, 72, 64))
+            kx = x + width - r
             ky = y + r
-            kr = r - 2
-            draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(113, 113, 122))
+            kr = 9
+            draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(255, 255, 255))
         else:
-            draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(39, 39, 42), outline=(63, 63, 70), width=1)
+            draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(58, 130, 118))
             kx = x + r
             ky = y + r
-            kr = r - 2
-            draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(142, 142, 147))
+            kr = 6
+            draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(0, 55, 49))
+    else:
+        if is_on:
+            draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(123, 208, 193))
+            kx = x + width - r
+            ky = y + r
+            kr = 9
+            draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(0, 55, 49))
+        else:
+            draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(45, 56, 55), outline=(61, 73, 71), width=1)
+            kx = x + r
+            ky = y + r
+            kr = 6
+            draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(143, 158, 155))
 
 def _draw_pil_badge(draw, text: str, right_x: int, center_y: int, is_selected: bool, font):
+    """
+    绘制 Material Design 3 风格胶囊徽标 (Tonal Badge)
+    """
     tw = max(24, len(text) * 11)
-    badge_w = max(36, tw + 14)
-    badge_h = 20
+    badge_w = max(38, tw + 14)
+    badge_h = 22
     bx = right_x - badge_w
     by = center_y - badge_h // 2
     if is_selected:
-        draw.rounded_rectangle([bx, by, bx + badge_w, by + badge_h], radius=10, fill=(243, 244, 246), outline=(229, 231, 235), width=1)
-        draw.text((bx + (badge_w - tw) // 2, by + 3), text, fill=(24, 24, 27), font=font)
+        draw.rounded_rectangle([bx, by, bx + badge_w, by + badge_h], radius=11, fill=(0, 72, 64))
+        draw.text((bx + (badge_w - tw) // 2, by + 3), text, fill=(255, 255, 255), font=font)
     else:
-        draw.rounded_rectangle([bx, by, bx + badge_w, by + badge_h], radius=10, fill=(34, 34, 40), outline=(50, 50, 58), width=1)
-        draw.text((bx + (badge_w - tw) // 2, by + 3), text, fill=(255, 103, 0), font=font)
+        draw.rounded_rectangle([bx, by, bx + badge_w, by + badge_h], radius=11, fill=(40, 59, 56), outline=(61, 73, 71), width=1)
+        draw.text((bx + (badge_w - tw) // 2, by + 3), text, fill=(123, 208, 193), font=font)
 
 
 class MenuFSM:
@@ -859,11 +892,11 @@ class MenuFSM:
         }
 
     # ========================================================
-    # 树莓派真机端 PIL 绘图渲染器 (极简工业设计 / 彻底去除廉价 AI 浮夸风)
+    # 树莓派真机端 PIL 绘图渲染器 (Material Design 3 Pixel Mint 质感)
     # ========================================================
     def render_pil_overlay(self, base_image: Image.Image) -> Image.Image:
         """
-        在 240x320 PIL 图像上渲染高对比度极简工业风菜单 (用于树莓派 ST7789 真机 LCD 直刷)
+        在 240x320 PIL 图像上渲染 Material Design 3 风格菜单 (用于树莓派 ST7789 真机 LCD 直刷)
         """
         img = base_image.copy()
         draw = ImageDraw.Draw(img)
@@ -876,17 +909,17 @@ class MenuFSM:
                 draw.text((200, 11), "Z", fill=(140, 140, 140), font=self.font_small)
             return img
 
-        # 2. 菜单背景：纯正工业哑光深灰浮层
-        overlay = Image.new("RGBA", (240, 320), (10, 10, 12, 245))
+        # 2. 菜单背景：Material Design 3 暗色表面 (M3 Tonal Surface)
+        overlay = Image.new("RGBA", (240, 320), (18, 20, 20, 250))
         img.paste(overlay, (0, 0), overlay)
         draw = ImageDraw.Draw(img)
 
-# 顶部极简信息栏
-        draw.line([(16, 36), (224, 36)], fill=(38, 38, 42), width=1)
+        # 顶部分割线 (M3 Outline)
+        draw.line([(16, 36), (224, 36)], fill=MD3_OUTLINE, width=1)
 
-        # A. 主菜单界面
+        # A. 主菜单界面 (M3 16px 圆角芯片卡片 + Pixel Mint 强调选框)
         if self.current_mode == "MENU_MAIN":
-            draw.text((16, 16), "SETTINGS", fill=(150, 150, 155), font=self.font_small)
+            draw.text((16, 16), "SETTINGS", fill=MD3_PRIMARY, font=self.font_small)
 
             y_start = 48
             card_h = 54
@@ -896,54 +929,55 @@ class MenuFSM:
                 card_y = y_start + idx * (card_h + card_gap)
 
                 if is_selected:
-                    # 极简高对比反色选框 (Dieter Rams / Teenage Engineering 风格)
-                    draw.rounded_rectangle([12, card_y, 228, card_y + card_h], radius=8, fill=(255, 255, 255))
-                    draw.text((22, card_y + 8), item["title"], fill=(0, 0, 0), font=self.font_bold)
-                    draw.text((22, card_y + 32), item["desc"], fill=(90, 90, 95), font=self.font_small)
-                    draw.text((212, card_y + 16), "›", fill=(0, 0, 0), font=self.font_bold)
+                    # M3 Pixel Mint 高亮卡片
+                    draw.rounded_rectangle([12, card_y, 228, card_y + card_h], radius=16, fill=MD3_PRIMARY)
+                    draw.text((22, card_y + 8), item["title"], fill=MD3_ON_PRIMARY, font=self.font_bold)
+                    draw.text((22, card_y + 32), item["desc"], fill=MD3_ON_PRIMARY_SUB, font=self.font_small)
+                    draw.text((212, card_y + 16), "›", fill=MD3_ON_PRIMARY, font=self.font_bold)
                 else:
-                    draw.rounded_rectangle([12, card_y, 228, card_y + card_h], radius=8, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
-                    draw.text((22, card_y + 8), item["title"], fill=(210, 210, 215), font=self.font_bold)
-                    draw.text((22, card_y + 32), item["desc"], fill=(120, 120, 125), font=self.font_small)
-                    draw.text((212, card_y + 16), "›", fill=(80, 80, 85), font=self.font_bold)
+                    # M3 Surface Container 暗色卡片 + Outline
+                    draw.rounded_rectangle([12, card_y, 228, card_y + card_h], radius=16, fill=MD3_SURF_CONT, outline=MD3_OUTLINE, width=1)
+                    draw.text((22, card_y + 8), item["title"], fill=MD3_ON_SURFACE, font=self.font_bold)
+                    draw.text((22, card_y + 32), item["desc"], fill=MD3_ON_SURF_VAR, font=self.font_small)
+                    draw.text((212, card_y + 16), "›", fill=MD3_ON_SURF_VAR, font=self.font_bold)
 
         # B. 扫码手机配置界面 (支持 AP 配网热点与已连接模式)
         elif self.current_mode == "QR_CODE":
             wf_st = wifi_manager.get_status()
             if wf_st["ap_mode"]:
-                draw.text((16, 16), "AP PROVISION", fill=(255, 180, 0), font=self.font_small)
+                draw.text((16, 16), "AP PROVISION", fill=MD3_PRIMARY, font=self.font_small)
                 draw.text((184, 16), "HOTSPOT", fill=(255, 180, 0), font=self.font_small)
 
-                draw.rounded_rectangle([42, 48, 198, 204], radius=10, fill=(255, 255, 255))
+                draw.rounded_rectangle([42, 48, 198, 204], radius=16, fill=(255, 255, 255))
                 qr_bytes = self.get_qr_png_bytes()
                 if qr_bytes:
                     import io
                     qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
                     img.paste(qr_pil, (48, 54))
 
-                draw.text((24, 226), f"热点: {wf_st['ap_ssid']}", fill=(255, 255, 255), font=self.font_bold)
-                draw.text((24, 248), f"密码: {wf_st['ap_password']}  (扫码直连)", fill=(130, 130, 135), font=self.font_small)
-                draw.text((24, 270), f"后台: {wf_st['ap_ip']}:8090/settings", fill=(100, 100, 105), font=self.font_small)
+                draw.text((24, 226), f"热点: {wf_st['ap_ssid']}", fill=MD3_ON_SURFACE, font=self.font_bold)
+                draw.text((24, 248), f"密码: {wf_st['ap_password']}  (扫码直连)", fill=MD3_ON_SURF_VAR, font=self.font_small)
+                draw.text((24, 270), f"后台: {wf_st['ap_ip']}:8090/settings", fill=MD3_PRIMARY, font=self.font_small)
             else:
-                draw.text((16, 16), "NETWORK", fill=(150, 150, 155), font=self.font_small)
-                draw.text((184, 16), "ONLINE", fill=(34, 197, 94), font=self.font_small)
+                draw.text((16, 16), "NETWORK", fill=MD3_PRIMARY, font=self.font_small)
+                draw.text((184, 16), "ONLINE", fill=MD3_PRIMARY, font=self.font_small)
 
                 ip = wf_st.get("ip", get_local_ip())
-                draw.rounded_rectangle([42, 48, 198, 204], radius=10, fill=(255, 255, 255))
+                draw.rounded_rectangle([42, 48, 198, 204], radius=16, fill=(255, 255, 255))
                 qr_bytes = self.get_qr_png_bytes()
                 if qr_bytes:
                     import io
                     qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
                     img.paste(qr_pil, (48, 54))
 
-                draw.text((24, 226), f"已连接: {wf_st.get('ssid', 'WiFi')}", fill=(255, 255, 255), font=self.font_bold)
-                draw.text((24, 248), f"本机 IP: {ip}:8090", fill=(130, 130, 135), font=self.font_small)
-                draw.text((24, 270), "手机扫码进后台配网或改配置", fill=(100, 100, 105), font=self.font_small)
+                draw.text((24, 226), f"已连接: {wf_st.get('ssid', 'WiFi')}", fill=MD3_ON_SURFACE, font=self.font_bold)
+                draw.text((24, 248), f"本机 IP: {ip}:8090", fill=MD3_ON_SURF_VAR, font=self.font_small)
+                draw.text((24, 270), "手机扫码进后台配网或改配置", fill=MD3_PRIMARY, font=self.font_small)
 
         # C. 一键体检诊断界面
         elif self.current_mode == "DOCTOR":
-            draw.text((16, 16), "DIAGNOSTICS", fill=(150, 150, 155), font=self.font_small)
-            draw.text((192, 16), "STATUS", fill=(110, 110, 115), font=self.font_small)
+            draw.text((16, 16), "DIAGNOSTICS", fill=MD3_PRIMARY, font=self.font_small)
+            draw.text((192, 16), "STATUS", fill=MD3_ON_SURF_VAR, font=self.font_small)
 
             d = self.doctor_cache
             items = [
@@ -958,19 +992,19 @@ class MenuFSM:
             card_h = 42
             card_gap = 8
             for label, val in items:
-                draw.rounded_rectangle([12, y, 228, y + card_h], radius=6, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
-                draw.text((22, y + 13), label, fill=(130, 130, 135), font=self.font_small)
-                is_good = any(x in val for x in ["正常", "OK", "在线", "°C"])
-                val_color = (255, 255, 255) if is_good else (245, 158, 11)
+                draw.rounded_rectangle([12, y, 228, y + card_h], radius=12, fill=MD3_SURF_CONT, outline=MD3_OUTLINE, width=1)
+                draw.text((22, y + 13), label, fill=MD3_ON_SURF_VAR, font=self.font_small)
+                is_good = any(x in val for x in ["正常", "OK", "在线", "°C"]) or ("." in val and "--" not in val)
+                val_color = MD3_PRIMARY if is_good else (245, 158, 11)
                 draw.text((115, y + 12), val, fill=val_color, font=self.font_bold)
                 y += (card_h + card_gap)
 
-        # D. 硬件控制界面 (TOGGLES: Switch 开关控件 + 视口滚动)
+        # D. 硬件控制界面 (TOGGLES: M3 Switch 开关控件 + 16px 圆角芯片)
         elif self.current_mode == "TOGGLES":
             total = len(self.hardware_items)
             cur_idx = max(0, min(total - 1, self.cursor))
 
-            draw.text((16, 16), "HARDWARE", fill=(150, 150, 155), font=self.font_small)
+            draw.text((16, 16), "HARDWARE", fill=MD3_PRIMARY, font=self.font_small)
 
             max_visible = 4
             start_idx = 0
@@ -1018,42 +1052,42 @@ class MenuFSM:
                     sub_txt = str(item.get("val", ""))
 
                 if is_selected:
-                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=8, fill=(255, 255, 255))
-                    draw.text((22, y + 8), item["name"], fill=(0, 0, 0), font=self.font_bold)
-                    draw.text((22, y + 32), sub_txt, fill=(90, 90, 95), font=self.font_small)
+                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=16, fill=MD3_PRIMARY)
+                    draw.text((22, y + 8), item["name"], fill=MD3_ON_PRIMARY, font=self.font_bold)
+                    draw.text((22, y + 32), sub_txt, fill=MD3_ON_PRIMARY_SUB, font=self.font_small)
                 else:
-                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=8, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
-                    draw.text((22, y + 8), item["name"], fill=(210, 210, 215), font=self.font_bold)
-                    draw.text((22, y + 32), sub_txt, fill=(120, 120, 125), font=self.font_small)
+                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=16, fill=MD3_SURF_CONT, outline=MD3_OUTLINE, width=1)
+                    draw.text((22, y + 8), item["name"], fill=MD3_ON_SURFACE, font=self.font_bold)
+                    draw.text((22, y + 32), sub_txt, fill=MD3_ON_SURF_VAR, font=self.font_small)
 
-                # 右侧 Switch / 胶囊徽标 / 箭头
+                # 右侧 M3 Switch / M3 胶囊徽标 / 箭头
                 if item_type == "toggle":
-                    _draw_pil_switch(draw, 12 + card_w - 46, y + 17, 36, 20, is_on, is_selected)
+                    _draw_pil_switch(draw, 12 + card_w - 52, y + 15, is_on, is_selected)
                 elif item_type == "cycle":
                     badge_txt = "九宫格" if "九宫格" in str(item.get("val", "")) else "连续跟随"
                     _draw_pil_badge(draw, badge_txt, 12 + card_w - 10, y + 27, is_selected, self.font_small)
                 else:
-                    draw.text((12 + card_w - 14, y + 16), "›", fill=(0, 0, 0) if is_selected else (80, 80, 85), font=self.font_bold)
+                    draw.text((12 + card_w - 14, y + 16), "›", fill=MD3_ON_PRIMARY if is_selected else MD3_ON_SURF_VAR, font=self.font_bold)
 
                 y += (card_h + card_gap)
 
-            # 极简工业滚动条
+            # M3 风格滚动条 (Surface Container 轨道 + Pixel Mint 滑块)
             if total > max_visible:
                 track_x = 224
                 track_y = 48
                 track_h = max_visible * (card_h + card_gap) - card_gap
-                draw.rounded_rectangle([track_x, track_y, track_x + 3, track_y + track_h], radius=2, fill=(28, 28, 32))
+                draw.rounded_rectangle([track_x, track_y, track_x + 3, track_y + track_h], radius=2, fill=MD3_SURF_CONT)
                 thumb_h = max(32, int(track_h * (max_visible / total)))
                 max_scroll = track_h - thumb_h
                 thumb_y = track_y + int((start_idx / (total - max_visible)) * max_scroll)
-                draw.rounded_rectangle([track_x, thumb_y, track_x + 3, thumb_y + thumb_h], radius=2, fill=(255, 103, 0))
+                draw.rounded_rectangle([track_x, thumb_y, track_x + 3, thumb_y + thumb_h], radius=2, fill=MD3_PRIMARY)
 
         # E. 系统设置界面 (SYSTEM: 版本号/更新/关机/重启/认主)
         elif self.current_mode == "SYSTEM":
             total = len(self.system_items)
             cur_idx = max(0, min(total - 1, self.cursor))
 
-            draw.text((16, 16), "SYSTEM", fill=(150, 150, 155), font=self.font_small)
+            draw.text((16, 16), "SYSTEM", fill=MD3_PRIMARY, font=self.font_small)
 
             max_visible = 4
             start_idx = 0
@@ -1102,39 +1136,39 @@ class MenuFSM:
                     sub_txt = str(item.get("val", ""))
 
                 if is_selected:
-                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=8, fill=(255, 255, 255))
-                    draw.text((22, y + 8), item["name"], fill=(0, 0, 0), font=self.font_bold)
-                    draw.text((22, y + 32), sub_txt, fill=(90, 90, 95), font=self.font_small)
+                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=16, fill=MD3_PRIMARY)
+                    draw.text((22, y + 8), item["name"], fill=MD3_ON_PRIMARY, font=self.font_bold)
+                    draw.text((22, y + 32), sub_txt, fill=MD3_ON_PRIMARY_SUB, font=self.font_small)
                 else:
-                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=8, fill=(18, 18, 20), outline=(32, 32, 36), width=1)
-                    draw.text((22, y + 8), item["name"], fill=(210, 210, 215), font=self.font_bold)
-                    draw.text((22, y + 32), sub_txt, fill=(120, 120, 125), font=self.font_small)
+                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=16, fill=MD3_SURF_CONT, outline=MD3_OUTLINE, width=1)
+                    draw.text((22, y + 8), item["name"], fill=MD3_ON_SURFACE, font=self.font_bold)
+                    draw.text((22, y + 32), sub_txt, fill=MD3_ON_SURF_VAR, font=self.font_small)
 
                 # 右侧胶囊徽标或动作箭头
                 if item_type in ["cycle", "info"]:
                     _draw_pil_badge(draw, str(item.get("val", "")), 12 + card_w - 10, y + 27, is_selected, self.font_small)
                 else:
-                    draw.text((12 + card_w - 14, y + 16), "›", fill=(0, 0, 0) if is_selected else (80, 80, 85), font=self.font_bold)
+                    draw.text((12 + card_w - 14, y + 16), "›", fill=MD3_ON_PRIMARY if is_selected else MD3_ON_SURF_VAR, font=self.font_bold)
 
                 y += (card_h + card_gap)
 
-            # 极简工业滚动条
+            # M3 风格滚动条
             if total > max_visible:
                 track_x = 224
                 track_y = 48
                 track_h = max_visible * (card_h + card_gap) - card_gap
-                draw.rounded_rectangle([track_x, track_y, track_x + 3, track_y + track_h], radius=2, fill=(28, 28, 32))
+                draw.rounded_rectangle([track_x, track_y, track_x + 3, track_y + track_h], radius=2, fill=MD3_SURF_CONT)
                 thumb_h = max(32, int(track_h * (max_visible / total)))
                 max_scroll = track_h - thumb_h
                 thumb_y = track_y + int((start_idx / (total - max_visible)) * max_scroll)
-                draw.rounded_rectangle([track_x, thumb_y, track_x + 3, thumb_y + thumb_h], radius=2, fill=(255, 103, 0))
+                draw.rounded_rectangle([track_x, thumb_y, track_x + 3, thumb_y + thumb_h], radius=2, fill=MD3_PRIMARY)
 
         # F. 人脸录入倒计时/取景界面 (FACE_ENROLL)
         elif self.current_mode == "FACE_ENROLL":
-            draw.text((16, 16), "FACE ID ENROLL", fill=(255, 200, 0), font=self.font_bold)
+            draw.text((16, 16), "FACE ID ENROLL", fill=MD3_PRIMARY, font=self.font_bold)
 
-            # 居中取景框
-            box_col = (255, 200, 0) if self.face_enroll_step > 0 else (34, 197, 94)
+            # 居中取景框 (M3 Mint 强调色)
+            box_col = MD3_PRIMARY if self.face_enroll_step > 0 else (34, 197, 94)
             draw.rectangle([40, 52, 200, 212], outline=box_col, width=2)
             cl = 14
             draw.line([(40, 52), (40+cl, 52)], fill=(255, 255, 255), width=3)
@@ -1148,18 +1182,18 @@ class MenuFSM:
 
             # 倒计时显示
             if self.face_enroll_step > 0:
-                draw.text((112, 115), str(self.face_enroll_step), fill=(255, 255, 255), font=self.font_bold)
+                draw.text((112, 115), str(self.face_enroll_step), fill=MD3_PRIMARY, font=self.font_bold)
 
             # 状态文案
-            draw.text((28, 230), self.face_enroll_msg, fill=(255, 255, 255), font=self.font_bold)
+            draw.text((28, 230), self.face_enroll_msg, fill=MD3_ON_SURFACE, font=self.font_bold)
 
         # G. 米家生态授权弹窗 (XIAOMI_QR: 屏幕居中渲染米家二维码)
         elif self.current_mode == "XIAOMI_QR":
-            draw.text((16, 16), "MI HOME / AUTH", fill=(255, 103, 0), font=self.font_bold)
-            draw.text((188, 16), "BINDING", fill=(150, 150, 155), font=self.font_small)
+            draw.text((16, 16), "MI HOME / AUTH", fill=MD3_PRIMARY, font=self.font_bold)
+            draw.text((188, 16), "BINDING", fill=MD3_ON_SURF_VAR, font=self.font_small)
 
             # 居中纯白卡片放二维码
-            draw.rounded_rectangle([42, 48, 198, 204], radius=10, fill=(255, 255, 255))
+            draw.rounded_rectangle([42, 48, 198, 204], radius=16, fill=(255, 255, 255))
             try:
                 from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
                 qr_bytes = qr_auth_manager.get_qr_png_bytes()
@@ -1172,9 +1206,9 @@ class MenuFSM:
             except Exception as e:
                 draw.text((50, 110), f"Error: {e}", fill=(0, 0, 0), font=self.font_small)
 
-            draw.text((24, 226), "打开米家App 扫码授权", fill=(255, 255, 255), font=self.font_bold)
-            draw.text((24, 248), self.xiaomi_status_text, fill=(255, 153, 0) if "成功" not in self.xiaomi_status_text else (34, 197, 94), font=self.font_small)
-            draw.text((24, 270), "绑定后可直接语音控制台灯/水壶等", fill=(120, 120, 125), font=self.font_small)
+            draw.text((24, 226), "打开米家App 扫码授权", fill=MD3_ON_SURFACE, font=self.font_bold)
+            draw.text((24, 248), self.xiaomi_status_text, fill=MD3_PRIMARY if "成功" in self.xiaomi_status_text else (255, 180, 0), font=self.font_small)
+            draw.text((24, 270), "绑定后可直接语音控制台灯/水壶等", fill=MD3_ON_SURF_VAR, font=self.font_small)
 
         return img
 
