@@ -381,6 +381,10 @@ class MenuFSM:
         self.xiaomi_status_text = "等待米家App扫码授权..."
         self.xiaomi_device_count = 0
 
+        # 彩蛋状态 (连续点击系统版本号触发)
+        self.version_click_count = 0
+        self.last_version_click_time = 0.0
+
         # 锁与监听器
         self._lock = threading.RLock()
         self.state_change_listeners: List[Callable[[Dict[str, Any]], None]] = []
@@ -990,6 +994,19 @@ class MenuFSM:
                         self.cycle_volume()
                     elif action_id == "timeout":
                         self.cycle_timeout()
+                    elif action_id == "version":
+                        # 连续点击版本号 5 次触发情书彩蛋
+                        now = time.time()
+                        if now - self.last_version_click_time < 2.5:
+                            self.version_click_count += 1
+                        else:
+                            self.version_click_count = 1
+                        self.last_version_click_time = now
+                        if self.version_click_count >= 5:
+                            self.version_click_count = 0
+                            self.current_mode = "EASTER_EGG"
+                            self._notify_listeners()
+                            print("💌 [MenuFSM] 触发彩蛋模式：致白菜的一封情书")
                     elif action_id == "update":
                         self.check_system_update_async()
                     elif action_id == "restart":
@@ -1007,6 +1024,14 @@ class MenuFSM:
                 if button == "K4":
                     self.current_mode = "SYSTEM"
                     self.cursor = 0
+                    self._notify_listeners()
+                return
+
+            # 8. 彩蛋模式 (EASTER_EGG: 致白菜的一封情书)
+            if self.current_mode == "EASTER_EGG":
+                if button in ["K1", "K2", "K3", "K4"]:
+                    self.current_mode = "SYSTEM"
+                    self.cursor = 7  # 保持在系统版本条目上
                     self._notify_listeners()
                 return
 
@@ -1391,6 +1416,45 @@ class MenuFSM:
             draw.text((24, 226), "打开米家App 扫码授权", fill=on_surf, font=self.font_bold)
             draw.text((24, 248), self.xiaomi_status_text, fill=p_col if "成功" in self.xiaomi_status_text else (255, 180, 0), font=self.font_small)
             draw.text((24, 270), "绑定后可直接语音控制台灯/水壶等", fill=on_surf_var, font=self.font_small)
+
+        # H. 彩蛋模式 (EASTER_EGG: 致白菜的一封情书)
+        elif self.current_mode == "EASTER_EGG":
+            draw.line([(18, 22), (13, 27)], fill=(255, 121, 198), width=2)
+            draw.line([(13, 27), (18, 32)], fill=(255, 121, 198), width=2)
+            draw.text((26, 17), "♥ 致白菜的一封信", fill=(255, 121, 198), font=self.font_bold)
+            draw.text((188, 21), "FOR HER", fill=on_surf_var, font=self.font_small)
+
+            # 居中情书卡片
+            draw.rounded_rectangle([12, 46, 228, 288], radius=14, fill=surf_col, outline=(255, 121, 198), width=1)
+
+            letter_lines = [
+                "「本项目只是一名老程序员用AI做的",
+                "能想到的比较动人的一封情书，",
+                "就像电影《失控玩家》一样，",
+                "把她的人物画像、你的语音、",
+                "你们的故事注入到 PIG 里，",
+                "PIG 会自己学习她的作息习惯，",
+                "记录她的不舒服，帮她定时喂猫，",
+                "提醒她锅里煮的茶叶蛋好了...",
+                "",
+                "叫 PIG 首先是基于 PI 的，",
+                "其次做 PIG 的人是一只猪。",
+                "",
+                "老程序员跟白菜遇到了很多问题，",
+                "但他坚信一切都有解决办法，",
+                "就像 PIG 会迭代，而且他，",
+                "真的很想念他的白菜 ♥」"
+            ]
+            y_offset = 54
+            for line in letter_lines:
+                if not line:
+                    y_offset += 4
+                    continue
+                color = (255, 182, 193) if ("想念" in line or "情书" in line or "猪" in line or "白菜" in line) else on_surf
+                draw.text((18, y_offset), line, fill=color, font=self.font_small)
+                y_offset += 14.5
+
+            draw.text((66, 296), "[按任意键返回设置]", fill=on_surf_var, font=self.font_small)
 
         return img
 

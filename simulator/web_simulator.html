@@ -1930,6 +1930,8 @@
                 }
               })
               .catch(() => { cur.val = "检查失败"; });
+          } else if (cur.id === "version") {
+            triggerEasterEggClick();
           } else if (cur.id === "restart") {
             cur.val = "正在重启...";
             fetch("/api/system/restart", { method: "POST" }).catch(() => {});
@@ -1942,6 +1944,10 @@
         if (button === "K4") {
           menuState.mode = "SYSTEM";
           menuState.cursor = 0;
+        }
+      } else if (menuState.mode === "EASTER_EGG") {
+        if (button === "K4" || button === "K3" || button === "K1" || button === "K2") {
+          menuState.mode = "SYSTEM";
         }
       }
 
@@ -1977,6 +1983,55 @@
       } else if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         sendHwButton("K4", "click");
+      }
+    });
+
+    // 允许通过鼠标直接点击屏幕画布进行交互 (支持点击版本号解密彩蛋)
+    eyeCanvas.addEventListener("click", (e) => {
+      const rect = eyeCanvas.getBoundingClientRect();
+      const scaleX = eyeCanvas.width / rect.width;
+      const scaleY = eyeCanvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top) * scaleY;
+
+      if (menuState.mode === "EASTER_EGG") {
+        sendHwButton("K4");
+        return;
+      }
+
+      // 处于系统设置界面中时，支持鼠标点选卡片
+      if (menuState.mode === "SYSTEM") {
+        const sysItems = menuState.system_items || [
+          { id: "theme" }, { id: "face_id" }, { id: "face_clear" }, { id: "mijia" },
+          { id: "voice" }, { id: "volume" }, { id: "timeout" }, { id: "version" },
+          { id: "update" }, { id: "restart" }, { id: "shutdown" }
+        ];
+        const total = sysItems.length;
+        const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
+        const maxVisible = 4;
+        let startIdx = 0;
+        if (total > maxVisible) {
+          if (curIdx < 2) startIdx = 0;
+          else if (curIdx >= total - 2) startIdx = total - maxVisible;
+          else startIdx = curIdx - 1;
+          startIdx = Math.max(0, Math.min(startIdx, total - maxVisible));
+        }
+
+        // 检查点击了哪一张卡片
+        for (let i = 0; i < maxVisible; i++) {
+          const cardY = 48 + i * 58;
+          if (cx >= 12 && cx <= 224 && cy >= cardY && cy <= cardY + 50) {
+            const realIdx = startIdx + i;
+            menuState.cursor = realIdx;
+            const item = sysItems[realIdx];
+            if (item && item.id === "version") {
+              triggerEasterEggClick();
+            } else {
+              sendHwButton("K3");
+            }
+            return;
+          }
+        }
       }
     });
 
@@ -2645,6 +2700,56 @@
           ctx.fillStyle = MD3.primary;
           roundRect(ctx, 232, thumbY, 3, thumbH, 1.5, true);
         }
+      } else if (menuState.mode === "EASTER_EGG") {
+        // 顶部返回箭头 + 标题
+        ctx.strokeStyle = "#ff79c6";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
+        ctx.fillStyle = "#ff79c6";
+        ctx.font = "bold 15px sans-serif";
+        ctx.fillText("💌 致白菜的一封信", 26, 31);
+        ctx.fillStyle = MD3.onSurfaceVariant;
+        ctx.font = "11px sans-serif";
+        ctx.fillText("FOR HER", 184, 30);
+
+        // 卡片底板
+        ctx.fillStyle = "rgba(255, 121, 198, 0.08)";
+        roundRect(ctx, 10, 44, 220, 252, 12, true);
+        ctx.strokeStyle = "rgba(255, 121, 198, 0.45)";
+        ctx.lineWidth = 1;
+        roundRect(ctx, 10, 44, 220, 252, 12, false);
+
+        // 文字排版 (微调字号和间距，完整呈现在 2.4 寸机器人面部屏幕上)
+        ctx.font = "10.5px sans-serif";
+        const lines = [
+          "「本项目只是一名老程序员用AI做的",
+          "能想到的比较动人的一封情书，",
+          "就像电影《失控玩家》一样，",
+          "把她的人物画像、你的语音、",
+          "你们的故事注入到 PIG 里，",
+          "PIG 会自己学习她的作息习惯，",
+          "记录她的不舒服，帮她定时喂猫，",
+          "提醒她锅里煮的茶叶蛋马上好了...",
+          "",
+          "叫 PIG 首先是基于 PI 的，",
+          "其次做 PIG 的人是一只 🐖。",
+          "",
+          "老程序员跟白菜遇到了很多问题，",
+          "但他坚信一切都有解决办法，",
+          "就像 PIG 会迭代，而且他，",
+          "真的很想念他的白菜 🥬」"
+        ];
+        let ty = 60;
+        for (const line of lines) {
+          if (!line) { ty += 4; continue; }
+          ctx.fillStyle = (line.includes("想念") || line.includes("情书") || line.includes("🐖") || line.includes("🥬")) ? "#ff79c6" : MD3.onSurface;
+          ctx.fillText(line, 16, ty);
+          ty += 14.5;
+        }
+
+        ctx.fillStyle = MD3.onSurfaceVariant;
+        ctx.font = "10px sans-serif";
+        ctx.fillText("[按任意键或点击屏幕返回]", 58, 308);
       }
     }
 
@@ -5906,6 +6011,10 @@
             } else {
               menuState = Object.assign(menuState, data);
             }
+            // 如果后端进入了彩蛋模式，自动同步屏幕状态
+            if (data.mode === "EASTER_EGG" && menuState.mode !== "EASTER_EGG") {
+              menuState.mode = "EASTER_EGG";
+            }
             if ((menuState.mode === "XIAOMI_QR" || menuState.mode === "QR_CODE") && menuState.qr_base64) {
               if (!qrCodeImg) {
                 qrCodeImg = new Image();
@@ -5921,6 +6030,32 @@
       } catch (e) {}
     }
     setInterval(syncMenuState, 1500);
+
+    // ==========================================
+    // 💌 致白菜的情书屏幕彩蛋控制函数
+    // ==========================================
+    function triggerEasterEggClick() {
+      const now = Date.now();
+      if (now - (window._lastVerClickTime || 0) < 2500) {
+        window._verClickCount = (window._verClickCount || 0) + 1;
+      } else {
+        window._verClickCount = 1;
+      }
+      window._lastVerClickTime = now;
+      if (window._verClickCount >= 5) {
+        window._verClickCount = 0;
+        menuState.mode = "EASTER_EGG";
+        sendHwButton("K3");
+        try {
+          const snd = new Audio("/static/sounds/wake_chime.wav");
+          snd.volume = 0.5;
+          snd.play().catch(() => {});
+        } catch (e) {}
+        showToast("💌 小猪屏幕已直接展现致白菜的情书");
+      } else if (window._verClickCount >= 2) {
+        showToast(`再按 ${5 - window._verClickCount} 次直接在屏幕上展开情书 💌`);
+      }
+    }
   </script>
 
   <!-- 动态 SVG 动图库画廊弹窗 -->
