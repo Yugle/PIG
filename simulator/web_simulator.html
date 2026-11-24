@@ -1882,9 +1882,20 @@
         else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 2; }
         else if (button === "K3") {
           const item = hwItems[menuState.cursor] || {};
-          if (item.id === "mic") menuState.is_mic_muted = !menuState.is_mic_muted;
-          else if (item.id === "track") menuState.face_tracking = !menuState.face_tracking;
-          else if (item.id === "servo_sleep") menuState.servo_sleeping = !menuState.servo_sleeping;
+          if (item.id === "mic") {
+            menuState.is_mic_muted = !menuState.is_mic_muted;
+            item.state = !menuState.is_mic_muted;
+          } else if (item.id === "track") {
+            menuState.face_tracking = !menuState.face_tracking;
+            item.state = !!menuState.face_tracking;
+          } else if (item.id === "servo_sleep") {
+            menuState.servo_sleeping = !menuState.servo_sleeping;
+            item.state = !menuState.servo_sleeping;
+          } else if (item.id === "proactive" || item.id === "sfx") {
+            item.state = (item.state !== undefined) ? !item.state : false;
+          } else if (item.id === "gaze_mode") {
+            item.val = (item.val === "九宫格灵动") ? "连续跟随" : "九宫格灵动";
+          }
         }
       } else if (menuState.mode === "SYSTEM") {
         const sysItems = menuState.system_items || [];
@@ -1962,6 +1973,76 @@
       }
     });
 
+// 极简硬件 Switch 开关与数据徽标绘制函数 (Dieter Rams / Teenage Engineering 风格)
+    function drawToggleSwitch(ctx, x, y, width, height, isOn, isSelected) {
+      const radius = height / 2;
+      ctx.save();
+      if (isOn) {
+        ctx.fillStyle = "#10b981"; // 活力高对比翡翠绿
+        roundRect(ctx, x, y, width, height, radius, true);
+      } else {
+        if (isSelected) {
+          ctx.fillStyle = "#e4e4e7"; // 选中白底卡片下的静止浅灰轨
+          roundRect(ctx, x, y, width, height, radius, true);
+          ctx.strokeStyle = "#d1d5db";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = "#27272a"; // 哑黑底卡片下的工业深灰轨
+          roundRect(ctx, x, y, width, height, radius, true);
+          ctx.strokeStyle = "#3f3f46";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+
+      // 旋钮滑块
+      const knobPadding = 2.5;
+      const knobRadius = radius - knobPadding;
+      const knobX = isOn ? (x + width - radius) : (x + radius);
+      const knobY = y + radius;
+
+      ctx.beginPath();
+      ctx.arc(knobX, knobY, knobRadius, 0, Math.PI * 2);
+      if (isOn) {
+        ctx.fillStyle = "#ffffff";
+      } else {
+        ctx.fillStyle = isSelected ? "#71717a" : "#8e8e93";
+      }
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawValueBadge(ctx, text, rightX, centerY, isSelected) {
+      ctx.save();
+      ctx.font = "bold 11px sans-serif";
+      const tw = ctx.measureText(text).width;
+      const badgeW = Math.max(36, tw + 14);
+      const badgeH = 20;
+      const badgeX = rightX - badgeW;
+      const badgeY = centerY - badgeH / 2;
+
+      if (isSelected) {
+        ctx.fillStyle = "#f3f4f6";
+        roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 10, true);
+        ctx.strokeStyle = "#e5e7eb";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = "#18181b";
+      } else {
+        ctx.fillStyle = "#222228";
+        roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 10, true);
+        ctx.strokeStyle = "#32323a";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = "#ff6700";
+      }
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, badgeX + badgeW / 2, centerY);
+      ctx.restore();
+    }
+
     // 2.4 寸屏幕 Canvas 极简工业风菜单渲染 (Dieter Rams / Teenage Engineering 风格)
     function renderMenuOverlayCanvas(ctx, w, h, now) {
       if (menuState.mode === "FACE") {
@@ -1996,60 +2077,50 @@
         ctx.fillStyle = "#94949b";
         ctx.font = "bold 11px monospace";
         ctx.fillText("SETTINGS", 16, 24);
-        ctx.fillStyle = "#686870";
-        ctx.fillText(`0${menuState.cursor + 1}/04`, 190, 24);
 
         const items = menuState.main_menu_items || [
-          { num: "01", title: "无线配置", desc: "手机扫码进设置后台 / 查IP" },
+          { num: "01", title: "无线与配网", desc: "AP热点配网 / 查IP / 手机设置" },
           { num: "02", title: "系统体检", desc: "网络延迟与外设实时排障" },
-          { num: "03", title: "硬件开关", desc: "麦克风静音 / 追踪 / 休眠" },
-          { num: "04", title: "服务电源", desc: "重启服务 / 树莓派安全关机" }
+          { num: "03", title: "硬件控制", desc: "舵机 / 麦克风 / 视线跟随" },
+          { num: "04", title: "系统设置", desc: "面容 / 音量 / 音色 / 关机" }
         ];
 
-        const yStart = 46;
+        const yStart = 48;
+        const cardH = 54;
+        const cardGap = 10;
         items.forEach((it, idx) => {
           const isSel = (idx === menuState.cursor);
-          const cy = yStart + idx * 56;
+          const cy = yStart + idx * (cardH + cardGap);
           if (isSel) {
             // 极简高对比纯白反色选框
             ctx.fillStyle = "#ffffff";
-            roundRect(ctx, 12, cy, 216, 48, 8, true);
+            roundRect(ctx, 12, cy, 216, cardH, 8, true);
             ctx.fillStyle = "#000000";
             ctx.font = "bold 14px sans-serif";
-            ctx.fillText(`${it.num}  ${it.title}`, 22, cy + 22);
+            ctx.fillText(it.title, 22, cy + 22);
             ctx.fillStyle = "#55555c";
             ctx.font = "11px sans-serif";
-            ctx.fillText(it.desc, 22, cy + 39);
+            ctx.fillText(it.desc, 22, cy + 42);
             ctx.fillStyle = "#000000";
             ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", 212, cy + 28);
+            ctx.fillText("›", 212, cy + 32);
           } else {
             ctx.fillStyle = "#121215";
             ctx.strokeStyle = "#222226";
             ctx.lineWidth = 1;
-            roundRect(ctx, 12, cy, 216, 48, 8, true);
+            roundRect(ctx, 12, cy, 216, cardH, 8, true);
             ctx.stroke();
             ctx.fillStyle = "#d1d1d6";
             ctx.font = "bold 14px sans-serif";
-            ctx.fillText(`${it.num}  ${it.title}`, 22, cy + 22);
+            ctx.fillText(it.title, 22, cy + 22);
             ctx.fillStyle = "#787880";
             ctx.font = "11px sans-serif";
-            ctx.fillText(it.desc, 22, cy + 39);
+            ctx.fillText(it.desc, 22, cy + 42);
             ctx.fillStyle = "#4a4a50";
             ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", 212, cy + 28);
+            ctx.fillText("›", 212, cy + 32);
           }
         });
-
-        // 底部按键提示
-        ctx.strokeStyle = "#222226";
-        ctx.beginPath();
-        ctx.moveTo(16, 288);
-        ctx.lineTo(224, 288);
-        ctx.stroke();
-        ctx.fillStyle = "#66666e";
-        ctx.font = "10px sans-serif";
-        ctx.fillText("[▲▼] 移动    [OK] 确认    [ESC] 返回", 24, 306);
 
       } else if (menuState.mode === "QR_CODE") {
         const wf = menuState.wifi || {};
@@ -2058,13 +2129,13 @@
 
         ctx.fillStyle = isAp ? "#f59e0b" : "#94949b";
         ctx.font = "bold 11px monospace";
-        ctx.fillText(isAp ? "01 / AP SETUP" : "01 / NETWORK", 16, 24);
+        ctx.fillText(isAp ? "AP SETUP" : "NETWORK", 16, 24);
         ctx.fillStyle = isAp ? "#f59e0b" : "#10b981";
         ctx.fillText(isAp ? "HOTSPOT" : "ONLINE", 180, 24);
 
         // 居中极简白底卡片
         ctx.fillStyle = "#ffffff";
-        roundRect(ctx, 42, 46, 156, 156, 10, true);
+        roundRect(ctx, 42, 48, 156, 156, 10, true);
 
         if (!qrCodeImg) preloadQrCode();
         if (menuState.qr_base64 && qrCodeImg && qrCodeImg.src !== menuState.qr_base64) {
@@ -2073,56 +2144,38 @@
         }
         if (qrCodeLoaded && qrCodeImg && (qrCodeImg.complete || menuState.qr_base64)) {
           try {
-            ctx.drawImage(qrCodeImg, 48, 52, 144, 144);
+            ctx.drawImage(qrCodeImg, 48, 54, 144, 144);
           } catch (e) {
             ctx.fillStyle = "#000000";
             ctx.font = "11px sans-serif";
-            ctx.fillText("二维码载入中...", 76, 128);
+            ctx.fillText("二维码载入中...", 76, 130);
           }
         } else {
           ctx.fillStyle = "#000000";
           ctx.font = "11px sans-serif";
-          ctx.fillText("二维码载入中...", 76, 128);
+          ctx.fillText("二维码载入中...", 76, 130);
         }
 
         if (isAp) {
           ctx.fillStyle = "#ffffff";
           ctx.font = "bold 13px sans-serif";
-          ctx.fillText(`热点: ${wf.ap_ssid || 'PIG-Setup-8090'}`, 24, 222);
+          ctx.fillText(`热点: ${wf.ap_ssid || 'PIG-Setup-8090'}`, 24, 228);
           ctx.fillStyle = "#8e8e93";
           ctx.font = "11px monospace";
-          ctx.fillText(`密码: ${wf.ap_password || '88888888'} (手机扫码直连)`, 24, 242);
+          ctx.fillText(`密码: ${wf.ap_password || '88888888'} (扫码直连)`, 24, 250);
           ctx.fillStyle = "#787880";
           ctx.font = "11px sans-serif";
-          ctx.fillText(`后台: ${wf.ap_ip || '192.168.4.1'}:8090/settings`, 24, 264);
-
-          ctx.strokeStyle = "#222226";
-          ctx.beginPath();
-          ctx.moveTo(16, 288);
-          ctx.lineTo(224, 288);
-          ctx.stroke();
-          ctx.fillStyle = "#66666e";
-          ctx.font = "10px sans-serif";
-          ctx.fillText("[OK] 切换常态网络       [ESC] 返回", 24, 306);
+          ctx.fillText(`后台: ${wf.ap_ip || '192.168.4.1'}:8090/settings`, 24, 272);
         } else {
           ctx.fillStyle = "#ffffff";
           ctx.font = "bold 13px sans-serif";
-          ctx.fillText(`已连接: ${wf.ssid || 'WiFi 网络'}`, 24, 222);
+          ctx.fillText(`已连接: ${wf.ssid || 'WiFi 网络'}`, 24, 228);
           ctx.fillStyle = "#8e8e93";
           ctx.font = "11px monospace";
-          ctx.fillText(`IP: ${ip}:8090`, 24, 242);
+          ctx.fillText(`IP: ${ip}:8090`, 24, 250);
           ctx.fillStyle = "#787880";
           ctx.font = "11px sans-serif";
-          ctx.fillText("手机扫码进入设置后台配网或改设", 24, 264);
-
-          ctx.strokeStyle = "#222226";
-          ctx.beginPath();
-          ctx.moveTo(16, 288);
-          ctx.lineTo(224, 288);
-          ctx.stroke();
-          ctx.fillStyle = "#66666e";
-          ctx.font = "10px sans-serif";
-          ctx.fillText("[OK] 开启AP配网热点    [ESC] 返回", 24, 306);
+          ctx.fillText("手机扫码进入后台进行配网与参数设置", 24, 272);
         }
 
       } else if (menuState.mode === "XIAOMI_QR") {
@@ -2133,7 +2186,7 @@
         ctx.fillText("BINDING", 188, 24);
 
         ctx.fillStyle = "#ffffff";
-        roundRect(ctx, 42, 46, 156, 156, 10, true);
+        roundRect(ctx, 42, 48, 156, 156, 10, true);
 
         if (!qrCodeImg) preloadQrCode();
         if (menuState.qr_base64 && qrCodeImg && qrCodeImg.src !== menuState.qr_base64) {
@@ -2142,44 +2195,33 @@
         }
         if (qrCodeLoaded && qrCodeImg && (qrCodeImg.complete || menuState.qr_base64)) {
           try {
-            ctx.drawImage(qrCodeImg, 48, 52, 144, 144);
+            ctx.drawImage(qrCodeImg, 48, 54, 144, 144);
           } catch (e) {
             ctx.fillStyle = "#000000";
             ctx.font = "11px sans-serif";
-            ctx.fillText("二维码载入中...", 76, 128);
+            ctx.fillText("二维码载入中...", 76, 130);
           }
         } else {
           ctx.fillStyle = "#000000";
           ctx.font = "11px sans-serif";
-          ctx.fillText("二维码载入中...", 76, 128);
+          ctx.fillText("二维码载入中...", 76, 130);
         }
 
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 13px sans-serif";
-        ctx.fillText("打开米家App 扫码授权", 24, 222);
-
+        ctx.fillText("打开米家App 扫码授权", 24, 228);
         const xSt = (menuState.xiaomi_qr && menuState.xiaomi_qr.status) || "等待扫码中...";
         ctx.fillStyle = xSt.includes("成功") ? "#10b981" : "#f59e0b";
         ctx.font = "11px monospace";
-        ctx.fillText(xSt, 24, 242);
-
+        ctx.fillText(xSt, 24, 250);
         ctx.fillStyle = "#787880";
         ctx.font = "11px sans-serif";
-        ctx.fillText("绑定后可直接语音控制米家台灯/插座", 24, 264);
-
-        ctx.strokeStyle = "#222226";
-        ctx.beginPath();
-        ctx.moveTo(16, 288);
-        ctx.lineTo(224, 288);
-        ctx.stroke();
-        ctx.fillStyle = "#66666e";
-        ctx.font = "10px sans-serif";
-        ctx.fillText("[OK] 刷新二维码       [ESC] 取消返回", 28, 306);
+        ctx.fillText("绑定后可直接语音控制米家台灯/插座", 24, 272);
 
       } else if (menuState.mode === "DOCTOR") {
         ctx.fillStyle = "#94949b";
         ctx.font = "bold 11px monospace";
-        ctx.fillText("02 / DIAGNOSTICS", 16, 24);
+        ctx.fillText("DIAGNOSTICS", 16, 24);
         ctx.fillStyle = "#686870";
         ctx.fillText("STATUS", 192, 24);
 
@@ -2193,56 +2235,45 @@
         ];
 
         let cy = 48;
+        const diagH = 42;
+        const diagGap = 8;
         diagList.forEach(item => {
           ctx.fillStyle = "#121215";
           ctx.strokeStyle = "#222226";
           ctx.lineWidth = 1;
-          roundRect(ctx, 12, cy, 216, 40, 6, true);
+          roundRect(ctx, 12, cy, 216, diagH, 6, true);
           ctx.stroke();
 
           ctx.fillStyle = "#8e8e93";
           ctx.font = "11px monospace";
-          ctx.fillText(item.label, 22, cy + 24);
+          ctx.fillText(item.label, 22, cy + 25);
 
           ctx.font = "bold 12px sans-serif";
           const isGood = item.val && (item.val.includes("正常") || item.val.includes("OK") || item.val.includes("在线") || item.val.includes("°C"));
           ctx.fillStyle = isGood ? "#ffffff" : "#f59e0b";
-          ctx.fillText(item.val, 115, cy + 24);
-          cy += 46;
+          ctx.fillText(item.val, 115, cy + 25);
+          cy += (diagH + diagGap);
         });
-
-        ctx.strokeStyle = "#222226";
-        ctx.beginPath();
-        ctx.moveTo(16, 288);
-        ctx.lineTo(224, 288);
-        ctx.stroke();
-        ctx.fillStyle = "#66666e";
-        ctx.font = "10px sans-serif";
-        ctx.fillText("[OK] 重新检测       [ESC] 返回", 30, 306);
 
       } else if (menuState.mode === "TOGGLES") {
         const hwItems = menuState.hardware_items || [
-          { id: "servo_center", name: "舵机居中归位", val: "ACTION (90°, 90°)" },
-          { id: "servo_test", name: "舵机动作自检", val: "TEST 摇头点头自检" },
-          { id: "servo_sleep", name: "舵机休眠防抖", val: menuState.servo_sleeping ? "OFF (休眠卸力)" : "ON (通电保持)" },
-          { id: "mic", name: "麦克风收音", val: menuState.is_mic_muted ? "OFF (已静音)" : "ON (收音中)" },
-          { id: "track", name: "人脸视线跟随", val: menuState.face_tracking ? "ON (已开启)" : "OFF (已关闭)" },
-          { id: "gaze_mode", name: "视线算法模式", val: "九宫格灵动" },
-          { id: "proactive", name: "主动关怀搭话", val: "ON (已开启)" },
-          { id: "sfx", name: "萌宠情绪拟声", val: "ON (已开启)" }
+          { id: "servo_center", name: "舵机居中归位", val: "ACTION (90°, 90°)", type: "action" },
+          { id: "servo_test", name: "舵机动作自检", val: "TEST 摇头自检", type: "action" },
+          { id: "servo_sleep", name: "舵机休眠防抖", val: menuState.servo_sleeping ? "OFF (休眠卸力)" : "ON (通电保持)", type: "toggle", state: !menuState.servo_sleeping },
+          { id: "mic", name: "麦克风收音", val: menuState.is_mic_muted ? "OFF (已静音)" : "ON (收音中)", type: "toggle", state: !menuState.is_mic_muted },
+          { id: "track", name: "人脸视线跟随", val: menuState.face_tracking ? "ON (已开启)" : "OFF (已关闭)", type: "toggle", state: !!menuState.face_tracking },
+          { id: "gaze_mode", name: "视线算法模式", val: "九宫格灵动", type: "cycle" },
+          { id: "proactive", name: "主动关怀搭话", val: "ON (已开启)", type: "toggle", state: true },
+          { id: "sfx", name: "萌宠情绪拟声", val: "ON (已开启)", type: "toggle", state: true }
         ];
 
         const total = hwItems.length;
         const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
 
-        // 顶部标题与当前索引数字标牌 (例如 03/08)
+        // 顶部极简标题 (去除繁琐序号 03/HARDWARE 与 04/08，返璞归真)
         ctx.fillStyle = "#94949b";
         ctx.font = "bold 11px monospace";
-        ctx.fillText("03 / HARDWARE", 16, 24);
-        ctx.fillStyle = "#ff6700";
-        ctx.font = "bold 11px monospace";
-        const countTxt = `${String(curIdx + 1).padStart(2, '0')}/${String(total).padStart(2, '0')}`;
-        ctx.fillText(countTxt, 186, 24);
+        ctx.fillText("HARDWARE", 16, 24);
 
         // 可视窗口滚动计算 (一屏显示 4 项，保证光标在可视区内，边界自动平滑卷动)
         const maxVisible = 4;
@@ -2259,99 +2290,114 @@
         }
 
         const visibleItems = hwItems.slice(startIdx, startIdx + maxVisible);
-        let cy = 44;
-        const cardH = 50;
-        const cardGap = 6;
+        let cy = 48;
+        const cardH = 54;
+        const cardGap = 10;
         const cardW = (total > maxVisible) ? 204 : 216;
 
         visibleItems.forEach((it, vIdx) => {
           const realIdx = startIdx + vIdx;
           const isSel = (realIdx === curIdx);
 
+          // 状态解析
+          let isOn = false;
+          if (it.id === "servo_sleep") isOn = !menuState.servo_sleeping;
+          else if (it.id === "mic") isOn = !menuState.is_mic_muted;
+          else if (it.id === "track") isOn = !!menuState.face_tracking;
+          else if (it.state !== undefined) isOn = !!it.state;
+          else if (it.val) isOn = it.val.includes("ON");
+
+          let subTxt = "";
+          if (it.type === "toggle") {
+            if (it.id === "servo_sleep") subTxt = isOn ? "通电保持" : "休眠卸力";
+            else if (it.id === "mic") subTxt = isOn ? "收音中" : "已静音";
+            else if (it.id === "track") subTxt = isOn ? "视觉跟随开启" : "跟随已关闭";
+            else if (it.id === "proactive") subTxt = isOn ? "主动搭话开启" : "搭话已关闭";
+            else if (it.id === "sfx") subTxt = isOn ? "情绪拟声开启" : "拟声已关闭";
+            else subTxt = isOn ? "已开启" : "已关闭";
+          } else if (it.type === "action") {
+            subTxt = (it.id === "servo_center") ? "居中归位 (90°, 90°)" : (it.val || "动作健康自检");
+          } else if (it.type === "cycle") {
+            subTxt = "算法跟随设定";
+          } else {
+            subTxt = String(it.val || "");
+          }
+
           if (isSel) {
             ctx.fillStyle = "#ffffff";
-            roundRect(ctx, 12, cy, cardW, cardH, 6, true);
+            roundRect(ctx, 12, cy, cardW, cardH, 8, true);
             ctx.fillStyle = "#000000";
             ctx.font = "bold 13px sans-serif";
-            ctx.fillText(`${String(realIdx + 1).padStart(2, '0')}  ${it.name}`, 22, cy + 20);
+            ctx.fillText(it.name, 22, cy + 22);
             ctx.fillStyle = "#55555c";
-            ctx.font = "11px monospace";
-            ctx.fillText(String(it.val), 22, cy + 38);
-            ctx.fillStyle = "#000000";
-            ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", cardW, cy + 28);
+            ctx.font = "11px sans-serif";
+            ctx.fillText(subTxt, 22, cy + 42);
           } else {
             ctx.fillStyle = "#121215";
             ctx.strokeStyle = "#222226";
             ctx.lineWidth = 1;
-            roundRect(ctx, 12, cy, cardW, cardH, 6, true);
+            roundRect(ctx, 12, cy, cardW, cardH, 8, true);
             ctx.stroke();
             ctx.fillStyle = "#d1d1d6";
             ctx.font = "bold 13px sans-serif";
-            ctx.fillText(`${String(realIdx + 1).padStart(2, '0')}  ${it.name}`, 22, cy + 20);
+            ctx.fillText(it.name, 22, cy + 22);
             ctx.fillStyle = "#787880";
-            ctx.font = "11px monospace";
-            ctx.fillText(String(it.val), 22, cy + 38);
-            ctx.fillStyle = "#4a4a50";
-            ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", cardW, cy + 28);
+            ctx.font = "11px sans-serif";
+            ctx.fillText(subTxt, 22, cy + 42);
           }
+
+          // 右侧交互组件：Switch开关 / 模式胶囊Tag / 动作箭头
+          if (it.type === "toggle") {
+            drawToggleSwitch(ctx, 12 + cardW - 46, cy + 17, 36, 20, isOn, isSel);
+          } else if (it.type === "cycle") {
+            const badgeTxt = (it.val && it.val.includes("九宫格")) ? "九宫格" : (it.val || "跟随");
+            drawValueBadge(ctx, badgeTxt, 12 + cardW - 10, cy + 27, isSel);
+          } else {
+            ctx.fillStyle = isSel ? "#000000" : "#55555c";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText("›", 12 + cardW - 14, cy + 32);
+          }
+
           cy += (cardH + cardGap);
         });
 
         // 极简工业细轨滚动条
         if (total > maxVisible) {
           const trackX = 224;
-          const trackY = 44;
-          const trackH = maxVisible * (cardH + cardGap) - cardGap;
+          const trackY = 48;
+          const trackH = maxVisible * (cardH + cardGap) - cardGap; // 4 * 64 - 10 = 246
           ctx.fillStyle = "#1c1c20";
           roundRect(ctx, trackX, trackY, 4, trackH, 2, true);
-          const thumbH = Math.max(28, Math.round(trackH * (maxVisible / total)));
+          const thumbH = Math.max(32, Math.round(trackH * (maxVisible / total)));
           const maxThumbScroll = trackH - thumbH;
           const thumbY = trackY + Math.round((startIdx / (total - maxVisible)) * maxThumbScroll);
           ctx.fillStyle = "#ff6700";
           roundRect(ctx, trackX, thumbY, 4, thumbH, 2, true);
         }
 
-        // 底部防遮挡实色保护底栏
-        ctx.fillStyle = "#0a0a0c";
-        ctx.fillRect(0, 280, 240, 40);
-        ctx.strokeStyle = "#222226";
-        ctx.beginPath();
-        ctx.moveTo(16, 284);
-        ctx.lineTo(224, 284);
-        ctx.stroke();
-        ctx.fillStyle = "#66666e";
-        ctx.font = "10px sans-serif";
-        ctx.fillText("[▲▼] 移动    [OK] 切换/执行    [ESC] 返回", 24, 304);
-
       } else if (menuState.mode === "SYSTEM") {
         const sysItems = menuState.system_items || [
-          { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定" },
-          { id: "face_clear", name: "重置主人面容", val: "RESET 清除面容" },
-          { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗" },
-          { id: "voice", name: "发音音色切换", val: "冰糖" },
-          { id: "volume", name: "系统播报音量", val: "80%" },
-          { id: "timeout", name: "屏幕息屏时间", val: "15秒" },
-          { id: "version", name: "系统固件版本", val: menuState.version || "v0.1.0" },
-          { id: "update", name: "检查系统更新", val: menuState.update_status || "点击检查更新" },
-          { id: "restart", name: "重启机器人服务", val: "RESTART" },
-          { id: "shutdown", name: "树莓派安全关机", val: "POWER OFF" }
+          { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定", type: "action" },
+          { id: "face_clear", name: "重置主人面容", val: "RESET 清除面容", type: "action" },
+          { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗", type: "action" },
+          { id: "voice", name: "发音音色切换", val: "冰糖", type: "cycle" },
+          { id: "volume", name: "系统播报音量", val: "80%", type: "cycle" },
+          { id: "timeout", name: "屏幕息屏时间", val: "15秒", type: "cycle" },
+          { id: "version", name: "系统固件版本", val: menuState.version || "v0.1.0", type: "info" },
+          { id: "update", name: "检查系统更新", val: menuState.update_status || "点击检查更新", type: "action" },
+          { id: "restart", name: "重启机器人服务", val: "RESTART", type: "action" },
+          { id: "shutdown", name: "树莓派安全关机", val: "POWER OFF", type: "action" }
         ];
 
         const total = sysItems.length;
         const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
 
-        // 顶部标题与当前索引数字标牌 (例如 05/06)
+        // 顶部极简标题 (去除繁琐序号 04/SYSTEM 与 05/10)
         ctx.fillStyle = "#94949b";
         ctx.font = "bold 11px monospace";
-        ctx.fillText("04 / SYSTEM", 16, 24);
-        ctx.fillStyle = "#ff6700";
-        ctx.font = "bold 11px monospace";
-        const countTxt = `${String(curIdx + 1).padStart(2, '0')}/${String(total).padStart(2, '0')}`;
-        ctx.fillText(countTxt, 186, 24);
+        ctx.fillText("SYSTEM", 16, 24);
 
-        // 可视窗口滚动计算 (一屏显示 4 项，保证光标在可视区内，边界自动平滑卷动)
+        // 可视窗口滚动计算
         const maxVisible = 4;
         let startIdx = 0;
         if (total > maxVisible) {
@@ -2366,77 +2412,78 @@
         }
 
         const visibleItems = sysItems.slice(startIdx, startIdx + maxVisible);
-        let cy = 44;
-        const cardH = 50;
-        const cardGap = 6;
-        const cardW = (total > maxVisible) ? 204 : 216; // 右侧预留 12px 放置工业细轨滚动条
+        let cy = 48;
+        const cardH = 54;
+        const cardGap = 10;
+        const cardW = (total > maxVisible) ? 204 : 216;
 
         visibleItems.forEach((it, vIdx) => {
           const realIdx = startIdx + vIdx;
           const isSel = (realIdx === curIdx);
 
+          let subTxt = "";
+          if (it.id === "face_id") subTxt = "3秒抓拍面部特征认主";
+          else if (it.id === "face_clear") subTxt = "清除本地主人面部特征";
+          else if (it.id === "mijia") subTxt = "屏幕弹窗扫码绑定米家";
+          else if (it.id === "voice") subTxt = "系统播报声音风格";
+          else if (it.id === "volume") subTxt = "扬声器播报音量增益";
+          else if (it.id === "timeout") subTxt = "无操作自动息屏倒计时";
+          else if (it.id === "version") subTxt = "PIG Robot OS 核心固件";
+          else if (it.id === "update") subTxt = it.val || "点击检查远程更新";
+          else if (it.id === "restart") subTxt = "热重启核心 Python 进程";
+          else if (it.id === "shutdown") subTxt = "安全切断供电避免坏卡";
+          else subTxt = String(it.val || "");
+
           if (isSel) {
             ctx.fillStyle = "#ffffff";
-            roundRect(ctx, 12, cy, cardW, cardH, 6, true);
+            roundRect(ctx, 12, cy, cardW, cardH, 8, true);
             ctx.fillStyle = "#000000";
             ctx.font = "bold 13px sans-serif";
-            ctx.fillText(`${String(realIdx + 1).padStart(2, '0')}  ${it.name}`, 22, cy + 20);
+            ctx.fillText(it.name, 22, cy + 22);
             ctx.fillStyle = "#55555c";
-            ctx.font = "11px monospace";
-            ctx.fillText(String(it.val), 22, cy + 38);
-            ctx.fillStyle = "#000000";
-            ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", cardW, cy + 28);
+            ctx.font = "11px sans-serif";
+            ctx.fillText(subTxt, 22, cy + 42);
           } else {
             ctx.fillStyle = "#121215";
             ctx.strokeStyle = "#222226";
             ctx.lineWidth = 1;
-            roundRect(ctx, 12, cy, cardW, cardH, 6, true);
+            roundRect(ctx, 12, cy, cardW, cardH, 8, true);
             ctx.stroke();
             ctx.fillStyle = "#d1d1d6";
             ctx.font = "bold 13px sans-serif";
-            ctx.fillText(`${String(realIdx + 1).padStart(2, '0')}  ${it.name}`, 22, cy + 20);
+            ctx.fillText(it.name, 22, cy + 22);
             ctx.fillStyle = "#787880";
-            ctx.font = "11px monospace";
-            ctx.fillText(String(it.val), 22, cy + 38);
-            ctx.fillStyle = "#4a4a50";
-            ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", cardW, cy + 28);
+            ctx.font = "11px sans-serif";
+            ctx.fillText(subTxt, 22, cy + 42);
           }
+
+          // 右侧交互组件
+          if (it.type === "cycle" || it.type === "info") {
+            drawValueBadge(ctx, String(it.val), 12 + cardW - 10, cy + 27, isSel);
+          } else {
+            ctx.fillStyle = isSel ? "#000000" : "#55555c";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText("›", 12 + cardW - 14, cy + 32);
+          }
+
           cy += (cardH + cardGap);
         });
 
-        // 极简工业细轨滚动条 (仅在条目超出可视范围时显示)
+        // 极简工业细轨滚动条
         if (total > maxVisible) {
           const trackX = 224;
-          const trackY = 44;
-          const trackH = maxVisible * (cardH + cardGap) - cardGap; // 4 * 56 - 6 = 218
-          // 轨道槽
+          const trackY = 48;
+          const trackH = maxVisible * (cardH + cardGap) - cardGap;
           ctx.fillStyle = "#1c1c20";
           roundRect(ctx, trackX, trackY, 4, trackH, 2, true);
-          // 滑块 (按比例缩放 + 动态计算位置)
-          const thumbH = Math.max(28, Math.round(trackH * (maxVisible / total)));
+          const thumbH = Math.max(32, Math.round(trackH * (maxVisible / total)));
           const maxThumbScroll = trackH - thumbH;
           const thumbY = trackY + Math.round((startIdx / (total - maxVisible)) * maxThumbScroll);
           ctx.fillStyle = "#ff6700";
           roundRect(ctx, trackX, thumbY, 4, thumbH, 2, true);
         }
-
-        // 底部防遮挡实色保护底栏 (确保绝对不会被任何菜单项遮挡重叠)
-        ctx.fillStyle = "#0a0a0c";
-        ctx.fillRect(0, 280, 240, 40);
-        ctx.strokeStyle = "#222226";
-        ctx.beginPath();
-        ctx.moveTo(16, 284);
-        ctx.lineTo(224, 284);
-        ctx.stroke();
-        ctx.fillStyle = "#66666e";
-        ctx.font = "10px sans-serif";
-        ctx.fillText("[▲▼] 选择    [OK] 执行    [ESC] 返回", 24, 304);
       }
     }
-
-
 
     // ==========================================
     // 2. Three.js 3D 机械实体渲染器
