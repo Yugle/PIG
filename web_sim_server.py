@@ -1168,6 +1168,19 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self.send_error(500, str(e))
             return
+
+        # 直接在屏幕展开关于 PIG 介绍彩蛋 (前后端全同步)
+        if self.path in ["/api/menu/easter_egg", "/api/menu/enter_easter_egg"]:
+            try:
+                menu_fsm.enter_easter_egg()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "state": menu_fsm.get_state()}, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
         # 摸头与全双工打断 POST 接口
         if self.path == "/api/touch":
             if hardware_agent:

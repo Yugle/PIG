@@ -1778,12 +1778,17 @@
           if (res.ok) {
             const data = await res.json();
             if (data && data.menu_state) {
-              // 关键保护：如果用户在请求在途期间又点击了按键，或者队列中还有未处理按键，绝不覆盖本地 cursor 与 mode！
+              // 关键保护：如果用户在请求在途期间又点击了按键，或者队列中还有未处理按键，绝不覆盖本地 cursor、mode 与 easter_egg_scroll！
               if (item.seq < localActionSeq || hwButtonQueue.length > 0) {
-                const { cursor, mode, ...rest } = data.menu_state;
+                const { cursor, mode, easter_egg_scroll, ...rest } = data.menu_state;
                 menuState = Object.assign(menuState, rest);
               } else {
-                menuState = Object.assign(menuState, data.menu_state);
+                if (menuState.mode === "EASTER_EGG" && Date.now() - lastLocalNavTime < 1500) {
+                  const { easter_egg_scroll, ...rest } = data.menu_state;
+                  menuState = Object.assign(menuState, rest);
+                } else {
+                  menuState = Object.assign(menuState, data.menu_state);
+                }
               }
               if (menuState.qr_base64 && qrCodeImg && !qrCodeLoaded) {
                 qrCodeImg.src = menuState.qr_base64;
@@ -1803,8 +1808,9 @@
     let lastSentButton = "";
     function sendHwButton(button, eventType = "click") {
       const now = Date.now();
-      if (button === lastSentButton && now - lastButtonSendTime < 180) {
-        return; // 过滤 180ms 内同一按键的重复触发抖动 (如 Enter 键与按钮点击事件并发)
+      const debounceThreshold = (menuState.mode === "EASTER_EGG") ? 90 : 180;
+      if (button === lastSentButton && now - lastButtonSendTime < debounceThreshold) {
+        return; // 过滤防抖
       }
       lastButtonSendTime = now;
       lastSentButton = button;
@@ -1947,9 +1953,9 @@
         }
       } else if (menuState.mode === "EASTER_EGG") {
         if (button === "K1") {
-          menuState.easter_egg_scroll = Math.max(0, (menuState.easter_egg_scroll || 0) - 28);
+          menuState.easter_egg_scroll = Math.max(0, (menuState.easter_egg_scroll || 0) - 26);
         } else if (button === "K2") {
-          menuState.easter_egg_scroll = Math.min(330, (menuState.easter_egg_scroll || 0) + 28);
+          menuState.easter_egg_scroll = Math.min(270, (menuState.easter_egg_scroll || 0) + 26);
         } else if (button === "K4" || button === "K3") {
           menuState.mode = "SYSTEM";
           menuState.easter_egg_scroll = 0;
@@ -2042,9 +2048,13 @@
     });
 
     // 允许通过鼠标滚轮在彩蛋界面平滑滚动
+    let lastWheelTime = 0;
     eyeCanvas.addEventListener("wheel", (e) => {
       if (menuState.mode === "EASTER_EGG") {
         e.preventDefault();
+        const now = Date.now();
+        if (now - lastWheelTime < 60) return;
+        lastWheelTime = now;
         if (e.deltaY > 0) {
           sendHwButton("K2");
         } else if (e.deltaY < 0) {
@@ -2720,12 +2730,12 @@
         }
       } else if (menuState.mode === "EASTER_EGG") {
         const scrollY = menuState.easter_egg_scroll || 0;
-        const maxScroll = 330;
+        const maxScroll = 270;
 
-        // 1. 卡片底板 (淡粉半透明底板 + 浪漫边框)
-        ctx.fillStyle = "rgba(255, 121, 198, 0.08)";
+        // 1. 卡片底板 (系统多主题 Material Design 3 风格，无过度粉色)
+        ctx.fillStyle = MD3.surfaceContainer || "#1d2424";
         roundRect(ctx, 10, 42, 220, 246, 10, true);
-        ctx.strokeStyle = "rgba(255, 121, 198, 0.45)";
+        ctx.strokeStyle = MD3.outline || "#374442";
         ctx.lineWidth = 1;
         roundRect(ctx, 10, 42, 220, 246, 10, false);
 
@@ -2736,11 +2746,9 @@
         ctx.clip();
 
         const letterItems = [
-          { type: "heading", text: "「致白菜」" },
-          { type: "space", val: 4 },
           { type: "text", text: "本项目只是一名老程序员" },
           { type: "text", text: "用 AI 做的能想到的" },
-          { type: "quote", text: "比较动人的一封情书。" },
+          { type: "highlight", text: "比较动人的一封情书。" },
           { type: "space", val: 8 },
           { type: "text", text: "就像电影《失控玩家》一样，" },
           { type: "text", text: "把她的人物画像、你的语音、" },
@@ -2750,53 +2758,38 @@
           { type: "text", text: "学习她的习惯、她的作息，" },
           { type: "text", text: "会记录她的不舒服，" },
           { type: "text", text: "帮她定时喂猫，" },
-          { type: "quote", text: "提醒她锅里煮的茶叶蛋" },
-          { type: "quote", text: "马上好了……" },
+          { type: "highlight", text: "提醒她锅里煮的茶叶蛋马上好了……" },
           { type: "space", val: 10 },
           { type: "highlight", text: "叫 PIG 是因为：" },
           { type: "text", text: "首先是基于 PI 的，" },
           { type: "quote", text: "其次做 PIG 的人是一只 🐖。" },
           { type: "space", val: 10 },
           { type: "text", text: "此时此刻，" },
-          { type: "text", text: "老程序员跟他的白菜" },
-          { type: "text", text: "遇到了很多问题。" },
-          { type: "space", val: 6 },
+          { type: "text", text: "写下这段话的老程序员" },
+          { type: "text", text: "跟他的白菜遇到了很多问题。" },
+          { type: "space", val: 8 },
           { type: "highlight", text: "但他坚信一切都有解决办法，" },
           { type: "highlight", text: "就像 PIG 会不断迭代。" },
           { type: "space", val: 8 },
-          { type: "heart", text: "而且他，真的很想念他的白菜 🥬」" },
-          { type: "space", val: 14 },
-          { type: "sub", text: "—— 献给白菜" },
-          { type: "sub", text: "永远相信爱的老程序员与小猪" }
+          { type: "quote", text: "而且他，真的很想念他的白菜 🥬。" },
+          { type: "space", val: 12 }
         ];
 
-        let curY = 64 - scrollY;
+        let curY = 66 - scrollY;
         for (const item of letterItems) {
           if (item.type === "space") {
             curY += item.val;
             continue;
           }
           if (curY >= 30 && curY <= 295) {
-            if (item.type === "heading") {
-              ctx.fillStyle = "#ff79c6";
-              ctx.font = "bold 15px sans-serif";
-              ctx.fillText(item.text, 20, curY);
-            } else if (item.type === "heart") {
-              ctx.fillStyle = "#ff69b4";
-              ctx.font = "bold 13px sans-serif";
-              ctx.fillText(item.text, 20, curY);
-            } else if (item.type === "highlight") {
-              ctx.fillStyle = "#ffd1dc";
+            if (item.type === "highlight") {
+              ctx.fillStyle = MD3.primary;
               ctx.font = "bold 13px sans-serif";
               ctx.fillText(item.text, 20, curY);
             } else if (item.type === "quote") {
-              ctx.fillStyle = "#ffb8d1";
+              ctx.fillStyle = MD3.onSurface || "#e3e3e3";
               ctx.font = "13px sans-serif";
               ctx.fillText(item.text, 20, curY);
-            } else if (item.type === "sub") {
-              ctx.fillStyle = "#9aa0a6";
-              ctx.font = "11px sans-serif";
-              ctx.fillText(item.text, 24, curY);
             } else {
               ctx.fillStyle = MD3.onSurface || "#e3e3e3";
               ctx.font = "13px sans-serif";
@@ -2807,21 +2800,21 @@
         }
         ctx.restore();
 
-        // 3. 顶部导航与遮罩 (固定在上方，遮住滚出的正文)
-        ctx.fillStyle = "#0e1116";
+        // 3. 顶部导航与遮罩 (系统标准顶栏：左箭头 + "关于 PIG" + "ABOUT")
+        ctx.fillStyle = MD3.surface || "#121414";
         ctx.fillRect(0, 0, 240, 42);
-        ctx.strokeStyle = "#ff79c6";
+        ctx.strokeStyle = MD3.primary;
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
-        ctx.fillStyle = "#ff79c6";
+        ctx.fillStyle = MD3.onSurface || "#e3e3e3";
         ctx.font = "bold 14px sans-serif";
-        ctx.fillText("💌 致白菜的一封信", 26, 31);
+        ctx.fillText("关于 PIG", 26, 31);
         ctx.fillStyle = MD3.onSurfaceVariant || "#8a8f98";
         ctx.font = "11px sans-serif";
-        ctx.fillText("FOR HER", 184, 30);
+        ctx.fillText("ABOUT", 188, 30);
 
         // 4. 底部状态指示与遮罩 (固定在下方)
-        ctx.fillStyle = "#0e1116";
+        ctx.fillStyle = MD3.surface || "#121414";
         ctx.fillRect(0, 288, 240, 32);
         ctx.fillStyle = MD3.onSurfaceVariant || "#8a8f98";
         ctx.font = "11px sans-serif";
@@ -2830,9 +2823,9 @@
         // 5. 动态右侧滚动条
         const trackY1 = 48, trackY2 = 280;
         const trackH = trackY2 - trackY1;
-        const thumbH = Math.max(24, Math.round((200 / 550) * trackH));
+        const thumbH = Math.max(24, Math.round((200 / 480) * trackH));
         const thumbY = trackY1 + Math.round((Math.max(0, Math.min(scrollY, maxScroll)) / maxScroll) * (trackH - thumbH));
-        ctx.fillStyle = "#ff79c6";
+        ctx.fillStyle = MD3.primary;
         roundRect(ctx, 226, thumbY, 3, thumbH, 1.5, true);
       }
     }
@@ -4737,9 +4730,9 @@
 
       if (ev.type === "menu_state" && ev.data) {
         // 关键防回跳保护：当本地在 1500ms 内触发过按键导航，或按键仍在在途队列中时，
-        // 绝不让异步 SSE 推送包冲刷覆盖本地当前的 mode 和 cursor，彻底根除模式跳级回弹与菜单闪烁！
+        // 绝不让异步 SSE 推送包冲刷覆盖本地当前的 mode、cursor 与 easter_egg_scroll，彻底根除模式跳级回弹与菜单闪烁！
         if (Date.now() - lastLocalNavTime < 1500 || hwButtonQueue.length > 0 || isProcessingHwButton) {
-          const { cursor, mode, ...rest } = ev.data;
+          const { cursor, mode, easter_egg_scroll, ...rest } = ev.data;
           menuState = Object.assign(menuState, rest);
         } else {
           menuState = Object.assign(menuState, ev.data);
@@ -6090,7 +6083,7 @@
           if (data) {
             // 当用户在操作菜单时 (非 FACE 模式)，绝不让后台定时轮询覆盖本地 cursor 与 mode，彻底消除反复跳变闪烁！
             if (menuState.mode !== "FACE") {
-              const { cursor, mode, ...rest } = data;
+              const { cursor, mode, easter_egg_scroll, ...rest } = data;
               menuState = Object.assign(menuState, rest);
             } else {
               menuState = Object.assign(menuState, data);
@@ -6119,7 +6112,7 @@
     setInterval(syncMenuState, 1500);
 
     // ==========================================
-    // 💌 致白菜的情书屏幕彩蛋控制函数
+    // 📖 关于 PIG 介绍屏幕彩蛋控制函数
     // ==========================================
     function triggerEasterEggClick() {
       const now = Date.now();
@@ -6133,15 +6126,16 @@
         window._verClickCount = 0;
         menuState.mode = "EASTER_EGG";
         menuState.easter_egg_scroll = 0;
-        sendHwButton("K3");
+        lastLocalNavTime = Date.now();
+        fetch("/api/menu/easter_egg", { method: "POST" }).catch(() => {});
         try {
           const snd = new Audio("/static/sounds/wake_chime.wav");
           snd.volume = 0.5;
           snd.play().catch(() => {});
         } catch (e) {}
-        showToast("💌 小猪屏幕已直接展现致白菜的情书");
+        showToast("📖 已在小猪屏幕上展开关于 PIG 的介绍");
       } else if (window._verClickCount >= 2) {
-        showToast(`再按 ${5 - window._verClickCount} 次直接在屏幕上展开情书 💌`);
+        showToast(`再按 ${5 - window._verClickCount} 次在屏幕展开项目介绍 📖`);
       }
     }
   </script>
