@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "community": "PIG Gitee Open Source Ecosystem",
-  "repository": "https://gitee.com/yugle159357/pig",
+  "repository": "https://gitee.com/yugle159357/PIG",
   "skills": [
     {
       "id": "stock_ticker",
@@ -22,7 +22,7 @@
         "action": "NOD"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/stock_ticker/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/stock_ticker/main.py"
     },
     {
       "id": "moyu_almanac",
@@ -43,7 +43,7 @@
         "action": "SHAKE"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/moyu_almanac/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/moyu_almanac/main.py"
     },
     {
       "id": "health_tea",
@@ -64,7 +64,7 @@
         "action": "NOD"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/health_tea/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/health_tea/main.py"
     },
     {
       "id": "pet_translator",
@@ -90,7 +90,7 @@
         "action": "NOD"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/pet_translator/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/pet_translator/main.py"
     },
     {
       "id": "sleep_aid_sounds",
@@ -111,7 +111,7 @@
         "action": "NOD"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/sleep_aid_sounds/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/sleep_aid_sounds/main.py"
     },
     {
       "id": "github_trending",
@@ -132,7 +132,7 @@
         "action": "LOOK_UP"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/github_trending/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/github_trending/main.py"
     },
     {
       "id": "nasa_apod",
@@ -153,7 +153,7 @@
         "action": "LOOK_UP"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/nasa_apod/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/nasa_apod/main.py"
     },
     {
       "id": "brain_math_game",
@@ -174,7 +174,7 @@
         "action": "NOD"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/brain_math_game/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/brain_math_game/main.py"
     },
     {
       "id": "poetry_duel",
@@ -195,7 +195,7 @@
         "action": "NOD"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/poetry_duel/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/poetry_duel/main.py"
     },
     {
       "id": "desk_stretching",
@@ -216,7 +216,7 @@
         "action": "LOOK_UP"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/desk_stretching/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/desk_stretching/main.py"
     },
     {
       "id": "crypto_price",
@@ -237,7 +237,7 @@
         "action": "LOOK_UP"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/crypto_price/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/crypto_price/main.py"
     },
     {
       "id": "med_tracker",
@@ -258,7 +258,7 @@
         "action": "NOD"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/med_tracker/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/med_tracker/main.py"
     },
     {
       "id": "dad_jokes",
@@ -273,7 +273,7 @@
         "action": "SHAKE"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/dad_jokes/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/dad_jokes/main.py"
     },
     {
       "id": "bilibili_follower",
@@ -294,7 +294,7 @@
         "action": "NOD"
       },
       "source": "gitee_community",
-      "code_url": "https://gitee.com/yugle159357/pig/raw/main/registry/skills/bilibili_follower/main.py"
+      "code_url": "https://gitee.com/yugle159357/PIG/raw/main/registry/skills/bilibili_follower/main.py"
     }
   ]
 }

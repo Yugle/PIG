@@ -582,7 +582,7 @@ ctl.!default {
 本项目遵循清晰的四层解耦架构，保证在低算力树莓派 3B 上的极低资源占用与高容错性：
 
 ```text
-pig/
+PIG/
 ├── main_agent.py          # PIG 多模态主程序 (语音唤醒/感知/决策/执行闭环)
 ├── web_sim_server.py      # 3D 仿真 Web 服务器、无线控制台与双向网关 (端口 8090)
 ├── config.json            # 核心全局配置 (大模型/ASR/TTS/飞书/舵机校准/米家)

@@ -26,7 +26,7 @@ from typing import Dict, List, Optional, Callable, Any
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 默认 Gitee 线上开源社区技能集散中心 (Online Skills Registry)
-DEFAULT_ONLINE_REGISTRY_URL = "https://gitee.com/yugle159357/pig/raw/main/registry/skills_registry.json"
+DEFAULT_ONLINE_REGISTRY_URL = "https://gitee.com/yugle159357/PIG/raw/main/registry/skills_registry.json"
 
 _global_skill_manager: Optional["SkillManager"] = None
 
