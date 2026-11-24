@@ -56,6 +56,8 @@ flowchart TD
         Mic["🎤 免驱 USB 迷你直插麦克风"]
         Speaker["🔊 Y57 USB 扩音喇叭 (数字声卡+功放+喇叭一线通)"]
         Touch["👆 TTP223 电容触摸传感器 (摸头杀，隔壳感应)"]
+        Radar["📡 HLK-LD2402 24GHz 毫米波人体雷达 (人来唤醒/人走休眠)"]
+        Buttons["🔘 4位独立微动按键板 (K1~K4 硬件菜单控制)"]
         Servos["🦾 二自由度云台 (SG90 9g 舵机 × 2: Pan/Tilt)"]
     end
 
@@ -97,6 +99,8 @@ flowchart TD
     RPi --- Mic
     RPi --- Speaker
     RPi --- Touch
+    RPi --- Radar
+    RPi --- Buttons
     RPi --- Servos
 ```
 
@@ -124,15 +128,22 @@ graph TD
         Pin1["Pin 1: 3.3V PWR"]
         Pin2["Pin 2: 5.0V PWR"]
         Pin6["Pin 6: GND (地)"]
+        Pin7["Pin 7: GPIO 4"]
         Pin9["Pin 9: GND (地)"]
         Pin11["Pin 11: GPIO 17"]
         Pin12["Pin 12: GPIO 18 (PWM0)"]
+        Pin13["Pin 13: GPIO 27"]
         Pin15["Pin 15: GPIO 22"]
+        Pin16["Pin 16: GPIO 23"]
+        Pin17["Pin 17: 3.3V PWR"]
+        Pin18["Pin 18: GPIO 24"]
         Pin19["Pin 19: GPIO 10 (MOSI)"]
         Pin22["Pin 22: GPIO 25"]
         Pin23["Pin 23: GPIO 11 (SCLK)"]
         Pin24["Pin 24: GPIO 8 (CE0)"]
         Pin33["Pin 33: GPIO 13 (PWM1)"]
+        Pin37["Pin 37: GPIO 26"]
+        Pin39["Pin 39: GND (地)"]
         USB_A["USB 端口 1"]
         USB_B["USB 端口 2"]
         USB_C["USB 端口 3"]
@@ -160,6 +171,16 @@ graph TD
         Touch_GND["TTP223 摸头传感器 GND"]
         Touch_SIG["TTP223 摸头传感器 SIG"]
 
+        Radar_VCC["LD2402 人体雷达 VCC (3.3V)"]
+        Radar_GND["LD2402 人体雷达 GND"]
+        Radar_OUT["LD2402 人体雷达 OUT (有人高电平)"]
+
+        Btn_K1["K1 按键 (GPIO 23: 音量+/菜单上)"]
+        Btn_K2["K2 按键 (GPIO 24: 音量-/菜单下)"]
+        Btn_K3["K3 按键 (GPIO 27: 确认/唤醒/解密)"]
+        Btn_K4["K4 按键 (GPIO 4: 返回/静音/关机)"]
+        Btn_GND["4位按键公共地 (GND)"]
+
         USB_Cam["📷 USB 720P 摄像头模组"]
         USB_Mic["🎤 USB 迷你直插麦克风"]
         USB_Spk["🔊 Y57 USB 一线通扩音喇叭"]
@@ -178,6 +199,18 @@ graph TD
     Pin1 --> Touch_VCC
     Pin9 --> Touch_GND
     Pin11 --> Touch_SIG
+
+    %% HLK-LD2402 人体雷达接线
+    Pin17 --> Radar_VCC
+    Pin39 --> Radar_GND
+    Pin37 --> Radar_OUT
+
+    %% 4位独立按键接线
+    Pin16 --> Btn_K1
+    Pin18 --> Btn_K2
+    Pin13 --> Btn_K3
+    Pin7 --> Btn_K4
+    Pin9 --- Btn_GND
 
     %% 舵机信号线
     Pin12 --> Pan_PWM

@@ -562,7 +562,52 @@ class FeishuClient:
         # 回退到智能投递通道
         return self._deliver_card(title, elements, template=template)
 
+    def update_im_card(self, message_id: str, title: str, elements: List[Dict[str, Any]], template: str = "blue") -> Dict[str, Any]:
+        """
+        通过 PATCH /open-apis/im/v1/messages/{message_id} 原地动态更新已发送的互动卡片
+        支持 AI 思考、Skill 调度过程实时上屏与最终定稿，彻底解决干等问题！
+        """
+        token = self.get_tenant_access_token()
+        if not token or not message_id:
+            return {"status": "error", "message": "缺少 token 或 message_id"}
+
+        card = {
+            "config": {"wide_screen_mode": True, "update_multi": True},
+            "header": {
+                "title": {"tag": "plain_text", "content": title},
+                "template": template
+            },
+            "elements": elements
+        }
+        url = f"https://open.feishu.cn/open-apis/im/v1/messages/{message_id}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json; charset=utf-8"
+        }
+        content_str = json.dumps(card, ensure_ascii=False)
+        payload = {"content": content_str}
+
+        return self._http_patch_json(url, payload, headers=headers)
+
     # 内部基础 HTTP 辅助
+    def _http_patch_json(self, url: str, data: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        try:
+            req_headers = {"Content-Type": "application/json; charset=utf-8"}
+            if headers:
+                req_headers.update(headers)
+            body_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            req = urllib.request.Request(url, data=body_bytes, headers=req_headers, method="PATCH")
+            with urllib.request.urlopen(req, timeout=6.0) as resp:
+                res_bytes = resp.read()
+                return json.loads(res_bytes.decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            logger.warning(f"⚠️ [Feishu] HTTP PATCH {e.code} 异常: {err_body}")
+            return {"status": "error", "code": e.code, "message": err_body}
+        except Exception as e:
+            logger.warning(f"⚠️ [Feishu] PATCH 请求失败: {e}")
+            return {"status": "error", "message": str(e)}
+
     def _http_post_json(self, url: str, data: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         try:
             req_headers = {"Content-Type": "application/json; charset=utf-8"}

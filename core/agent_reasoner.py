@@ -107,7 +107,8 @@ class AgentReasoner:
         skill_manager,
         evolution_engine=None,
         session_id: str = "device",
-        silent: bool = False
+        silent: bool = False,
+        on_step_callback: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         核心 ReAct 自主执行循环
@@ -203,10 +204,33 @@ class AgentReasoner:
 
                     logger.info(f"🤖 [ReAct Step {step}] Thought: {thought} | Action: {tool_name}({tool_args})")
 
+                    if on_step_callback:
+                        try:
+                            on_step_callback({
+                                "stage": "tool_calling",
+                                "step": step,
+                                "thought": thought,
+                                "tool_name": tool_name,
+                                "tool_args": tool_args
+                            })
+                        except Exception as cb_err:
+                            logger.warning(f"on_step_callback 异常: {cb_err}")
+
                     # 真正执行工具
                     observation = skill_manager.dispatch(skill_call)
                     last_observation = observation
                     logger.info(f"🔍 [ReAct Step {step}] Observation: {observation}")
+
+                    if on_step_callback:
+                        try:
+                            on_step_callback({
+                                "stage": "tool_done",
+                                "step": step,
+                                "tool_name": tool_name,
+                                "observation": observation
+                            })
+                        except Exception:
+                            pass
 
                     steps_log.append({
                         "step": step,

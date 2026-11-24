@@ -147,7 +147,7 @@ def handle_feishu_incoming_message(clean_text: str, open_id: str, chat_id: str, 
                 # 绝不在此处重复发送一条冗余的纯文本气泡，保证聊天界面只有一张完整优雅的交互卡片！
                 return
 
-            # 2. 常规对话：进入 ReAct 认知推演链路
+            # 2. 常规对话：进入 ReAct 认知推演链路 (支持飞书卡片原地流式状态动态推送，实时展示调用了哪个技能)
             from core.agent_reasoner import AgentReasoner
             from core.prompt_builder import PromptBuilder
 
@@ -162,7 +162,73 @@ def handle_feishu_incoming_message(clean_text: str, open_id: str, chat_id: str, 
             sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=300, skill_manager=skill_mgr)
             sid = f"feishu_{chat_id or open_id}"
 
-            print(f"🤖 [Feishu Bot] 正在为会话 {sid} 进行思考推演: '{clean_text}'...")
+            # 技能中文友好展示名称
+            SKILL_LABELS = {
+                "xiaomi_iot": "📱 米家智能家居",
+                "weather": "🌤️ 天气查询",
+                "reminder": "⏰ 闹钟与日程",
+                "remote_guard": "📷 远程安防与现场巡检",
+                "visual_qa": "👁️ 多模态视觉之眼",
+                "pet_tamagotchi": "🐾 萌宠互动",
+                "dice_roll": "🎲 趣味掷骰子",
+                "pig_fortune": "🔮 今日运势占卜",
+                "news_briefing": "📰 新闻早报",
+                "system_config": "⚙️ 系统设置",
+                "network_diagnostics": "🌐 网络诊断",
+                "pomodoro": "🍅 番茄专注钟",
+                "crypto_price": "📈 加密行情",
+                "bilibili_follower": "📺 B站数据"
+            }
+
+            # 🚀 步骤 1：0.2 秒极速首屏占位卡片，杜绝用户干等！
+            init_card = {
+                "config": {"wide_screen_mode": True, "update_multi": True},
+                "header": {
+                    "title": {"tag": "plain_text", "content": "🤖 PIG 正在处理..."},
+                    "template": "blue"
+                },
+                "elements": [
+                    {
+                        "tag": "div",
+                        "text": {
+                            "tag": "lark_md",
+                            "content": "⏳ **正在分析意图并规划任务链路...**"
+                        }
+                    }
+                ]
+            }
+
+            msg_res = feishu_client.send_im_message(target_id, "interactive", init_card, receive_id_type=id_type)
+            msg_id = msg_res.get("data", {}).get("message_id") if msg_res.get("code") == 0 else None
+
+            start_t = time.time()
+            skills_used = []
+
+            # 步骤 2：流式步骤回调函数 (每当判定需要调用工具，立即原地刷新卡片！)
+            def _on_feishu_step(ev: dict):
+                if not msg_id:
+                    return
+                stage = ev.get("stage")
+                if stage == "tool_calling":
+                    t_name = ev.get("tool_name", "")
+                    s_label = SKILL_LABELS.get(t_name, f"🛠️ {t_name}")
+                    skills_used.append(s_label)
+                    thought_text = str(ev.get("thought") or "").strip()
+                    thought_line = f"💭 **决策思考**：{thought_text}\n" if thought_text else ""
+                    step_num = ev.get("step", 1)
+
+                    call_elements = [
+                        {
+                            "tag": "div",
+                            "text": {
+                                "tag": "lark_md",
+                                "content": f"{thought_line}⚙️ **正在调用技能 (第 {step_num} 步)**：`{s_label}`\n⏳ **执行状态**：正在与后端服务交互，请稍候片刻..."
+                            }
+                        }
+                    ]
+                    feishu_client.update_im_card(msg_id, "⚙️ PIG 正在执行任务...", call_elements, template="turquoise")
+
+            print(f"🤖 [Feishu Bot] 正在为会话 {sid} 进行思考推演 (动态流式卡片模式): '{clean_text}'...")
             res = reasoner.run_react_loop(
                 user_text=clean_text,
                 base_sys_prompt=sys_prompt,
@@ -170,9 +236,42 @@ def handle_feishu_incoming_message(clean_text: str, open_id: str, chat_id: str, 
                 skill_manager=skill_mgr,
                 evolution_engine=evolution_engine,
                 session_id=sid,
-                silent=True  # 远程静默执行，绝不触发本地舵机转动与大声发音！
+                silent=True,  # 远程静默执行，绝不触发本地舵机转动与大声发音！
+                on_step_callback=_on_feishu_step
             )
             reply_text = res.get("reply", "小猪收到啦！")
+            elapsed = round(time.time() - start_t, 1)
+
+            # 🚀 步骤 3：任务全部完成，原地定稿最终卡片！
+            if msg_id:
+                final_elements = [
+                    {
+                        "tag": "div",
+                        "text": {
+                            "tag": "lark_md",
+                            "content": reply_text
+                        }
+                    }
+                ]
+                if skills_used:
+                    chain_str = " ➔ ".join(skills_used)
+                    final_elements.append({"tag": "hr"})
+                    final_elements.append({
+                        "tag": "note",
+                        "elements": [
+                            {
+                                "tag": "plain_text",
+                                "content": f"⚡ 技能链路：{chain_str} · 总耗时 {elapsed}s · PIG Robot OS"
+                            }
+                        ]
+                    })
+                card_title = "💬 PIG 回复" if not skills_used else "✅ PIG 执行完毕"
+                update_res = feishu_client.update_im_card(msg_id, card_title, final_elements, template="blue")
+                if update_res.get("code") == 0:
+                    print(f"📤 [Feishu Bot] 已原地动态更新卡片至飞书 {msg_id} (耗时 {elapsed}s)")
+                    return
+
+            # 若未拿到 msg_id 或更新失败，兜底以普通消息发送
             send_res = feishu_client.send_im_message(target_id, "text", {"text": reply_text}, receive_id_type=id_type)
             print(f"📤 [Feishu Bot] 已回复消息至飞书 {target_id}: '{reply_text[:50]}...' -> {send_res.get('code', send_res.get('status'))}")
         except Exception as e:
