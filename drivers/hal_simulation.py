@@ -244,6 +244,11 @@ class SimulationRobotHAL(BaseRobotHAL):
         """获取当前毫米波人体雷达检测状态"""
         return bool(self.radar_detected)
 
+    def detach_servos(self):
+        """仿真切断舵机力矩"""
+        pass
+
+
 
     def close(self):
         if hasattr(self, "_cam") and self._cam is not None:

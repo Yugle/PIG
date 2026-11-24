@@ -241,6 +241,12 @@ class PhysicalRobotHAL(BaseRobotHAL):
         except Exception:
             pass
 
+    def detach_servos(self):
+        """主动立即切断舵机 PWM 脉宽输出 (卸力/防发热/静音休眠)"""
+        self._cancel_detach()
+        self._detach_servos()
+
+
     def update_servo_config(self, cfg: dict):
         """动态更新舵机微调与动力学参数"""
         if "pan_trim" in cfg: self.pan_trim = float(cfg["pan_trim"])

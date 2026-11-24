@@ -88,3 +88,10 @@ class BaseRobotHAL(ABC):
         """
         return True
 
+    def detach_servos(self):
+        """
+        切断舵机 PWM 脉冲以释放力矩 (防发热/防啸叫/低功耗卸力)。
+        """
+        pass
+
+
