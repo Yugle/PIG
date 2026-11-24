@@ -1778,9 +1778,9 @@
           if (res.ok) {
             const data = await res.json();
             if (data && data.menu_state) {
-              // 关键保护：如果用户在请求在途期间又点击了按键，或者队列中还有未处理按键，绝不覆盖本地 cursor！
+              // 关键保护：如果用户在请求在途期间又点击了按键，或者队列中还有未处理按键，绝不覆盖本地 cursor 与 mode！
               if (item.seq < localActionSeq || hwButtonQueue.length > 0) {
-                const { cursor, ...rest } = data.menu_state;
+                const { cursor, mode, ...rest } = data.menu_state;
                 menuState = Object.assign(menuState, rest);
               } else {
                 menuState = Object.assign(menuState, data.menu_state);
@@ -1799,9 +1799,21 @@
       isProcessingHwButton = false;
     }
 
+    let lastButtonSendTime = 0;
+    let lastSentButton = "";
     function sendHwButton(button, eventType = "click") {
-      lastLocalNavTime = Date.now();
+      const now = Date.now();
+      if (button === lastSentButton && now - lastButtonSendTime < 180) {
+        return; // 过滤 180ms 内同一按键的重复触发抖动 (如 Enter 键与按钮点击事件并发)
+      }
+      lastButtonSendTime = now;
+      lastSentButton = button;
+      lastLocalNavTime = now;
       const currentSeq = ++localActionSeq;
+
+      if (document.activeElement && typeof document.activeElement.blur === "function") {
+        document.activeElement.blur();
+      }
 
       // 1. 本地极速 0ms 响应 (绝对安全边界钳制 Clamping，彻底根除快速连续按造成的跳顶与反复跳)
       if (menuState.mode === "FACE") {
@@ -4323,9 +4335,10 @@
       if (!ev || !ev.type) return;
 
       if (ev.type === "menu_state" && ev.data) {
-        // 当本地在 500ms 内操作过菜单，或者按键队列未清空时，保护本地高亮 cursor 不被网络延迟包冲刷覆盖
-        if (Date.now() - lastLocalNavTime < 500 || hwButtonQueue.length > 0 || isProcessingHwButton) {
-          const { cursor, ...rest } = ev.data;
+        // 关键防回跳保护：当本地在 1500ms 内触发过按键导航，或按键仍在在途队列中时，
+        // 绝不让异步 SSE 推送包冲刷覆盖本地当前的 mode 和 cursor，彻底根除模式跳级回弹与菜单闪烁！
+        if (Date.now() - lastLocalNavTime < 1500 || hwButtonQueue.length > 0 || isProcessingHwButton) {
+          const { cursor, mode, ...rest } = ev.data;
           menuState = Object.assign(menuState, rest);
         } else {
           menuState = Object.assign(menuState, ev.data);
