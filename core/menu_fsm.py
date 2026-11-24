@@ -34,72 +34,290 @@ def get_local_ip() -> str:
 
 
 # ========================================================
-# Material Design 3 (Pixel Mint Theme) 调色板与组件绘制
+# Material Design 3 (Material You) 多主题配色方案
 # ========================================================
-MD3_SURFACE = (18, 20, 20)           # #121414 基础暗色表面
-MD3_SURF_CONT = (29, 36, 36)         # #1d2424 卡片容器表面
-MD3_OUTLINE = (61, 73, 71)           # #3d4947 边框轮廓线
-MD3_PRIMARY = (123, 208, 193)        # #7bd0c1 Pixel Mint 强调主色
-MD3_ON_PRIMARY = (0, 55, 49)         # #003731 强调色上深松绿主文字
-MD3_ON_PRIMARY_SUB = (14, 82, 73)    # #0e5249 强调色下次要文字
-MD3_ON_SURFACE = (225, 227, 227)     # #e1e3e3 表面主文字
-MD3_ON_SURF_VAR = (151, 163, 160)    # #97a3a0 表面次要文字
-MD3_BADGE_BG = (40, 59, 56)          # #283b38 未选中徽标背景
+THEMES = {
+    "mint": {
+        "name": "薄荷绿",
+        "primary": (123, 208, 193),       # #7bd0c1 Pixel Mint
+        "on_primary": (0, 55, 49),        # #003731
+        "on_primary_sub": (14, 82, 73),   # #0e5249
+        "surface": (18, 20, 20),          # #121414
+        "surface_container": (29, 36, 36),# #1d2424
+        "surface_high": (38, 48, 47),     # #26302f
+        "outline": (55, 68, 66),          # #374442
+        "badge_bg": (40, 59, 56),         # #283b38
+        "icon_bg_sel": (0, 72, 64),       # #004840
+    },
+    "orange": {
+        "name": "暖阳橙",
+        "primary": (255, 171, 64),        # #ffab40 Pixel Warm Amber
+        "on_primary": (74, 38, 0),        # #4a2600
+        "on_primary_sub": (102, 53, 0),   # #663500
+        "surface": (22, 19, 17),          # #161311
+        "surface_container": (38, 31, 26),# #261f1a
+        "surface_high": (52, 42, 35),     # #342a23
+        "outline": (76, 62, 52),          # #4c3e34
+        "badge_bg": (56, 44, 36),         # #382c24
+        "icon_bg_sel": (94, 49, 0),       # #5e3100
+    },
+    "blue": {
+        "name": "海天蓝",
+        "primary": (130, 177, 255),      # #82b1ff Pixel Sky Blue
+        "on_primary": (0, 44, 94),        # #002c5e
+        "on_primary_sub": (0, 64, 136),   # #004088
+        "surface": (16, 19, 24),          # #101318
+        "surface_container": (26, 32, 42),# #1a202a
+        "surface_high": (36, 44, 58),     # #242c3a
+        "outline": (52, 64, 84),          # #344054
+        "badge_bg": (32, 44, 62),         # #202c3e
+        "icon_bg_sel": (0, 60, 128),      # #003c80
+    },
+    "purple": {
+        "name": "薰衣紫",
+        "primary": (208, 188, 255),      # #d0bcff Pixel Lavender
+        "on_primary": (56, 30, 114),      # #381e72
+        "on_primary_sub": (79, 44, 150),  # #4f2c96
+        "surface": (20, 18, 24),          # #141218
+        "surface_container": (33, 29, 40),# #211d28
+        "surface_high": (46, 41, 56),     # #2e2938
+        "outline": (68, 60, 82),          # #443c52
+        "badge_bg": (48, 40, 62),         # #30283e
+        "icon_bg_sel": (79, 44, 150),     # #4f2c96
+    },
+    "mono": {
+        "name": "极简白",
+        "primary": (240, 240, 240),      # #f0f0f0 Bauhaus Minimalist
+        "on_primary": (18, 18, 18),       # #121212
+        "on_primary_sub": (50, 50, 50),   # #323232
+        "surface": (18, 18, 18),          # #121212
+        "surface_container": (32, 32, 32),# #202020
+        "surface_high": (46, 46, 46),     # #2e2e2e
+        "outline": (64, 64, 64),          # #404040
+        "badge_bg": (44, 44, 44),         # #2c2c2c
+        "icon_bg_sel": (200, 200, 200),   # #c8c8c8
+    }
+}
+THEME_KEYS = ["mint", "orange", "blue", "purple", "mono"]
 
-def _draw_pil_switch(draw, x: int, y: int, is_on: bool, is_selected: bool, width: int = 42, height: int = 24):
+def _draw_vector_icon(draw, icon_name: str, cx: int, cy: int, color):
     """
-    绘制 Material Design 3 风格开关：
-    - 42x24px 药丸形轨道
-    - 选中项（薄荷绿背景上）：
-      - 开：深松绿轨道 (0, 72, 64)，纯白大滑块（直径18px）
-      - 关：柔和松绿轨道 (58, 130, 118)，深松绿小滑块（直径12px）
-    - 未选中项（深灰暗卡片上）：
-      - 开：薄荷绿轨道 (123, 208, 193)，深松绿大滑块（直径18px）
-      - 关：深暗灰轨道 (45, 56, 55)，灰边框 (61, 73, 71)，浅灰小滑块（直径12px）
+    在指定中心点 (cx, cy) 绘制 18x18px 矢量微图标
     """
-    r = height // 2
-    if is_selected:
-        if is_on:
-            draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(0, 72, 64))
-            kx = x + width - r
-            ky = y + r
-            kr = 9
-            draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(255, 255, 255))
-        else:
-            draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(58, 130, 118))
-            kx = x + r
-            ky = y + r
-            kr = 6
-            draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(0, 55, 49))
-    else:
-        if is_on:
-            draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(123, 208, 193))
-            kx = x + width - r
-            ky = y + r
-            kr = 9
-            draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(0, 55, 49))
-        else:
-            draw.rounded_rectangle([x, y, x + width, y + height], radius=r, fill=(45, 56, 55), outline=(61, 73, 71), width=1)
-            kx = x + r
-            ky = y + r
-            kr = 6
-            draw.ellipse([kx - kr, ky - kr, kx + kr, ky + kr], fill=(143, 158, 155))
+    if icon_name == "wifi":
+        draw.arc([cx - 8, cy - 7, cx + 8, cy + 9], 200, 340, fill=color, width=2)
+        draw.arc([cx - 5, cy - 3, cx + 5, cy + 7], 200, 340, fill=color, width=2)
+        draw.ellipse([cx - 2, cy + 4, cx + 2, cy + 8], fill=color)
 
-def _draw_pil_badge(draw, text: str, right_x: int, center_y: int, is_selected: bool, font):
-    """
-    绘制 Material Design 3 风格胶囊徽标 (Tonal Badge)
-    """
-    tw = max(24, len(text) * 11)
-    badge_w = max(38, tw + 14)
-    badge_h = 22
-    bx = right_x - badge_w
-    by = center_y - badge_h // 2
-    if is_selected:
-        draw.rounded_rectangle([bx, by, bx + badge_w, by + badge_h], radius=11, fill=(0, 72, 64))
-        draw.text((bx + (badge_w - tw) // 2, by + 3), text, fill=(255, 255, 255), font=font)
+    elif icon_name == "doctor":
+        draw.line([(cx - 8, cy + 1), (cx - 4, cy + 1)], fill=color, width=2)
+        draw.line([(cx - 4, cy + 1), (cx - 2, cy - 6)], fill=color, width=2)
+        draw.line([(cx - 2, cy - 6), (cx + 1, cy + 7)], fill=color, width=2)
+        draw.line([(cx + 1, cy + 7), (cx + 3, cy - 2)], fill=color, width=2)
+        draw.line([(cx + 3, cy - 2), (cx + 5, cy + 1)], fill=color, width=2)
+        draw.line([(cx + 5, cy + 1), (cx + 8, cy + 1)], fill=color, width=2)
+
+    elif icon_name == "hardware":
+        draw.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], outline=color, width=2)
+        draw.ellipse([cx - 2, cy - 2, cx + 2, cy + 2], fill=color)
+        draw.line([(cx, cy - 9), (cx, cy - 6)], fill=color, width=2)
+        draw.line([(cx, cy + 6), (cx, cy + 9)], fill=color, width=2)
+        draw.line([(cx - 9, cy), (cx - 6, cy)], fill=color, width=2)
+        draw.line([(cx + 6, cy), (cx + 9, cy)], fill=color, width=2)
+
+    elif icon_name in ["settings", "theme", "palette"]:
+        # 调色盘 / 主题风格 / 设置
+        if icon_name in ["theme", "palette"]:
+            draw.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], outline=color, width=2)
+            draw.ellipse([cx - 3, cy - 4, cx - 1, cy - 2], fill=color)
+            draw.ellipse([cx + 2, cy - 3, cx + 4, cy - 1], fill=color)
+            draw.ellipse([cx - 4, cy + 1, cx - 2, cy + 3], fill=color)
+        else:
+            draw.line([(cx - 7, cy - 4), (cx + 7, cy - 4)], fill=color, width=2)
+            draw.ellipse([cx - 3, cy - 6, cx + 1, cy - 2], fill=color)
+            draw.line([(cx - 7, cy + 4), (cx + 7, cy + 4)], fill=color, width=2)
+            draw.ellipse([cx + 1, cy + 2, cx + 5, cy + 6], fill=color)
+
+    elif icon_name == "servo":
+        draw.arc([cx - 6, cy - 6, cx + 6, cy + 6], 45, 315, fill=color, width=2)
+        draw.polygon([(cx + 4, cy - 7), (cx + 7, cy - 2), (cx + 1, cy - 4)], fill=color)
+        draw.ellipse([cx - 2, cy - 2, cx + 2, cy + 2], fill=color)
+
+    elif icon_name == "spark":
+        draw.polygon([(cx, cy - 8), (cx + 2, cy - 2), (cx + 8, cy), (cx + 2, cy + 2), (cx, cy + 8), (cx - 2, cy + 2), (cx - 8, cy), (cx - 2, cy - 2)], fill=color)
+
+    elif icon_name == "lock":
+        draw.rounded_rectangle([cx - 6, cy - 2, cx + 6, cy + 7], radius=2, fill=color)
+        draw.arc([cx - 4, cy - 7, cx + 4, cy + 1], 180, 360, fill=color, width=2)
+
+    elif icon_name == "mic":
+        draw.rounded_rectangle([cx - 3, cy - 7, cx + 3, cy + 1], radius=3, fill=color)
+        draw.arc([cx - 6, cy - 4, cx + 6, cy + 4], 0, 180, fill=color, width=2)
+        draw.line([(cx, cy + 4), (cx, cy + 7)], fill=color, width=2)
+        draw.line([(cx - 4, cy + 7), (cx + 4, cy + 7)], fill=color, width=2)
+
+    elif icon_name == "eye":
+        draw.arc([cx - 8, cy - 7, cx + 8, cy + 7], 15, 165, fill=color, width=2)
+        draw.arc([cx - 8, cy - 7, cx + 8, cy + 7], 195, 345, fill=color, width=2)
+        draw.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=color)
+
+    elif icon_name == "grid":
+        for gx in [-5, 0, 5]:
+            for gy in [-5, 0, 5]:
+                draw.ellipse([cx + gx - 1, cy + gy - 1, cx + gx + 1, cy + gy + 1], fill=color)
+
+    elif icon_name == "chat":
+        draw.rounded_rectangle([cx - 7, cy - 6, cx + 7, cy + 3], radius=4, fill=color)
+        draw.polygon([(cx - 3, cy + 3), (cx - 5, cy + 7), (cx + 1, cy + 3)], fill=color)
+
+    elif icon_name == "sfx":
+        draw.ellipse([cx - 6, cy + 1, cx - 1, cy + 6], fill=color)
+        draw.ellipse([cx + 2, cy - 2, cx + 7, cy + 3], fill=color)
+        draw.line([(cx - 1, cy + 3), (cx - 1, cy - 5)], fill=color, width=2)
+        draw.line([(cx + 7, cy), (cx + 7, cy - 8)], fill=color, width=2)
+        draw.line([(cx - 1, cy - 5), (cx + 7, cy - 8)], fill=color, width=2)
+
+    elif icon_name == "face":
+        draw.rounded_rectangle([cx - 7, cy - 7, cx + 7, cy + 7], radius=3, outline=color, width=2)
+        draw.ellipse([cx - 4, cy - 3, cx - 2, cy - 1], fill=color)
+        draw.ellipse([cx + 2, cy - 3, cx + 4, cy - 1], fill=color)
+        draw.arc([cx - 4, cy - 1, cx + 4, cy + 4], 20, 160, fill=color, width=2)
+
+    elif icon_name == "trash":
+        draw.line([(cx - 6, cy - 5), (cx + 6, cy - 5)], fill=color, width=2)
+        draw.line([(cx - 2, cy - 7), (cx + 2, cy - 7)], fill=color, width=2)
+        draw.rounded_rectangle([cx - 5, cy - 4, cx + 5, cy + 7], radius=1, outline=color, width=2)
+        draw.line([(cx - 2, cy - 2), (cx - 2, cy + 5)], fill=color, width=1)
+        draw.line([(cx + 2, cy - 2), (cx + 2, cy + 5)], fill=color, width=1)
+
+    elif icon_name == "home":
+        draw.polygon([(cx, cy - 8), (cx + 8, cy - 1), (cx - 8, cy - 1)], fill=color)
+        draw.rounded_rectangle([cx - 6, cy - 1, cx + 6, cy + 7], radius=1, fill=color)
+        draw.rectangle([cx - 2, cy + 2, cx + 2, cy + 7], fill=(18, 20, 20))
+
+    elif icon_name == "voice":
+        draw.line([(cx - 6, cy - 3), (cx - 6, cy + 3)], fill=color, width=2)
+        draw.line([(cx - 2, cy - 6), (cx - 2, cy + 6)], fill=color, width=2)
+        draw.line([(cx + 2, cy - 8), (cx + 2, cy + 8)], fill=color, width=2)
+        draw.line([(cx + 6, cy - 4), (cx + 6, cy + 4)], fill=color, width=2)
+
+    elif icon_name == "volume":
+        draw.polygon([(cx - 6, cy - 3), (cx - 3, cy - 3), (cx + 1, cy - 6), (cx + 1, cy + 6), (cx - 3, cy + 3), (cx - 6, cy + 3)], fill=color)
+        draw.arc([cx - 1, cy - 5, cx + 7, cy + 5], 300, 60, fill=color, width=2)
+
+    elif icon_name == "clock":
+        draw.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], outline=color, width=2)
+        draw.line([(cx, cy - 5), (cx, cy)], fill=color, width=2)
+        draw.line([(cx, cy), (cx + 4, cy)], fill=color, width=2)
+
+    elif icon_name == "chip":
+        draw.rectangle([cx - 5, cy - 5, cx + 5, cy + 5], outline=color, width=2)
+        draw.rectangle([cx - 2, cy - 2, cx + 2, cy + 2], fill=color)
+        for d in [-3, 3]:
+            draw.line([(cx + d, cy - 8), (cx + d, cy - 5)], fill=color, width=1)
+            draw.line([(cx + d, cy + 5), (cx + d, cy + 8)], fill=color, width=1)
+            draw.line([(cx - 8, cy + d), (cx - 5, cy + d)], fill=color, width=1)
+            draw.line([(cx + 5, cy + d), (cx + 8, cy + d)], fill=color, width=1)
+
+    elif icon_name == "cloud":
+        draw.ellipse([cx - 4, cy - 6, cx + 4, cy + 2], fill=color)
+        draw.ellipse([cx - 7, cy - 2, cx - 1, cy + 4], fill=color)
+        draw.ellipse([cx + 1, cy - 2, cx + 7, cy + 4], fill=color)
+        draw.rectangle([cx - 5, cy, cx + 5, cy + 4], fill=color)
+        draw.line([(cx, cy - 1), (cx, cy + 7)], fill=(18, 20, 20), width=2)
+
+    elif icon_name == "restart":
+        draw.arc([cx - 6, cy - 6, cx + 6, cy + 6], 45, 315, fill=color, width=2)
+        draw.polygon([(cx + 4, cy - 7), (cx + 7, cy - 2), (cx + 1, cy - 4)], fill=color)
+
+    elif icon_name == "power":
+        draw.arc([cx - 6, cy - 6, cx + 6, cy + 6], 135, 405, fill=color, width=2)
+        draw.line([(cx, cy - 8), (cx, cy - 1)], fill=color, width=2)
+
+    elif icon_name == "camera":
+        draw.rounded_rectangle([cx - 7, cy - 4, cx + 7, cy + 6], radius=2, outline=color, width=2)
+        draw.rectangle([cx - 3, cy - 7, cx + 3, cy - 4], fill=color)
+        draw.ellipse([cx - 3, cy - 1, cx + 3, cy + 5], fill=color)
+
     else:
-        draw.rounded_rectangle([bx, by, bx + badge_w, by + badge_h], radius=11, fill=(40, 59, 56), outline=(61, 73, 71), width=1)
-        draw.text((bx + (badge_w - tw) // 2, by + 3), text, fill=(123, 208, 193), font=font)
+        draw.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=color)
+
+
+def _draw_modern_tile(draw, x: int, y: int, w: int, h: int, icon: str, title: str, right_type: str, right_val: Any, is_selected: bool, font_bold, font_small, theme: dict):
+    """
+    绘制 Material Design 3 极简单行卡片 (左图标底座 + 纯净单行居中标题 + 右侧控件)
+    """
+    r = 16
+    p_col = theme["primary"]
+    on_p = theme["on_primary"]
+    surf_cont = theme["surface_container"]
+    surf_high = theme["surface_high"]
+    outline = theme["outline"]
+    icon_sel_bg = theme["icon_bg_sel"]
+    badge_bg = theme["badge_bg"]
+
+    if is_selected:
+        draw.rounded_rectangle([x, y, x + w, y + h], radius=r, fill=p_col)
+        icon_bg = icon_sel_bg
+        icon_col = (255, 255, 255) if theme.get("name") != "极简白" else (18, 18, 18)
+        t_col = on_p
+    else:
+        draw.rounded_rectangle([x, y, x + w, y + h], radius=r, fill=surf_cont, outline=outline, width=1)
+        icon_bg = surf_high
+        icon_col = p_col
+        t_col = (235, 238, 238)
+
+    # 左侧圆形图标底座 (30x30px)
+    ic_cx = x + 25
+    ic_cy = y + h // 2
+    ic_r = 15
+    draw.ellipse([ic_cx - ic_r, ic_cy - ic_r, ic_cx + ic_r, ic_cy + ic_r], fill=icon_bg)
+    _draw_vector_icon(draw, icon, ic_cx, ic_cy, icon_col)
+
+    # 中间纯净单行标题 (垂直完美居中，杜绝任何杂乱第二行)
+    draw.text((x + 48, y + (h - 17) // 2), title, fill=t_col, font=font_bold)
+
+    # 右侧控件
+    if right_type == "switch":
+        sw_w, sw_h = 42, 24
+        sw_x = x + w - sw_w - 10
+        sw_y = y + (h - sw_h) // 2
+        is_on = bool(right_val)
+        if is_selected:
+            if is_on:
+                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=12, fill=icon_sel_bg)
+                draw.ellipse([sw_x + sw_w - 21, sw_y + 3, sw_x + sw_w - 3, sw_y + 21], fill=(255, 255, 255))
+            else:
+                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=12, fill=surf_high)
+                draw.ellipse([sw_x + 6, sw_y + 6, sw_x + 18, sw_y + 18], fill=on_p)
+        else:
+            if is_on:
+                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=12, fill=p_col)
+                draw.ellipse([sw_x + sw_w - 21, sw_y + 3, sw_x + sw_w - 3, sw_y + 21], fill=on_p)
+            else:
+                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=12, fill=(45, 52, 52), outline=outline, width=1)
+                draw.ellipse([sw_x + 6, sw_y + 6, sw_x + 18, sw_y + 18], fill=(145, 155, 155))
+
+    elif right_type == "badge":
+        txt = str(right_val)
+        tw = max(24, len(txt) * 11)
+        bw = max(38, tw + 14)
+        bh = 22
+        bx = x + w - bw - 10
+        by = y + (h - bh) // 2
+        if is_selected:
+            draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=11, fill=icon_sel_bg)
+            draw.text((bx + (bw - tw) // 2, by + 3), txt, fill=(255, 255, 255), font=font_small)
+        else:
+            draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=11, fill=badge_bg, outline=outline, width=1)
+            draw.text((bx + (bw - tw) // 2, by + 3), txt, fill=p_col, font=font_small)
+
+    elif right_type == "chevron":
+        chv_x = x + w - 16
+        chv_y = y + h // 2
+        col = on_p if is_selected else (145, 158, 155)
+        draw.line([(chv_x - 4, chv_y - 5), (chv_x + 1, chv_y)], fill=col, width=2)
+        draw.line([(chv_x + 1, chv_y), (chv_x - 4, chv_y + 5)], fill=col, width=2)
 
 
 class MenuFSM:
@@ -117,13 +335,18 @@ class MenuFSM:
         self.is_mic_muted = False
         self.face_tracking_enabled = True
         self.is_servo_sleeping = False
+
+        # 系统主题配色 (mint, orange, blue, purple, mono)
+        self.theme_key = self._load_cfg().get("theme_color", "mint")
+        if self.theme_key not in THEMES:
+            self.theme_key = "mint"
         
-        # 主菜单定义 (工业极简风，杜绝劣质 AI Emojis)
+        # 主菜单定义 (Material Design 3 极简现代微图标与单行纯净标题)
         self.main_menu_items = [
-            {"id": "qr", "num": "01", "title": "无线与配网", "desc": "AP热点配网 / 查IP / 手机设置"},
-            {"id": "doctor", "num": "02", "title": "系统体检", "desc": "网络延迟与外设实时排障"},
-            {"id": "toggles", "num": "03", "title": "硬件控制", "desc": "舵机归位 / 自检 / 麦克风 / 追踪"},
-            {"id": "system", "num": "04", "title": "系统设置", "desc": "面容 / 音量 / 音色 / 息屏 / 关机"},
+            {"id": "qr", "icon": "wifi", "title": "无线与配网"},
+            {"id": "doctor", "icon": "doctor", "title": "系统体检"},
+            {"id": "toggles", "icon": "hardware", "title": "硬件控制"},
+            {"id": "system", "icon": "settings", "title": "系统设置"},
         ]
         
         # 舵机状态提示
@@ -205,19 +428,19 @@ class MenuFSM:
     def _sync_hardware_items(self):
         c_cfg = self._load_cfg()
         gaze_mode = c_cfg.get("gaze_tracking_mode", "9grid")
-        gaze_txt = "九宫格灵动" if gaze_mode == "9grid" else "连续跟随"
+        gaze_txt = "九宫格" if gaze_mode == "9grid" else "连续跟随"
         proactive_on = c_cfg.get("proactive_care", True)
         sfx_on = c_cfg.get("non_verbal_audio", True)
         
         self.hardware_items = [
-            {"id": "servo_center", "name": "舵机居中归位", "val": getattr(self, "servo_center_status", "ACTION (90°, 90°)"), "type": "action"},
-            {"id": "servo_test", "name": "舵机动作自检", "val": getattr(self, "servo_test_status", "TEST 摇头点头自检"), "type": "action"},
-            {"id": "servo_sleep", "name": "舵机休眠防抖", "val": "OFF (休眠卸力)" if self.is_servo_sleeping else "ON (通电保持)", "type": "toggle", "state": not self.is_servo_sleeping},
-            {"id": "mic", "name": "麦克风收音", "val": "OFF (已静音)" if self.is_mic_muted else "ON (收音中)", "type": "toggle", "state": not self.is_mic_muted},
-            {"id": "track", "name": "人脸视线跟随", "val": "ON (已开启)" if self.face_tracking_enabled else "OFF (已关闭)", "type": "toggle", "state": self.face_tracking_enabled},
-            {"id": "gaze_mode", "name": "视线算法模式", "val": gaze_txt, "type": "cycle"},
-            {"id": "proactive", "name": "主动关怀搭话", "val": "ON (已开启)" if proactive_on else "OFF (已关闭)", "type": "toggle", "state": proactive_on},
-            {"id": "sfx", "name": "萌宠情绪拟声", "val": "ON (已开启)" if sfx_on else "OFF (已关闭)", "type": "toggle", "state": sfx_on},
+            {"id": "servo_center", "icon": "servo", "name": "舵机居中归位", "val": getattr(self, "servo_center_status", "回正校准"), "type": "action"},
+            {"id": "servo_test", "icon": "spark", "name": "舵机动作自检", "val": getattr(self, "servo_test_status", "自检通过"), "type": "action"},
+            {"id": "servo_sleep", "icon": "lock", "name": "舵机保持通电", "val": "", "type": "toggle", "state": not self.is_servo_sleeping},
+            {"id": "mic", "icon": "mic", "name": "麦克风收音", "val": "", "type": "toggle", "state": not self.is_mic_muted},
+            {"id": "track", "icon": "eye", "name": "人脸视线跟随", "val": "", "type": "toggle", "state": self.face_tracking_enabled},
+            {"id": "gaze_mode", "icon": "grid", "name": "视线算法模式", "val": gaze_txt, "type": "cycle"},
+            {"id": "proactive", "icon": "chat", "name": "主动关怀搭话", "val": "", "type": "toggle", "state": proactive_on},
+            {"id": "sfx", "icon": "sfx", "name": "萌宠情绪拟声", "val": "", "type": "toggle", "state": sfx_on},
         ]
         # 兼容旧代码引用
         self.toggle_items = self.hardware_items
@@ -227,20 +450,32 @@ class MenuFSM:
         voice = c_cfg.get("mimo_voice", "冰糖")
         vol = c_cfg.get("volume", 80)
         timeout = int(self.auto_timeout)
-        timeout_txt = f"{timeout}秒" if timeout < 999 else "常亮不熄屏"
+        timeout_txt = f"{timeout}秒" if timeout < 999 else "常亮"
+        theme_name = THEMES.get(getattr(self, "theme_key", "mint"), THEMES["mint"])["name"]
 
         self.system_items = [
-            {"id": "face_id", "name": "录入主人面容", "val": "SCAN 拍照绑定", "type": "action"},
-            {"id": "face_clear", "name": "重置主人面容", "val": getattr(self, "face_clear_status", "RESET 清除面容"), "type": "action"},
-            {"id": "mijia", "name": "米家扫码绑定", "val": "屏幕弹窗", "type": "action"},
-            {"id": "voice", "name": "发音音色切换", "val": voice, "type": "cycle"},
-            {"id": "volume", "name": "系统播报音量", "val": f"{vol}%", "type": "cycle"},
-            {"id": "timeout", "name": "屏幕息屏时间", "val": timeout_txt, "type": "cycle"},
-            {"id": "version", "name": "系统固件版本", "val": self.version_str, "type": "info"},
-            {"id": "update", "name": "检查系统更新", "val": self.update_status, "type": "action"},
-            {"id": "restart", "name": "重启机器人服务", "val": "RESTART", "type": "action"},
-            {"id": "shutdown", "name": "树莓派安全关机", "val": "POWER OFF", "type": "action"},
+            {"id": "theme", "icon": "theme", "name": "系统主题风格", "val": theme_name, "type": "cycle"},
+            {"id": "face_id", "icon": "face", "name": "录入主人面容", "val": "", "type": "action"},
+            {"id": "face_clear", "icon": "trash", "name": "重置主人面容", "val": "", "type": "action"},
+            {"id": "mijia", "icon": "home", "name": "米家扫码绑定", "val": "", "type": "action"},
+            {"id": "voice", "icon": "voice", "name": "发音音色切换", "val": voice, "type": "cycle"},
+            {"id": "volume", "icon": "volume", "name": "系统播报音量", "val": f"{vol}%", "type": "cycle"},
+            {"id": "timeout", "icon": "clock", "name": "屏幕息屏时间", "val": timeout_txt, "type": "cycle"},
+            {"id": "version", "icon": "chip", "name": "系统固件版本", "val": self.version_str, "type": "info"},
+            {"id": "update", "icon": "cloud", "name": "检查系统更新", "val": self.update_status, "type": "action"},
+            {"id": "restart", "icon": "restart", "name": "重启机器人服务", "val": "", "type": "action"},
+            {"id": "shutdown", "icon": "power", "name": "树莓派安全关机", "val": "", "type": "action"},
         ]
+
+    def cycle_theme(self):
+        """循环切换 M3 主题调色板 (薄荷绿 -> 暖阳橙 -> 海天蓝 -> 薰衣紫 -> 极简白)"""
+        cur_idx = THEME_KEYS.index(self.theme_key) if self.theme_key in THEME_KEYS else 0
+        next_key = THEME_KEYS[(cur_idx + 1) % len(THEME_KEYS)]
+        self.theme_key = next_key
+        self._save_cfg_key("theme_color", next_key)
+        self._sync_system_items()
+        self._notify_listeners()
+        print(f"🎨 [MenuFSM] 切换系统主题: {THEMES[next_key]['name']} ({next_key})")
 
     def run_servo_center(self):
         """舵机一键居中归位 (90°, 90°)"""
@@ -741,7 +976,9 @@ class MenuFSM:
                     self._notify_listeners()
                 elif button == "K3":
                     action_id = self.system_items[self.cursor]["id"]
-                    if action_id == "face_id":
+                    if action_id == "theme":
+                        self.cycle_theme()
+                    elif action_id == "face_id":
                         self.trigger_face_id_enrollment()
                     elif action_id == "face_clear":
                         self.clear_master_face()
@@ -884,6 +1121,7 @@ class MenuFSM:
             },
             "settings_url": f"http://{ip}:8090/settings",
             "qr_base64": self.get_qr_base64(),
+            "theme": getattr(self, "theme_key", "mint"),
             "is_mic_muted": self.is_mic_muted,
             "face_tracking": self.face_tracking_enabled,
             "servo_sleeping": self.is_servo_sleeping,
@@ -892,11 +1130,11 @@ class MenuFSM:
         }
 
     # ========================================================
-    # 树莓派真机端 PIL 绘图渲染器 (Material Design 3 Pixel Mint 质感)
+    # 树莓派真机端 PIL 绘图渲染器 (Material Design 3 现代穿戴/手环旗舰风格)
     # ========================================================
     def render_pil_overlay(self, base_image: Image.Image) -> Image.Image:
         """
-        在 240x320 PIL 图像上渲染 Material Design 3 风格菜单 (用于树莓派 ST7789 真机 LCD 直刷)
+        在 240x320 PIL 图像上渲染 Material Design 3 现代卡片菜单 (用于树莓派 ST7789 真机 LCD 直刷)
         """
         img = base_image.copy()
         draw = ImageDraw.Draw(img)
@@ -909,44 +1147,48 @@ class MenuFSM:
                 draw.text((200, 11), "Z", fill=(140, 140, 140), font=self.font_small)
             return img
 
-        # 2. 菜单背景：Material Design 3 暗色表面 (M3 Tonal Surface)
-        overlay = Image.new("RGBA", (240, 320), (18, 20, 20, 250))
+        # 获取当前激活的 M3 主题调色板
+        theme = THEMES.get(getattr(self, "theme_key", "mint"), THEMES["mint"])
+        p_col = theme["primary"]
+        on_p = theme["on_primary"]
+        surf_col = theme["surface"]
+        on_surf = (225, 227, 227)
+        on_surf_var = (151, 163, 160)
+
+        # 2. 菜单背景：Material Design 3 暗色表面 (动态跟随主题基调)
+        overlay = Image.new("RGBA", (240, 320), surf_col + (250,))
         img.paste(overlay, (0, 0), overlay)
         draw = ImageDraw.Draw(img)
 
-        # 顶部分割线 (M3 Outline)
-        draw.line([(16, 36), (224, 36)], fill=MD3_OUTLINE, width=1)
-
-        # A. 主菜单界面 (M3 16px 圆角芯片卡片 + Pixel Mint 强调选框)
+        # A. 主菜单界面 (M3 极简单行药丸卡片 + 矢量微图标底座)
         if self.current_mode == "MENU_MAIN":
-            draw.text((16, 16), "SETTINGS", fill=MD3_PRIMARY, font=self.font_small)
+            # 顶栏：微呼吸圆点 + 标题 + 在线状态
+            draw.ellipse([14, 23, 20, 29], fill=p_col)
+            draw.text((26, 17), "控制中心", fill=on_surf, font=self.font_bold)
+            draw.text((192, 21), "在线", fill=p_col, font=self.font_small)
 
-            y_start = 48
-            card_h = 54
+            y_start = 50
+            card_h = 50
             card_gap = 10
             for idx, item in enumerate(self.main_menu_items):
                 is_selected = (idx == self.cursor)
                 card_y = y_start + idx * (card_h + card_gap)
-
-                if is_selected:
-                    # M3 Pixel Mint 高亮卡片
-                    draw.rounded_rectangle([12, card_y, 228, card_y + card_h], radius=16, fill=MD3_PRIMARY)
-                    draw.text((22, card_y + 8), item["title"], fill=MD3_ON_PRIMARY, font=self.font_bold)
-                    draw.text((22, card_y + 32), item["desc"], fill=MD3_ON_PRIMARY_SUB, font=self.font_small)
-                    draw.text((212, card_y + 16), "›", fill=MD3_ON_PRIMARY, font=self.font_bold)
-                else:
-                    # M3 Surface Container 暗色卡片 + Outline
-                    draw.rounded_rectangle([12, card_y, 228, card_y + card_h], radius=16, fill=MD3_SURF_CONT, outline=MD3_OUTLINE, width=1)
-                    draw.text((22, card_y + 8), item["title"], fill=MD3_ON_SURFACE, font=self.font_bold)
-                    draw.text((22, card_y + 32), item["desc"], fill=MD3_ON_SURF_VAR, font=self.font_small)
-                    draw.text((212, card_y + 16), "›", fill=MD3_ON_SURF_VAR, font=self.font_bold)
+                _draw_modern_tile(
+                    draw, 12, card_y, 216, card_h,
+                    item.get("icon", "settings"), item["title"],
+                    "chevron", "", is_selected, self.font_bold, self.font_small, theme
+                )
 
         # B. 扫码手机配置界面 (支持 AP 配网热点与已连接模式)
         elif self.current_mode == "QR_CODE":
             wf_st = wifi_manager.get_status()
+            # 顶栏带返回箭头
+            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
+            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
+            draw.text((26, 17), "无线配网", fill=on_surf, font=self.font_bold)
+
             if wf_st["ap_mode"]:
-                draw.text((16, 16), "AP PROVISION", fill=MD3_PRIMARY, font=self.font_small)
-                draw.text((184, 16), "HOTSPOT", fill=(255, 180, 0), font=self.font_small)
+                draw.text((176, 21), "热点已开启", fill=(255, 180, 0), font=self.font_small)
 
                 draw.rounded_rectangle([42, 48, 198, 204], radius=16, fill=(255, 255, 255))
                 qr_bytes = self.get_qr_png_bytes()
@@ -955,12 +1197,11 @@ class MenuFSM:
                     qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
                     img.paste(qr_pil, (48, 54))
 
-                draw.text((24, 226), f"热点: {wf_st['ap_ssid']}", fill=MD3_ON_SURFACE, font=self.font_bold)
-                draw.text((24, 248), f"密码: {wf_st['ap_password']}  (扫码直连)", fill=MD3_ON_SURF_VAR, font=self.font_small)
-                draw.text((24, 270), f"后台: {wf_st['ap_ip']}:8090/settings", fill=MD3_PRIMARY, font=self.font_small)
+                draw.text((24, 222), f"热点: {wf_st['ap_ssid']}", fill=on_surf, font=self.font_bold)
+                draw.text((24, 244), f"密码: {wf_st['ap_password']}  (扫码直连)", fill=on_surf_var, font=self.font_small)
+                draw.text((24, 266), f"后台: {wf_st['ap_ip']}:8090/settings", fill=p_col, font=self.font_small)
             else:
-                draw.text((16, 16), "NETWORK", fill=MD3_PRIMARY, font=self.font_small)
-                draw.text((184, 16), "ONLINE", fill=MD3_PRIMARY, font=self.font_small)
+                draw.text((188, 21), "已联网", fill=p_col, font=self.font_small)
 
                 ip = wf_st.get("ip", get_local_ip())
                 draw.rounded_rectangle([42, 48, 198, 204], radius=16, fill=(255, 255, 255))
@@ -970,41 +1211,46 @@ class MenuFSM:
                     qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
                     img.paste(qr_pil, (48, 54))
 
-                draw.text((24, 226), f"已连接: {wf_st.get('ssid', 'WiFi')}", fill=MD3_ON_SURFACE, font=self.font_bold)
-                draw.text((24, 248), f"本机 IP: {ip}:8090", fill=MD3_ON_SURF_VAR, font=self.font_small)
-                draw.text((24, 270), "手机扫码进后台配网或改配置", fill=MD3_PRIMARY, font=self.font_small)
+                draw.text((24, 222), f"已连: {wf_st.get('ssid', 'WiFi')}", fill=on_surf, font=self.font_bold)
+                draw.text((24, 244), f"IP: {ip}:8090", fill=on_surf_var, font=self.font_small)
+                draw.text((24, 266), "手机扫码进入后台进行配网设置", fill=p_col, font=self.font_small)
 
-        # C. 一键体检诊断界面
+        # C. 一键体检诊断界面 (纯净单行无冗余副标题)
         elif self.current_mode == "DOCTOR":
-            draw.text((16, 16), "DIAGNOSTICS", fill=MD3_PRIMARY, font=self.font_small)
-            draw.text((192, 16), "STATUS", fill=MD3_ON_SURF_VAR, font=self.font_small)
+            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
+            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
+            draw.text((26, 17), "系统体检", fill=on_surf, font=self.font_bold)
+            draw.text((188, 21), "HEALTH", fill=p_col, font=self.font_small)
 
             d = self.doctor_cache
             items = [
-                ("WIFI IP", d.get("wifi_ip", "--")),
-                ("MIMO API", d.get("mimo_status", "--")),
-                ("CAMERA", d.get("camera_status", "--")),
-                ("MICROPHONE", d.get("mic_status", "--")),
-                ("CPU TEMP", d.get("cpu_temp", "--")),
+                ("wifi", "网络连接", "badge", "在线" if "." in d.get("wifi_ip", "") and "--" not in d.get("wifi_ip", "") else "离线"),
+                ("doctor", "大模型接口", "badge", d.get("mimo_status", "正常")),
+                ("camera", "视觉摄像头", "badge", d.get("camera_status", "正常")),
+                ("mic", "麦克风矩阵", "badge", d.get("mic_status", "正常")),
+                ("chip", "处理器核心", "badge", d.get("cpu_temp", "45°C")),
             ]
 
             y = 48
-            card_h = 42
-            card_gap = 8
-            for label, val in items:
-                draw.rounded_rectangle([12, y, 228, y + card_h], radius=12, fill=MD3_SURF_CONT, outline=MD3_OUTLINE, width=1)
-                draw.text((22, y + 13), label, fill=MD3_ON_SURF_VAR, font=self.font_small)
-                is_good = any(x in val for x in ["正常", "OK", "在线", "°C"]) or ("." in val and "--" not in val)
-                val_color = MD3_PRIMARY if is_good else (245, 158, 11)
-                draw.text((115, y + 12), val, fill=val_color, font=self.font_bold)
+            card_h = 46
+            card_gap = 7
+            for icon, label, r_type, val in items:
+                _draw_modern_tile(
+                    draw, 12, y, 216, card_h,
+                    icon, label,
+                    r_type, val, False, self.font_bold, self.font_small, theme
+                )
                 y += (card_h + card_gap)
 
-        # D. 硬件控制界面 (TOGGLES: M3 Switch 开关控件 + 16px 圆角芯片)
+        # D. 硬件控制界面 (TOGGLES: 单行 M3 Switch 极简卡片)
         elif self.current_mode == "TOGGLES":
             total = len(self.hardware_items)
             cur_idx = max(0, min(total - 1, self.cursor))
 
-            draw.text((16, 16), "HARDWARE", fill=MD3_PRIMARY, font=self.font_small)
+            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
+            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
+            draw.text((26, 17), "硬件控制", fill=on_surf, font=self.font_bold)
+            draw.text((192, 21), f"{cur_idx+1:02d}/{total:02d}", fill=on_surf_var, font=self.font_small)
 
             max_visible = 4
             start_idx = 0
@@ -1018,76 +1264,43 @@ class MenuFSM:
                 start_idx = max(0, min(start_idx, total - max_visible))
 
             visible_items = self.hardware_items[start_idx : start_idx + max_visible]
-            card_w = 204 if total > max_visible else 216
-            card_h = 54
-            card_gap = 10
+            card_w = 212
+            card_h = 50
+            card_gap = 8
             y = 48
 
             for v_idx, item in enumerate(visible_items):
                 real_idx = start_idx + v_idx
                 is_selected = (real_idx == cur_idx)
                 is_on = bool(item.get("state", False))
-
-                item_id = item.get("id", "")
                 item_type = item.get("type", "")
 
-                if item_type == "toggle":
-                    if item_id == "servo_sleep":
-                        sub_txt = "通电保持" if is_on else "休眠卸力"
-                    elif item_id == "mic":
-                        sub_txt = "收音中" if is_on else "已静音"
-                    elif item_id == "track":
-                        sub_txt = "视觉跟随开启" if is_on else "跟随已关闭"
-                    elif item_id == "proactive":
-                        sub_txt = "主动搭话开启" if is_on else "搭话已关闭"
-                    elif item_id == "sfx":
-                        sub_txt = "情绪拟声开启" if is_on else "拟声已关闭"
-                    else:
-                        sub_txt = "已开启" if is_on else "已关闭"
-                elif item_type == "action":
-                    sub_txt = "居中归位 (90°, 90°)" if item_id == "servo_center" else str(item.get("val", "动作健康自检"))
-                elif item_type == "cycle":
-                    sub_txt = "算法跟随设定"
-                else:
-                    sub_txt = str(item.get("val", ""))
+                r_type = "switch" if item_type == "toggle" else ("badge" if item_type == "cycle" else "chevron")
+                r_val = is_on if item_type == "toggle" else (str(item.get("val", "")) if item_type == "cycle" else "")
 
-                if is_selected:
-                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=16, fill=MD3_PRIMARY)
-                    draw.text((22, y + 8), item["name"], fill=MD3_ON_PRIMARY, font=self.font_bold)
-                    draw.text((22, y + 32), sub_txt, fill=MD3_ON_PRIMARY_SUB, font=self.font_small)
-                else:
-                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=16, fill=MD3_SURF_CONT, outline=MD3_OUTLINE, width=1)
-                    draw.text((22, y + 8), item["name"], fill=MD3_ON_SURFACE, font=self.font_bold)
-                    draw.text((22, y + 32), sub_txt, fill=MD3_ON_SURF_VAR, font=self.font_small)
-
-                # 右侧 M3 Switch / M3 胶囊徽标 / 箭头
-                if item_type == "toggle":
-                    _draw_pil_switch(draw, 12 + card_w - 52, y + 15, is_on, is_selected)
-                elif item_type == "cycle":
-                    badge_txt = "九宫格" if "九宫格" in str(item.get("val", "")) else "连续跟随"
-                    _draw_pil_badge(draw, badge_txt, 12 + card_w - 10, y + 27, is_selected, self.font_small)
-                else:
-                    draw.text((12 + card_w - 14, y + 16), "›", fill=MD3_ON_PRIMARY if is_selected else MD3_ON_SURF_VAR, font=self.font_bold)
-
+                _draw_modern_tile(
+                    draw, 12, y, card_w, card_h,
+                    item.get("icon", "hardware"), item["name"],
+                    r_type, r_val, is_selected, self.font_bold, self.font_small, theme
+                )
                 y += (card_h + card_gap)
 
-            # M3 风格滚动条 (Surface Container 轨道 + Pixel Mint 滑块)
+            # 极简 2px 贴边胶囊滚动滑块
             if total > max_visible:
-                track_x = 224
-                track_y = 48
-                track_h = max_visible * (card_h + card_gap) - card_gap
-                draw.rounded_rectangle([track_x, track_y, track_x + 3, track_y + track_h], radius=2, fill=MD3_SURF_CONT)
-                thumb_h = max(32, int(track_h * (max_visible / total)))
-                max_scroll = track_h - thumb_h
-                thumb_y = track_y + int((start_idx / (total - max_visible)) * max_scroll)
-                draw.rounded_rectangle([track_x, thumb_y, track_x + 3, thumb_y + thumb_h], radius=2, fill=MD3_PRIMARY)
+                thumb_h = 44
+                max_scroll = 180
+                thumb_y = 52 + int((start_idx / (total - max_visible)) * max_scroll)
+                draw.rounded_rectangle([232, thumb_y, 235, thumb_y + thumb_h], radius=1, fill=p_col)
 
-        # E. 系统设置界面 (SYSTEM: 版本号/更新/关机/重启/认主)
+        # E. 系统设置界面 (SYSTEM: 主题风格/面容/音色/音量/版本/更新/重启/关机)
         elif self.current_mode == "SYSTEM":
             total = len(self.system_items)
             cur_idx = max(0, min(total - 1, self.cursor))
 
-            draw.text((16, 16), "SYSTEM", fill=MD3_PRIMARY, font=self.font_small)
+            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
+            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
+            draw.text((26, 17), "系统设置", fill=on_surf, font=self.font_bold)
+            draw.text((192, 21), f"{cur_idx+1:02d}/{total:02d}", fill=on_surf_var, font=self.font_small)
 
             max_visible = 4
             start_idx = 0
@@ -1101,74 +1314,41 @@ class MenuFSM:
                 start_idx = max(0, min(start_idx, total - max_visible))
 
             visible_items = self.system_items[start_idx : start_idx + max_visible]
-            card_w = 204 if total > max_visible else 216
-            card_h = 54
-            card_gap = 10
+            card_w = 212
+            card_h = 50
+            card_gap = 8
             y = 48
 
             for v_idx, item in enumerate(visible_items):
                 real_idx = start_idx + v_idx
                 is_selected = (real_idx == cur_idx)
-                item_id = item.get("id", "")
                 item_type = item.get("type", "")
 
-                if item_id == "face_id":
-                    sub_txt = "3秒抓拍面部特征认主"
-                elif item_id == "face_clear":
-                    sub_txt = "清除本地主人面容数据"
-                elif item_id == "mijia":
-                    sub_txt = "屏幕弹窗扫码绑定"
-                elif item_id == "voice":
-                    sub_txt = "系统播报声音风格"
-                elif item_id == "volume":
-                    sub_txt = "扬声器播报音量增益"
-                elif item_id == "timeout":
-                    sub_txt = "无操作自动息屏倒计时"
-                elif item_id == "version":
-                    sub_txt = "PIG Robot OS 核心固件"
-                elif item_id == "update":
-                    sub_txt = str(item.get("val", "点击检查远程更新"))
-                elif item_id == "restart":
-                    sub_txt = "热重启核心 Python 进程"
-                elif item_id == "shutdown":
-                    sub_txt = "安全切断供电避免坏卡"
-                else:
-                    sub_txt = str(item.get("val", ""))
+                r_type = "badge" if item_type in ["cycle", "info"] else "chevron"
+                r_val = str(item.get("val", "")) if item_type in ["cycle", "info"] else ""
 
-                if is_selected:
-                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=16, fill=MD3_PRIMARY)
-                    draw.text((22, y + 8), item["name"], fill=MD3_ON_PRIMARY, font=self.font_bold)
-                    draw.text((22, y + 32), sub_txt, fill=MD3_ON_PRIMARY_SUB, font=self.font_small)
-                else:
-                    draw.rounded_rectangle([12, y, 12 + card_w, y + card_h], radius=16, fill=MD3_SURF_CONT, outline=MD3_OUTLINE, width=1)
-                    draw.text((22, y + 8), item["name"], fill=MD3_ON_SURFACE, font=self.font_bold)
-                    draw.text((22, y + 32), sub_txt, fill=MD3_ON_SURF_VAR, font=self.font_small)
-
-                # 右侧胶囊徽标或动作箭头
-                if item_type in ["cycle", "info"]:
-                    _draw_pil_badge(draw, str(item.get("val", "")), 12 + card_w - 10, y + 27, is_selected, self.font_small)
-                else:
-                    draw.text((12 + card_w - 14, y + 16), "›", fill=MD3_ON_PRIMARY if is_selected else MD3_ON_SURF_VAR, font=self.font_bold)
-
+                _draw_modern_tile(
+                    draw, 12, y, card_w, card_h,
+                    item.get("icon", "settings"), item["name"],
+                    r_type, r_val, is_selected, self.font_bold, self.font_small, theme
+                )
                 y += (card_h + card_gap)
 
-            # M3 风格滚动条
+            # 极简 2px 贴边胶囊滚动滑块
             if total > max_visible:
-                track_x = 224
-                track_y = 48
-                track_h = max_visible * (card_h + card_gap) - card_gap
-                draw.rounded_rectangle([track_x, track_y, track_x + 3, track_y + track_h], radius=2, fill=MD3_SURF_CONT)
-                thumb_h = max(32, int(track_h * (max_visible / total)))
-                max_scroll = track_h - thumb_h
-                thumb_y = track_y + int((start_idx / (total - max_visible)) * max_scroll)
-                draw.rounded_rectangle([track_x, thumb_y, track_x + 3, thumb_y + thumb_h], radius=2, fill=MD3_PRIMARY)
+                thumb_h = 44
+                max_scroll = 180
+                thumb_y = 52 + int((start_idx / (total - max_visible)) * max_scroll)
+                draw.rounded_rectangle([232, thumb_y, 235, thumb_y + thumb_h], radius=1, fill=p_col)
 
         # F. 人脸录入倒计时/取景界面 (FACE_ENROLL)
         elif self.current_mode == "FACE_ENROLL":
-            draw.text((16, 16), "FACE ID ENROLL", fill=MD3_PRIMARY, font=self.font_bold)
+            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
+            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
+            draw.text((26, 17), "面容录入", fill=on_surf, font=self.font_bold)
 
-            # 居中取景框 (M3 Mint 强调色)
-            box_col = MD3_PRIMARY if self.face_enroll_step > 0 else (34, 197, 94)
+            # 居中取景框 (动态主题强调色)
+            box_col = p_col if self.face_enroll_step > 0 else (34, 197, 94)
             draw.rectangle([40, 52, 200, 212], outline=box_col, width=2)
             cl = 14
             draw.line([(40, 52), (40+cl, 52)], fill=(255, 255, 255), width=3)
@@ -1182,15 +1362,17 @@ class MenuFSM:
 
             # 倒计时显示
             if self.face_enroll_step > 0:
-                draw.text((112, 115), str(self.face_enroll_step), fill=MD3_PRIMARY, font=self.font_bold)
+                draw.text((112, 115), str(self.face_enroll_step), fill=p_col, font=self.font_bold)
 
             # 状态文案
-            draw.text((28, 230), self.face_enroll_msg, fill=MD3_ON_SURFACE, font=self.font_bold)
+            draw.text((28, 230), self.face_enroll_msg, fill=on_surf, font=self.font_bold)
 
         # G. 米家生态授权弹窗 (XIAOMI_QR: 屏幕居中渲染米家二维码)
         elif self.current_mode == "XIAOMI_QR":
-            draw.text((16, 16), "MI HOME / AUTH", fill=MD3_PRIMARY, font=self.font_bold)
-            draw.text((188, 16), "BINDING", fill=MD3_ON_SURF_VAR, font=self.font_small)
+            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
+            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
+            draw.text((26, 17), "米家授权", fill=on_surf, font=self.font_bold)
+            draw.text((188, 21), "BINDING", fill=on_surf_var, font=self.font_small)
 
             # 居中纯白卡片放二维码
             draw.rounded_rectangle([42, 48, 198, 204], radius=16, fill=(255, 255, 255))
@@ -1206,9 +1388,9 @@ class MenuFSM:
             except Exception as e:
                 draw.text((50, 110), f"Error: {e}", fill=(0, 0, 0), font=self.font_small)
 
-            draw.text((24, 226), "打开米家App 扫码授权", fill=MD3_ON_SURFACE, font=self.font_bold)
-            draw.text((24, 248), self.xiaomi_status_text, fill=MD3_PRIMARY if "成功" in self.xiaomi_status_text else (255, 180, 0), font=self.font_small)
-            draw.text((24, 270), "绑定后可直接语音控制台灯/水壶等", fill=MD3_ON_SURF_VAR, font=self.font_small)
+            draw.text((24, 226), "打开米家App 扫码授权", fill=on_surf, font=self.font_bold)
+            draw.text((24, 248), self.xiaomi_status_text, fill=p_col if "成功" in self.xiaomi_status_text else (255, 180, 0), font=self.font_small)
+            draw.text((24, 270), "绑定后可直接语音控制台灯/水壶等", fill=on_surf_var, font=self.font_small)
 
         return img
 

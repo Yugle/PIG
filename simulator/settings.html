@@ -523,9 +523,10 @@
 
     <!-- 操作按钮组 (避免折行，主操作与测试操作分层) -->
     <button class="btn" onclick="saveFeishuConfig()">💾 保存飞书配置</button>
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;">
-      <button class="btn btn-secondary" style="white-space:nowrap; padding:10px 6px; font-size:0.8rem;" onclick="testFeishuAlert()">🔔 发送测试告警</button>
-      <button class="btn btn-secondary" style="white-space:nowrap; padding:10px 6px; font-size:0.8rem;" onclick="testFeishuDiary()">🌙 发送进化日记</button>
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px; margin-top:8px;">
+      <button class="btn btn-secondary" style="white-space:nowrap; padding:10px 4px; font-size:0.75rem;" onclick="testFeishuAlert()">🔔 发送测试告警</button>
+      <button class="btn btn-secondary" style="white-space:nowrap; padding:10px 4px; font-size:0.75rem;" onclick="testFeishuDiary()">🌙 发送进化日记</button>
+      <button class="btn btn-secondary" style="white-space:nowrap; padding:10px 4px; font-size:0.75rem; border-color:#00e5ff; color:#00e5ff; background:rgba(0, 229, 255, 0.08);" onclick="testFeishuSnapshot()">📷 测试远程抓拍</button>
     </div>
 
     <!-- 状态监控仪表板 -->
@@ -960,6 +961,24 @@
           showToast("自进化日记卡片已送达！");
         } else {
           alert("发送失败: " + (d.message || d.error || "请检查 Webhook 或私聊绑定配置"));
+        }
+      } catch (e) {
+        alert("请求失败: " + e);
+      }
+    }
+
+    async function testFeishuSnapshot() {
+      try {
+        showToast("正在启动摄像头抓拍并推送到飞书...");
+        const res = await fetch("/api/feishu/test_snapshot");
+        const d = await res.json();
+        if (d.status === "ok") {
+          showToast("📷 现场安防抓拍卡片已送达飞书！");
+          if (d.report) {
+            alert(d.report);
+          }
+        } else {
+          alert("抓拍推送失败: " + (d.message || "请确认飞书配置或摄像头状态"));
         }
       } catch (e) {
         alert("请求失败: " + e);

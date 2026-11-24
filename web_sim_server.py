@@ -93,6 +93,31 @@ def handle_feishu_incoming_message(clean_text: str, open_id: str, chat_id: str, 
     """统一处理飞书传入消息 (无论是 WebSocket 长连接还是 HTTP Webhook 回调)"""
     def _worker():
         try:
+            target_id = chat_id if chat_id else open_id
+            id_type = "chat_id" if chat_id else "open_id"
+
+            # 1. 优先精准识别远程看家 / 拍照巡检意图 (秒级抓拍直出，杜绝废话)
+            text_lower = clean_text.strip().lower()
+            snapshot_triggers = ["看看家", "拍照", "拍张照", "拍个照", "看下家", "监控", "看一眼", "巡视", "巡检", "安防", "家里安全", "看看客厅", "看看周围", "拍张照片", "照一张", "拍一下", "看看现场"]
+            if any(k in text_lower for k in snapshot_triggers):
+                print(f"📷 [Feishu Bot] 命中远程看家与监控抓拍意图: '{clean_text}'")
+                dir_val = "center"
+                if any(w in text_lower for w in ["向左", "往左", "左边", "左侧", "左看"]):
+                    dir_val = "left"
+                elif any(w in text_lower for w in ["向右", "往右", "右边", "右侧", "右看"]):
+                    dir_val = "right"
+                elif any(w in text_lower for w in ["抬头", "向上", "天花板", "高处", "上看"]):
+                    dir_val = "up"
+                elif any(w in text_lower for w in ["低头", "向下", "地面", "桌面", "低处", "下看"]):
+                    dir_val = "down"
+
+                from skills.remote_guard.main import run as run_remote_guard
+                report = run_remote_guard(direction=dir_val, question=clean_text, target_id=target_id, id_type=id_type)
+                send_res = feishu_client.send_im_message(target_id, "text", {"text": report}, receive_id_type=id_type)
+                print(f"📤 [Feishu Bot] 安防抓拍简报已回复至飞书 {target_id}: -> {send_res.get('code', send_res.get('status'))}")
+                return
+
+            # 2. 常规对话：进入 ReAct 认知推演链路
             from core.agent_reasoner import AgentReasoner
             from core.prompt_builder import PromptBuilder
 
@@ -118,8 +143,6 @@ def handle_feishu_incoming_message(clean_text: str, open_id: str, chat_id: str, 
                 silent=True  # 远程静默执行，绝不触发本地舵机转动与大声发音！
             )
             reply_text = res.get("reply", "小猪收到啦！")
-            target_id = chat_id if chat_id else open_id
-            id_type = "chat_id" if chat_id else "open_id"
             send_res = feishu_client.send_im_message(target_id, "text", {"text": reply_text}, receive_id_type=id_type)
             print(f"📤 [Feishu Bot] 已回复消息至飞书 {target_id}: '{reply_text[:50]}...' -> {send_res.get('code', send_res.get('status'))}")
         except Exception as e:
@@ -298,6 +321,22 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "last_open_id": feishu_client.last_user_open_id,
                 "active_sessions": mem.list_active_sessions() if mem else {}
             }, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 📷 飞书远程安防抓拍现场测试 API (GET 支持)
+        if self.path == "/api/feishu/test_snapshot":
+            try:
+                from skills.remote_guard.main import run as run_remote_guard
+                report = run_remote_guard(direction="center", question="前端设置页一键远程巡检抓拍测试")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "message": "现场抓拍与安防卡片已成功触发并推向飞书！", "report": report}, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False).encode("utf-8"))
             return
 
         # 五维性格与亲密度状态查询 API
@@ -836,6 +875,22 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"status": "ok", "result": res}, ensure_ascii=False).encode("utf-8"))
             except Exception as e:
                 self.send_error(500, str(e))
+            return
+
+        # 📷 飞书远程安防抓拍现场测试 API
+        if self.path == "/api/feishu/test_snapshot":
+            try:
+                from skills.remote_guard.main import run as run_remote_guard
+                report = run_remote_guard(direction="center", question="前端设置页一键远程巡检抓拍测试")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "message": "现场抓拍与安防卡片已成功触发并推向飞书！", "report": report}, ensure_ascii=False).encode("utf-8"))
+            except Exception as e:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False).encode("utf-8"))
             return
 
         # 4按键实体/虚拟事件分发 API (K1~K4)

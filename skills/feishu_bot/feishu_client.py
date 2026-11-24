@@ -377,6 +377,130 @@ class FeishuClient:
         ]
         return self._deliver_card("📊 PIG 系统健康与运行状态", elements, template="blue")
 
+    def upload_image(self, image_bytes: bytes) -> Optional[str]:
+        """
+        上传图片至飞书并获取 image_key (用于富交互卡片内嵌图片渲染或图片消息)
+        官方接口: POST https://open.feishu.cn/open-apis/im/v1/images
+        """
+        if not image_bytes or len(image_bytes) < 50:
+            logger.warning("⚠️ [Feishu] 上传图片内容为空或过小")
+            return None
+
+        token = self.get_tenant_access_token()
+        if not token:
+            logger.warning("⚠️ [Feishu] 未能获取 tenant_access_token，跳过图片直传")
+            return None
+
+        url = "https://open.feishu.cn/open-apis/im/v1/images"
+        headers = {"Authorization": f"Bearer {token}"}
+        files = {
+            "image_type": (None, "message"),
+            "image": ("snapshot.jpg", image_bytes, "image/jpeg")
+        }
+        try:
+            import requests
+            resp = requests.post(url, headers=headers, files=files, timeout=12)
+            if resp.status_code == 200:
+                res_data = resp.json()
+                if res_data.get("code") == 0:
+                    img_key = res_data.get("data", {}).get("image_key")
+                    logger.info(f"✅ [Feishu] 摄像头现场快照成功上传至飞书: image_key={img_key}")
+                    return img_key
+                else:
+                    logger.warning(f"⚠️ [Feishu] 上传图片 API 错误: {res_data}")
+            else:
+                logger.warning(f"⚠️ [Feishu] 上传图片 HTTP 状态异常: {resp.status_code}")
+        except Exception as e:
+            logger.warning(f"⚠️ [Feishu] 上传图片网络请求异常: {e}")
+        return None
+
+    def send_camera_snapshot_card(
+        self,
+        image_bytes: bytes,
+        vlm_analysis: str,
+        direction_desc: str = "水平 90° · 俯仰 90° (正视前方)",
+        target_id: Optional[str] = None,
+        id_type: str = "open_id"
+    ) -> Dict[str, Any]:
+        """
+        构建并发送【📷 PIG 远程安防与家庭现场巡检】富文本卡片
+        支持直接指定 target_id 或自动投递至最近会话/Webhook
+        """
+        now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+        img_key = self.upload_image(image_bytes)
+
+        elements: List[Dict[str, Any]] = []
+
+        # 1. 顶部图片元素 (若 image_key 上传成功)
+        if img_key:
+            elements.append({
+                "tag": "img",
+                "img_key": img_key,
+                "alt": {"tag": "plain_text", "content": "PIG 实时现场抓拍"},
+                "mode": "fit_horizontal"
+            })
+
+        # 2. 机位与元数据信息
+        elements.append({
+            "tag": "div",
+            "fields": [
+                {
+                    "is_short": True,
+                    "text": {
+                        "tag": "lark_md",
+                        "content": f"**🕒 抓拍时间**\n{now_str}"
+                    }
+                },
+                {
+                    "is_short": True,
+                    "text": {
+                        "tag": "lark_md",
+                        "content": f"**📐 镜头机位**\n{direction_desc}"
+                    }
+                }
+            ]
+        })
+
+        # 3. 智能多模态视觉环境分析
+        if vlm_analysis:
+            elements.append({
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": f"**👁️ 现场智能环境诊断**\n{vlm_analysis}"
+                }
+            })
+
+        elements.append({"tag": "hr"})
+
+        # 4. 底部说明
+        elements.append({
+            "tag": "note",
+            "elements": [
+                {
+                    "tag": "plain_text",
+                    "content": "来自 PIG 具身伴侣机器人 · 远程安防巡检通道 (零公网IP长连接直发)"
+                }
+            ]
+        })
+
+        title = "📷 PIG 远程安防与家庭现场巡检"
+        template = "blue"
+
+        # 如果显式指定了发送目标 (如当前接收到消息的会话)
+        if target_id and self.app_id and self.app_secret:
+            card = {
+                "config": {"wide_screen_mode": True},
+                "header": {"title": {"tag": "plain_text", "content": title}, "template": template},
+                "elements": elements
+            }
+            res = self.send_im_message(target_id, "interactive", card, receive_id_type=id_type)
+            if res.get("code") == 0:
+                return res
+
+        # 回退到智能投递通道
+        return self._deliver_card(title, elements, template=template)
+
     # 内部基础 HTTP 辅助
     def _http_post_json(self, url: str, data: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         try:

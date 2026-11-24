@@ -1,0 +1,24 @@
+{
+  "id": "remote_guard",
+  "name": "远程看家与监控抓拍",
+  "version": "1.0.0",
+  "author": "Antigravity Lab",
+  "category": "生活助手",
+  "description": "远程拍摄家庭现场照片并通过飞书推送安防巡检卡片。当主人在飞书或远程询问'看看家'、'拍张照'、'监控'、'看看客厅'、'看下家里'、'转头看看'或需要远程看家巡检时调用此技能。",
+  "parameters": {
+    "direction": {
+      "type": "string",
+      "description": "镜头朝向：'center'(正前方), 'left'(向左看), 'right'(向右看), 'up'(抬头高位视角), 'down'(低头俯视视角)",
+      "default": "center"
+    },
+    "question": {
+      "type": "string",
+      "description": "巡检观察重点，如 '看看门窗是否关好', '看看猫咪在不在', '巡视一下客厅'",
+      "default": "巡视当前环境并汇报状态"
+    }
+  },
+  "default_behavior": {
+    "emotion": "WINK",
+    "action": "LOOK_UP"
+  }
+}
