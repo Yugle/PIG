@@ -423,6 +423,26 @@ class BaseRobotHAL(ABC):
     def close(self):
         """释放外设资源"""
         pass
+
+    def add_touch_listener(self, callback):
+        """注册 TTP223 摸头传感器触摸事件监听回调"""
+        pass
+
+    def add_button_listener(self, callback):
+        """注册实体独立按键 (K1~K4) 事件监听回调 (click / long_press)"""
+        pass
+
+    def add_radar_listener(self, callback):
+        """注册 HLK-LD2402 24GHz 毫米波人体存在感应模块事件回调 (True=有人, False=无人)"""
+        pass
+
+    def trigger_radar(self, detected: bool):
+        """手动或仿真触发一次毫米波雷达人体状态跳变"""
+        pass
+
+    def is_radar_detected(self) -> bool:
+        """获取当前毫米波人体雷达检测状态"""
+        return True
 ```
 
 ---
@@ -724,7 +744,7 @@ PIG/
 ```
 
 ### 3. 硬件驱动层 (`drivers/hal_physical.py` & `drivers/hal_simulation.py`)
-物理驱动直接通过 `pigpio` 进行硬件级 DMA PWM 脉冲生成，确保 SG90 舵机零抖动；仿真驱动则无缝桥接 MuJoCo 物理引擎或无头状态。
+物理驱动直接通过 `pigpio` 进行硬件级 DMA PWM 脉冲生成，确保 SG90 舵机零抖动；集成 **HLK-LD2402 24GHz 毫米波人体雷达中断监听**、TTP223 摸头传感器与 4 颗独立按键；仿真驱动则无缝桥接 MuJoCo 物理引擎或无头状态。
 
 ```python
 # hal_physical.py 核心控制逻辑
@@ -737,60 +757,36 @@ from luma.core.interface.serial import spi
 from luma.lcd.device import st7789
 
 class PhysicalRobotHAL(BaseRobotHAL):
-    def __init__(self, pan_pin=18, tilt_pin=13):
+    def __init__(self, pan_pin=18, tilt_pin=13, touch_pin=17, radar_pin=26, **kwargs):
         self.pi = pigpio.pi()
         if not self.pi.connected:
             raise RuntimeError("pigpiod 未启动，请先运行: sudo systemctl start pigpiod")
         self.pan_pin = pan_pin
         self.tilt_pin = tilt_pin
+        self.touch_pin = touch_pin
+        self.radar_pin = radar_pin
         self.cur_pan = 90.0
         self.cur_tilt = 90.0
 
-        # 初始化 ST7789 2.4寸 SPI 液晶屏 (240x320)
+        # 1. 初始化 ST7789 2.4寸 SPI 液晶屏 (240x320)
         serial_spi = spi(port=0, device=0, gpio_DC=25, gpio_RST=22)
         self.screen = st7789(serial_spi, width=240, height=320, rotate=0)
 
-        # 舵机平滑归中
+        # 2. 初始化 HLK-LD2402 毫米波人体存在雷达 (Pin 37 / GPIO 26)
+        # OUT 默认高电平=有人/微动，低电平=无人；硬件 50ms 消抖 + 边缘中断
+        self.pi.set_mode(self.radar_pin, pigpio.INPUT)
+        self.pi.set_pull_up_down(self.radar_pin, pigpio.PUD_DOWN)
+        self.pi.set_glitch_filter(self.radar_pin, 50000)
+        self.radar_detected = bool(self.pi.read(self.radar_pin))
+        self._radar_cb = self.pi.callback(self.radar_pin, pigpio.EITHER_EDGE, self._on_gpio_radar)
+
+        # 3. 舵机平滑归中
         self.set_angles(90, 90, smooth=False)
 
-    def _angle_to_pulse(self, angle: float) -> int:
-        angle = max(10, min(170, angle))
-        return int(500 + (angle / 180.0) * 2000)
-
-    def set_angles(self, pan: float, tilt: float, smooth: bool = True):
-        pan = max(20.0, min(160.0, pan))
-        tilt = max(60.0, min(120.0, tilt))
-
-        if not smooth:
-            self.pi.set_servo_pulsewidth(self.pan_pin, self._angle_to_pulse(pan))
-            self.pi.set_servo_pulsewidth(self.tilt_pin, self._angle_to_pulse(tilt))
-            self.cur_pan, self.cur_tilt = pan, tilt
-            return
-
-        steps = 15
-        for s in range(1, steps + 1):
-            p = self.cur_pan + (pan - self.cur_pan) * (s / steps)
-            t = self.cur_tilt + (tilt - self.cur_tilt) * (s / steps)
-            self.pi.set_servo_pulsewidth(self.pan_pin, self._angle_to_pulse(p))
-            self.pi.set_servo_pulsewidth(self.tilt_pin, self._angle_to_pulse(t))
-            time.sleep(0.015)
-
-        self.cur_pan, self.cur_tilt = pan, tilt
-
-    def display_face(self, pil_image):
-        self.screen.display(pil_image)
-
-    def capture_image(self) -> bytes:
-        tmp_img = "/tmp/capture.jpg"
-        subprocess.run(["fswebcam", "-r", "640x480", "--no-banner", tmp_img],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        with open(tmp_img, "rb") as f:
-            return f.read()
-
-    def close(self):
-        self.pi.set_servo_pulsewidth(self.pan_pin, 0)
-        self.pi.set_servo_pulsewidth(self.tilt_pin, 0)
-        self.pi.stop()
+    def _on_gpio_radar(self, gpio, level, tick):
+        """雷达中断回调: 1=有人靠近/在场 (0.1s极速中断唤醒), 0=人走离席 (30s自动休眠)"""
+        detected = (level == 1)
+        self.trigger_radar(detected)
 ```
 
 ### 4. 12 款拟真眼部微表情系统 (`drivers/eye_renderer.py`)
@@ -905,28 +901,37 @@ class FaceTracker:
 ```
 
 ### 7. 闲置自主生命体征状态机 (`core/idle_fsm.py`)
-彻底消除无交互时机器人“仿佛断电死机”的呆滞感，构建四级生物拟态状态机：
+彻底消除无交互时机器人“仿佛断电死机”的呆滞感，构建与 **HLK-LD2402 毫米波人体雷达硬件中断** 深度联动的多级生物拟态状态机：
 1. **正弦波呼吸律动 (`IDLE`)**: 舵机在基准角度以 $T=4.0s$ 周期进行 $\pm1.2^\circ$ 正弦波微幅浮动，眼球随机触发自发眨眼与微扫视。
 2. **无聊换姿势 (`BORED`)**: 连续闲置 60 秒无交互，机器人自动微倾头部或伸展打哈欠。
 3. **打瞌睡微垂 (`DOZING`)**: 连续闲置 180 秒无交互，头部微微下垂 12°，眼睛半闭呈现 `SLEEPY` 状态。
-4. **受惊醒猛抬头 (`WAKING`)**: 一旦被唤醒词叫醒或检测到人脸突然靠近，瞬间弹出 `SURPRISED` 睁眼微震、头部回弹正位并伴随清脆唤醒提示音。
-5. **主动式关怀搭话 (Proactive Reminders)**: 闲置过久且主人在场时，主动结合长期记忆发起贴心提醒（如：“阿强，看屏幕很久啦，喝口水休息一下吧！”）。
+4. **受惊醒猛抬头 (`WAKING` / 毫米波人来 0.1s 极速唤醒)**: 当被唤醒词叫醒、摸头、或 **HLK-LD2402 毫米波雷达检测到人体靠近（OUT 上升沿中断）** 时，瞬间触发惊醒反弹，以 `Tilt 85°` 抬头瞪圆大眼并伴随清脆三和弦提示音，0.1 秒内恢复就绪。
+5. **毫米波离席 30 秒自动休眠防烧屏 (`ABSENT_SLEEP`)**: 当毫米波雷达检测到主人离开工位（OUT 持续低电平超过 30 秒），状态机快速切入休眠：**2.4 寸 IPS 彩屏熄屏（彻底防烧屏/残影）、舵机低头并自动卸力 Detach（防发热老化）**，主人回桌即醒。
+6. **主动式关怀搭话 (Proactive Reminders)**: 闲置过久且主人在场时，主动结合长期记忆发起贴心提醒（如：“阿强，看屏幕很久啦，喝口水休息一下吧！”）。
 
 ```python
-# idle_fsm.py 核心状态机循环
+# idle_fsm.py 核心状态机逻辑
 class IdleFSM:
+    def __init__(self, away_sleep_timeout_sec=30):
+        self.radar_present = True
+        self.away_sleep_timeout_sec = away_sleep_timeout_sec
+
+    def notify_radar(self, detected: bool):
+        """HLK-LD2402 毫米波雷达硬件中断跳变"""
+        was_present = self.radar_present
+        self.radar_present = bool(detected)
+        if detected and not was_present:
+            # 🚀 人来 0.1s 极速惊醒抬头
+            if self.state in ("DOZING", "BORED"):
+                self.state = "WAKING"
+
     def update(self) -> dict:
-        idle_time = time.time() - self.last_interaction_time
-        if idle_time > 180:
+        now = time.time()
+        # 💤 人走离席超过 30s，快速进入低功耗低头休眠
+        if not self.radar_present and (now - self.last_radar_change_time) > self.away_sleep_timeout_sec:
             self.state = "DOZING"
-            return {"pan": 90, "tilt": 102, "emotion": "SLEEPY"}
-        elif idle_time > 60:
-            self.state = "BORED"
-        else:
-            self.state = "IDLE"
-            t = time.time() - self.start_time
-            sine_tilt = math.sin(t * (2 * math.pi / 4.0)) * 1.2
-            return {"pan": 90, "tilt": 90 + sine_tilt, "emotion": "NORMAL"}
+            return {"tilt_offset": 12.0, "emotion": "SLEEPY"}
+        # ... 基础正弦波呼吸起伏 ...
 ```
 
 ### 8. 语音识别与动态 VAD 切音 (`drivers/asr_engine.py`)
@@ -1137,6 +1142,7 @@ python3 main_agent.py
    - **Three.js 3D 机器人模型**: 支持平滑转头、仰头、摇头、点头动作。
    - **面部 3D 动态材质贴合**: 2.4寸 ST7789 屏幕作为动态 CanvasTexture 直接贴合在 3D 头部正面，随头部俯仰旋转实时呈现 12 款微表情、高光与眨眼；右下角提供可折叠画中画特写。
    - **视觉注视追踪开关**: 顶部状态栏提供 `[👁️ 注视追踪: 关/开]` 一键切换，开启后支持鼠标视线追踪或摄像头人脸追踪。
+   - **📡 毫米波雷达仿真交互与 API**: 顶部工具栏提供 **`[📡 雷达: 有人/无人]`** 动态交互胶囊按钮，支持一键模拟人走与人来，实时观察机器人低头休眠与抬头惊醒；后端开放 `GET /api/radar` 与 `POST /api/radar/trigger` 接口供自动化测试与孪生同步。
    - **闹钟日程与自进化动作看板**: 实时展示正在倒计时中的定时器与闹钟，支持一键取消；展示机器人自主进化出的新动作徽章，支持点击演练。
    - **🌱 元认知自进化看板**: 展示根据真实互动统计推算的主人作息规律画像（早起/犯困/睡前），展示最近夜间反思摘要，支持一键触发记忆升华反思。
    - **到点主动打断抢占弹窗**: 闹钟到点时，3D 机器人猛然惊醒抬头、播放唤醒和弦音并全屏弹出打断提醒与语音播报。
@@ -1241,6 +1247,13 @@ if __name__ == "__main__":
    * **设备异常即时报警**: 当机器人捕获到外设离线、网络中断、舵机卡死或系统过热时，秒级下发红色高警示富文本卡片至管理员私聊或运维群；
    * **深夜自进化日记卡片**: 每天夜间海马体反思完成后，自动构建精致的墨绿色主题飞书交互式卡片，推送当日累计互动轮次、亲密度升降、主人作息画像变化、新动作进化徽章与今日情感总结。
 
+4. **原地动态流式卡片更新 (In-Place Dynamic Streaming Cards)**:
+   * **阶段 ①（0.2s 极速首屏占位）**: 用户发送消息后 0.2 秒内极速下发首屏交互卡片 `🤖 PIG 正在处理... ⏳ 正在分析意图并规划任务链路...`，彻底终结用户干等死寂感；
+   * **阶段 ②（实时动态调用技能上报）**: 当 ReAct 决策引擎调度外部技能（米家 IoT、天气、安防巡检等）时，通过飞书原生 `PATCH /open-apis/im/v1/messages/{message_id}` 原地刷新卡片为 `⚙️ PIG 正在执行任务...`，展示推演思考与调用的具体技能名称（如 `📱 米家智能家居 (xiaomi_iot)`）；
+   * **阶段 ③（任务定稿与链路追踪）**: 任务执行完毕后，同一卡片再次原地定稿刷新为 `✅ PIG 执行完毕`，呈现最终答复并附带 `⚡ 技能链路：... · 耗时 1.8s · PIG Robot OS` 元数据指标条；
+   * **核心优势**: 单张卡片状态原地渐变演进，不会像传统分片发消息那样连续弹窗叮咚轰炸手机屏幕，且完全避免触发飞书 5 QPS 的高频限流拦截。
+
+
 ```python
 # skills/feishu_bot/feishu_client.py 核心长连接与卡片下发
 from lark_oapi.ws import Client as WsClient
@@ -1278,15 +1291,16 @@ class FeishuClient:
      * 手机扫码直达后台设置中心 (`http://<IP>:8090/settings`)；
    * **`02 / 系统体检` (DOCTOR)**:
      * 硬件与网络链路一键实时体检：网络延迟 (ms)、小米 MiMo 大模型接口响应、视觉摄像头状态、麦克风收音矩阵与 CPU 芯片核心温度；
-   * **`03 / 硬件控制` (TOGGLES - 8 项核心硬件控制)**:
+   * **`03 / 硬件控制` (TOGGLES - 9 项核心硬件控制)**:
      1. `舵机居中归位`: 立即平滑将水平与俯仰舵机复位至 90° 机械校准零位；
      2. `舵机动作自检`: 左右 60°~120° 摇头 + 上下 75°~90° 点头完整运动学巡检；
      3. `舵机保持通电`: 切换通电保持防抖或空闲自动卸力休眠；
-     4. `麦克风收音`: 一键静音 / 恢复硬件拾音监听；
-     5. `人脸视线跟随`: 开启/关闭视觉人脸检测与眼神追踪；
-     6. `视线算法模式`: 切换“九宫格灵动视线”或“连续物理轴追踪”；
-     7. `主动关怀搭话`: 开启/关闭久坐关怀与作息生物钟自发搭话；
-     8. `萌宠情绪拟声`: 开启/关闭程序化非语言正弦波萌趣音效；
+     4. `毫米波人体感应`: 开启/关闭 HLK-LD2402 毫米波在场检测、人来极速唤醒与离席休眠；
+     5. `麦克风收音`: 一键静音 / 恢复硬件拾音监听；
+     6. `人脸视线跟随`: 开启/关闭视觉人脸检测与眼神追踪；
+     7. `视线算法模式`: 切换“九宫格灵动视线”或“连续物理轴追踪”；
+     8. `主动关怀搭话`: 开启/关闭久坐关怀与作息生物钟自发搭话；
+     9. `萌宠情绪拟声`: 开启/关闭程序化非语言正弦波萌趣音效；
    * **`04 / 系统设置` (SYSTEM - 11 项系统设置与物联功能)**:
      1. `系统主题风格`: 实时无缝循环切换 5 大 Material Design 3 主题（薄荷绿 / 暖阳橙 / 海天蓝 / 薰衣紫 / 极简白）；
      2. `录入主人面容`: 屏幕倒计时 3 秒拍照采样，提取 128 维特征向量持久化至 `master_face.json`；
