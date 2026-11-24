@@ -19,12 +19,25 @@ from typing import Dict, Any, Optional, List, Callable
 logger = logging.getLogger("FeishuBot")
 
 
+def _load_default_feishu_config() -> Dict[str, Any]:
+    cfg_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config.json")
+    if os.path.exists(cfg_file):
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as f:
+                d = json.load(f)
+                return d.get("feishu", {})
+        except Exception:
+            pass
+    return {}
+
+
 class FeishuClient:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        self.config = config or {}
+        self.config = config if (config and any(config.values())) else _load_default_feishu_config()
         self._tenant_access_token = ""
         self._token_expires_at = 0.0
         self._lock = threading.RLock()
+        self._last_upload_err = None
         
         # WebSocket 长连接运行状态
         self._ws_client = None
@@ -400,18 +413,28 @@ class FeishuClient:
         try:
             import requests
             resp = requests.post(url, headers=headers, files=files, timeout=12)
-            if resp.status_code == 200:
-                res_data = resp.json()
-                if res_data.get("code") == 0:
-                    img_key = res_data.get("data", {}).get("image_key")
-                    logger.info(f"✅ [Feishu] 摄像头现场快照成功上传至飞书: image_key={img_key}")
-                    return img_key
-                else:
-                    logger.warning(f"⚠️ [Feishu] 上传图片 API 错误: {res_data}")
+            res_data = resp.json() if resp.text else {}
+            if resp.status_code == 200 and res_data.get("code") == 0:
+                img_key = res_data.get("data", {}).get("image_key")
+                logger.info(f"✅ [Feishu] 摄像头现场快照成功上传至飞书: image_key={img_key}")
+                self._last_upload_err = None
+                return img_key
             else:
-                logger.warning(f"⚠️ [Feishu] 上传图片 HTTP 状态异常: {resp.status_code}")
+                err_code = res_data.get("code")
+                if err_code == 99991672:
+                    auth_link = f"https://open.feishu.cn/app/{self.app_id}/auth?q=im:resource:upload,im:resource&op_from=openapi&token_type=tenant"
+                    logger.warning(f"⚠️ [Feishu] 缺少图片上传权限 (code 99991672)。请开通 [im:resource:upload]: {auth_link}")
+                    self._last_upload_err = {
+                        "type": "permission",
+                        "auth_link": auth_link,
+                        "msg": "飞书自建应用尚未开通 [上传图片或文件资源 (im:resource:upload)] 权限"
+                    }
+                else:
+                    logger.warning(f"⚠️ [Feishu] 上传图片 API 错误 (HTTP {resp.status_code}): {res_data}")
+                    self._last_upload_err = {"type": "api", "msg": res_data.get("msg", str(res_data))}
         except Exception as e:
             logger.warning(f"⚠️ [Feishu] 上传图片网络请求异常: {e}")
+            self._last_upload_err = {"type": "network", "msg": str(e)}
         return None
 
     def send_camera_snapshot_card(
@@ -439,6 +462,34 @@ class FeishuClient:
                 "alt": {"tag": "plain_text", "content": "PIG 实时现场抓拍"},
                 "mode": "fit_horizontal"
             })
+        else:
+            # 若因权限未开通导致无法内嵌图片，提供明确说明与一键直达开通按钮
+            auth_url = f"https://open.feishu.cn/app/{self.app_id}/auth?q=im:resource:upload,im:resource&op_from=openapi&token_type=tenant" if self.app_id else ""
+            hint_md = "⚠️ **[现场照片已成功捕获，但飞书应用权限受限]**\n"
+            if auth_url:
+                hint_md += f"飞书自建应用当前未勾选 **[上传图片或文件 (im:resource:upload)]** 权限，导致图片无法直接内嵌在聊天中。\n👉 **[点击这里一键前往开通权限]({auth_url})** 开通后即可直接在聊天框看图！"
+            else:
+                hint_md += "当前仅配置了群 Webhook，飞书限制图片内嵌需配置自建应用 App ID/Secret。"
+
+            elements.append({
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": hint_md
+                }
+            })
+            if auth_url:
+                elements.append({
+                    "tag": "action",
+                    "actions": [
+                        {
+                            "tag": "button",
+                            "text": {"tag": "plain_text", "content": "🔑 一键开通飞书发图权限"},
+                            "type": "danger",
+                            "url": auth_url
+                        }
+                    ]
+                })
 
         # 2. 机位与元数据信息
         elements.append({

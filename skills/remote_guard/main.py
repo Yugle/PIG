@@ -269,4 +269,15 @@ def run(direction="center", question="巡视当前环境并汇报状态", **kwar
     except Exception as e:
         print(f"⚠️ [RemoteGuard] 飞书卡片投递异常: {e}")
 
-    return f"📷【家庭安防巡检已完成】\n机位：{dir_desc}\n诊断：{vlm_summary}\n\n已将现场抓拍照片及安防卡片同步推送至你的飞书手机端！"
+    # 检查是否有飞书发图权限提醒
+    extra_hint = ""
+    try:
+        from skills.feishu_bot.feishu_client import feishu_client
+        if getattr(feishu_client, "_last_upload_err", None):
+            err_info = feishu_client._last_upload_err
+            if err_info.get("type") == "permission":
+                extra_hint = f"\n\n⚠️ 注：飞书自建应用当前尚未开通发图权限 [im:resource:upload]，导致卡片未能直接显示图片。\n👉 请点击卡片中的开通按钮或直接访问链接一键申请开通：\n{err_info.get('auth_link')}"
+    except Exception:
+        pass
+
+    return f"📷【家庭安防巡检已完成】\n机位：{dir_desc}\n诊断：{vlm_summary}{extra_hint}"
