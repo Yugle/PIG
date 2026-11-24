@@ -384,6 +384,7 @@ class MenuFSM:
         # 彩蛋状态 (连续点击系统版本号触发与滚动状态)
         self.version_click_count = 0
         self.last_version_click_time = 0.0
+        self.version_hint = None
         self.easter_egg_scroll_y = 0
         self.easter_egg_max_scroll = 230
 
@@ -459,6 +460,12 @@ class MenuFSM:
         timeout_txt = f"{timeout}秒" if timeout < 999 else "常亮"
         theme_name = THEMES.get(getattr(self, "theme_key", "mint"), THEMES["mint"])["name"]
 
+        ver_val = self.version_str
+        if getattr(self, "version_hint", None) and (time.time() - getattr(self, "last_version_click_time", 0) < 3.0):
+            ver_val = self.version_hint
+        else:
+            self.version_hint = None
+
         self.system_items = [
             {"id": "theme", "icon": "theme", "name": "系统主题风格", "val": theme_name, "type": "cycle"},
             {"id": "face_id", "icon": "face", "name": "录入主人面容", "val": "", "type": "action"},
@@ -467,7 +474,7 @@ class MenuFSM:
             {"id": "voice", "icon": "voice", "name": "发音音色切换", "val": voice, "type": "cycle"},
             {"id": "volume", "icon": "volume", "name": "系统播报音量", "val": f"{vol}%", "type": "cycle"},
             {"id": "timeout", "icon": "clock", "name": "屏幕息屏时间", "val": timeout_txt, "type": "cycle"},
-            {"id": "version", "icon": "chip", "name": "系统固件版本", "val": self.version_str, "type": "info"},
+            {"id": "version", "icon": "chip", "name": "系统固件版本", "val": ver_val, "type": "info"},
             {"id": "update", "icon": "cloud", "name": "检查系统更新", "val": self.update_status, "type": "action"},
             {"id": "restart", "icon": "restart", "name": "重启机器人服务", "val": "", "type": "action"},
             {"id": "shutdown", "icon": "power", "name": "树莓派安全关机", "val": "", "type": "action"},
@@ -657,6 +664,9 @@ class MenuFSM:
         with self._lock:
             self.current_mode = "EASTER_EGG"
             self.easter_egg_scroll_y = 0
+            self.version_click_count = 0
+            self.version_hint = None
+            self._sync_system_items()
             self._notify_listeners()
             print("📖 [MenuFSM] 进入关于本项目(PIG)自述模式")
 
@@ -666,6 +676,10 @@ class MenuFSM:
             self.current_mode = "SYSTEM"
             self.easter_egg_scroll_y = 0
             self.cursor = 7
+            self.version_click_count = 0
+            self.version_hint = None
+            self._sync_system_items()
+            self._notify_listeners()
             self._notify_listeners()
 
     def trigger_face_id_enrollment(self):
@@ -1021,14 +1035,21 @@ class MenuFSM:
                     elif action_id == "version":
                         # 连续点击版本号 5 次触发项目自述
                         now = time.time()
-                        if now - self.last_version_click_time < 2.5:
+                        if now - self.last_version_click_time < 3.0:
                             self.version_click_count += 1
                         else:
                             self.version_click_count = 1
                         self.last_version_click_time = now
                         if self.version_click_count >= 5:
                             self.version_click_count = 0
+                            self.version_hint = None
+                            self._sync_system_items()
                             self.enter_easter_egg()
+                        else:
+                            needed = 5 - self.version_click_count
+                            self.version_hint = f"再按 {needed} 次"
+                            self._sync_system_items()
+                            self._notify_listeners()
                     elif action_id == "update":
                         self.check_system_update_async()
                     elif action_id == "restart":
@@ -1057,7 +1078,7 @@ class MenuFSM:
                 elif button in ["K2", "DOWN"]:
                     self.easter_egg_scroll_y = min(self.easter_egg_max_scroll, self.easter_egg_scroll_y + 26)
                     self._notify_listeners()
-                elif button in ["K4", "K3", "ESC", "ENTER"]:
+                elif button in ["K4", "ESC"]:
                     self.exit_easter_egg()
                 return
 
@@ -1177,7 +1198,9 @@ class MenuFSM:
             "face_tracking": self.face_tracking_enabled,
             "servo_sleeping": self.is_servo_sleeping,
             "local_ip": ip,
+            "version_hint": self.version_hint,
             "easter_egg_scroll": self.easter_egg_scroll_y,
+            "easter_egg_scroll_y": self.easter_egg_scroll_y,
             "time_left": max(0, int(self.auto_timeout - (time.time() - self.last_interaction_time)))
         }
 
@@ -1294,103 +1317,99 @@ class MenuFSM:
                 )
                 y += (card_h + card_gap)
 
-        # D. 硬件控制界面 (TOGGLES: 单行 M3 Switch 极简卡片)
+        # D. 硬件控制界面 (TOGGLES: 连续视口平滑渲染，无生硬跳页)
         elif self.current_mode == "TOGGLES":
             total = len(self.hardware_items)
             cur_idx = max(0, min(total - 1, self.cursor))
 
-            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
-            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), "硬件控制", fill=on_surf, font=self.font_bold)
-            draw.text((192, 21), f"{cur_idx+1:02d}/{total:02d}", fill=on_surf_var, font=self.font_small)
-
-            max_visible = 4
-            start_idx = 0
-            if total > max_visible:
-                if cur_idx < 2:
-                    start_idx = 0
-                elif cur_idx >= total - 2:
-                    start_idx = total - max_visible
-                else:
-                    start_idx = cur_idx - 1
-                start_idx = max(0, min(start_idx, total - max_visible))
-
-            visible_items = self.hardware_items[start_idx : start_idx + max_visible]
             card_w = 212
             card_h = 50
             card_gap = 8
-            y = 48
+            pitch = card_h + card_gap  # 58px
 
-            for v_idx, item in enumerate(visible_items):
-                real_idx = start_idx + v_idx
-                is_selected = (real_idx == cur_idx)
-                is_on = bool(item.get("state", False))
-                item_type = item.get("type", "")
+            viewport_h = 260
+            total_content_h = total * pitch - card_gap
+            max_scroll = max(0, total_content_h - viewport_h + 8)
+            scroll_y = max(0, min(max_scroll, (cur_idx - 1) * pitch))
 
-                r_type = "switch" if item_type == "toggle" else ("badge" if item_type == "cycle" else "chevron")
-                r_val = is_on if item_type == "toggle" else (str(item.get("val", "")) if item_type == "cycle" else "")
+            # 绘制落入视口 44 <= y <= 312 范围内的连续卡片
+            for idx, item in enumerate(self.hardware_items):
+                card_y = 48 + idx * pitch - scroll_y
+                if card_y + card_h >= 44 and card_y <= 312:
+                    is_selected = (idx == cur_idx)
+                    is_on = bool(item.get("state", False))
+                    item_type = item.get("type", "")
+                    r_type = "switch" if item_type == "toggle" else ("badge" if item_type == "cycle" else "chevron")
+                    r_val = is_on if item_type == "toggle" else (str(item.get("val", "")) if item_type == "cycle" else "")
 
-                _draw_modern_tile(
-                    draw, 12, y, card_w, card_h,
-                    item.get("icon", "hardware"), item["name"],
-                    r_type, r_val, is_selected, self.font_bold, self.font_small, theme
-                )
-                y += (card_h + card_gap)
+                    _draw_modern_tile(
+                        draw, 12, card_y, card_w, card_h,
+                        item.get("icon", "hardware"), item["name"],
+                        r_type, r_val, is_selected, self.font_bold, self.font_small, theme
+                    )
 
-            # 极简 2px 贴边胶囊滚动滑块
-            if total > max_visible:
-                thumb_h = 44
-                max_scroll = 180
-                thumb_y = 52 + int((start_idx / (total - max_visible)) * max_scroll)
+            # 顶部固定导航遮罩
+            draw.rectangle([0, 0, 240, 44], fill=surf_col)
+            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
+            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
+            draw.text((26, 17), "硬件控制", fill=on_surf, font=self.font_bold)
+
+            # 底部遮罩
+            draw.rectangle([0, 312, 240, 320], fill=surf_col)
+
+            # 极简动态连续滑块
+            if total > 4 and max_scroll > 0:
+                track_y1, track_y2 = 48, 302
+                track_h = track_y2 - track_y1
+                thumb_h = max(24, int((viewport_h / total_content_h) * track_h))
+                thumb_y = track_y1 + int((scroll_y / max_scroll) * (track_h - thumb_h))
                 draw.rounded_rectangle([232, thumb_y, 235, thumb_y + thumb_h], radius=1, fill=p_col)
 
-        # E. 系统设置界面 (SYSTEM: 主题风格/面容/音色/音量/版本/更新/重启/关机)
+        # E. 系统设置界面 (SYSTEM: 连续视口平滑渲染，无生硬跳页)
         elif self.current_mode == "SYSTEM":
             total = len(self.system_items)
             cur_idx = max(0, min(total - 1, self.cursor))
 
-            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
-            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), "系统设置", fill=on_surf, font=self.font_bold)
-            draw.text((192, 21), f"{cur_idx+1:02d}/{total:02d}", fill=on_surf_var, font=self.font_small)
-
-            max_visible = 4
-            start_idx = 0
-            if total > max_visible:
-                if cur_idx < 2:
-                    start_idx = 0
-                elif cur_idx >= total - 2:
-                    start_idx = total - max_visible
-                else:
-                    start_idx = cur_idx - 1
-                start_idx = max(0, min(start_idx, total - max_visible))
-
-            visible_items = self.system_items[start_idx : start_idx + max_visible]
             card_w = 212
             card_h = 50
             card_gap = 8
-            y = 48
+            pitch = card_h + card_gap  # 58px
 
-            for v_idx, item in enumerate(visible_items):
-                real_idx = start_idx + v_idx
-                is_selected = (real_idx == cur_idx)
-                item_type = item.get("type", "")
+            viewport_h = 260
+            total_content_h = total * pitch - card_gap
+            max_scroll = max(0, total_content_h - viewport_h + 8)
+            scroll_y = max(0, min(max_scroll, (cur_idx - 1) * pitch))
 
-                r_type = "badge" if item_type in ["cycle", "info"] else "chevron"
-                r_val = str(item.get("val", "")) if item_type in ["cycle", "info"] else ""
+            # 绘制落入视口 44 <= y <= 312 范围内的连续卡片
+            for idx, item in enumerate(self.system_items):
+                card_y = 48 + idx * pitch - scroll_y
+                if card_y + card_h >= 44 and card_y <= 312:
+                    is_selected = (idx == cur_idx)
+                    item_type = item.get("type", "")
+                    r_type = "badge" if item_type in ["cycle", "info"] else "chevron"
+                    r_val = str(item.get("val", "")) if item_type in ["cycle", "info"] else ""
 
-                _draw_modern_tile(
-                    draw, 12, y, card_w, card_h,
-                    item.get("icon", "settings"), item["name"],
-                    r_type, r_val, is_selected, self.font_bold, self.font_small, theme
-                )
-                y += (card_h + card_gap)
+                    _draw_modern_tile(
+                        draw, 12, card_y, card_w, card_h,
+                        item.get("icon", "settings"), item["name"],
+                        r_type, r_val, is_selected, self.font_bold, self.font_small, theme
+                    )
 
-            # 极简 2px 贴边胶囊滚动滑块
-            if total > max_visible:
-                thumb_h = 44
-                max_scroll = 180
-                thumb_y = 52 + int((start_idx / (total - max_visible)) * max_scroll)
+            # 顶部固定导航遮罩
+            draw.rectangle([0, 0, 240, 44], fill=surf_col)
+            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
+            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
+            draw.text((26, 17), "系统设置", fill=on_surf, font=self.font_bold)
+
+            # 底部遮罩
+            draw.rectangle([0, 312, 240, 320], fill=surf_col)
+
+            # 极简动态连续滑块
+            if total > 4 and max_scroll > 0:
+                track_y1, track_y2 = 48, 302
+                track_h = track_y2 - track_y1
+                thumb_h = max(24, int((viewport_h / total_content_h) * track_h))
+                thumb_y = track_y1 + int((scroll_y / max_scroll) * (track_h - thumb_h))
                 draw.rounded_rectangle([232, thumb_y, 235, thumb_y + thumb_h], radius=1, fill=p_col)
 
         # F. 人脸录入倒计时/取景界面 (FACE_ENROLL)
@@ -1473,7 +1492,7 @@ class MenuFSM:
                 ("space", 10),
                 ("highlight", "叫 PIG 是因为："),
                 ("text", "首先是基于 PI 的，"),
-                ("quote", "其次做 PIG 的人是一只 🐖。"),
+                ("quote", "其次做 PIG 的人是一只小猪。"),
                 ("space", 10),
                 ("text", "此时此刻，"),
                 ("text", "写下这段话的老程序员"),
@@ -1482,11 +1501,11 @@ class MenuFSM:
                 ("highlight", "但他坚信一切都有解决办法，"),
                 ("highlight", "就像 PIG 会不断迭代。"),
                 ("space", 8),
-                ("quote", "而且他，真的很想念他的白菜 🥬。"),
+                ("quote", "而且他，真的很想念他的白菜。"),
                 ("space", 16)
             ]
 
-            # 2. 绘制滚动正文内容 (只在卡片视口内 44 <= y <= 300 绘制可见行，全部常规字重，无粗体)
+            # 2. 绘制滚动正文内容 (只在卡片视口内 44 <= y <= 300 绘制可见行，全部常规字重，统一主文本色，无任何加粗或高亮色)
             cur_y = 56 - self.easter_egg_scroll_y
             for it_type, val in letter_items:
                 if it_type == "space":
@@ -1494,12 +1513,7 @@ class MenuFSM:
                     continue
 
                 if 44 <= cur_y <= 300:
-                    if it_type == "highlight":
-                        draw.text((20, cur_y), val, fill=p_col, font=font_body)
-                    elif it_type == "quote":
-                        draw.text((20, cur_y), val, fill=(205, 215, 220), font=font_body)
-                    else:
-                        draw.text((20, cur_y), val, fill=on_surf, font=font_body)
+                    draw.text((20, cur_y), val, fill=on_surf, font=font_body)
                 cur_y += 19
 
             # 3. 绘制顶部遮罩与顶栏 (纯净系统风格：左箭头 + "关于 PIG" + "ABOUT"，常规字重)

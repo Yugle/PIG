@@ -1729,6 +1729,12 @@
       }
     };
 
+    // 菜单连续平滑滚动阻尼状态机 (60 FPS Damped Lerp)
+    const menuSmoothScroll = {
+      TOGGLES: 0,
+      SYSTEM: 0,
+    };
+
     let qrCodeImg = null;
     let qrCodeLoaded = false;
 
@@ -1859,9 +1865,11 @@
           } else if (menuState.cursor === 2) {
             menuState.mode = "TOGGLES";
             menuState.cursor = 0;
+            menuSmoothScroll.TOGGLES = 0;
           } else if (menuState.cursor === 3) {
             menuState.mode = "SYSTEM";
             menuState.cursor = 0;
+            menuSmoothScroll.SYSTEM = 0;
           }
         }
       } else if (menuState.mode === "QR_CODE") {
@@ -1938,6 +1946,7 @@
               .catch(() => { cur.val = "检查失败"; });
           } else if (cur.id === "version") {
             triggerEasterEggClick();
+            return;
           } else if (cur.id === "restart") {
             cur.val = "正在重启...";
             fetch("/api/system/restart", { method: "POST" }).catch(() => {});
@@ -1956,7 +1965,7 @@
           menuState.easter_egg_scroll = Math.max(0, (menuState.easter_egg_scroll || 0) - 26);
         } else if (button === "K2") {
           menuState.easter_egg_scroll = Math.min(230, (menuState.easter_egg_scroll || 0) + 26);
-        } else if (button === "K4" || button === "K3") {
+        } else if (button === "K4") {
           menuState.mode = "SYSTEM";
           menuState.easter_egg_scroll = 0;
           menuState.cursor = 7;
@@ -2007,36 +2016,24 @@
       const cy = (e.clientY - rect.top) * scaleY;
 
       if (menuState.mode === "EASTER_EGG") {
+        if (Date.now() - (window._easterEggEnterTime || 0) < 600) return;
         sendHwButton("K4");
         return;
       }
 
-      // 处于系统设置界面中时，支持鼠标点选卡片
-      if (menuState.mode === "SYSTEM") {
-        const sysItems = menuState.system_items || [
-          { id: "theme" }, { id: "face_id" }, { id: "face_clear" }, { id: "mijia" },
-          { id: "voice" }, { id: "volume" }, { id: "timeout" }, { id: "version" },
-          { id: "update" }, { id: "restart" }, { id: "shutdown" }
-        ];
-        const total = sysItems.length;
-        const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
-        const maxVisible = 4;
-        let startIdx = 0;
-        if (total > maxVisible) {
-          if (curIdx < 2) startIdx = 0;
-          else if (curIdx >= total - 2) startIdx = total - maxVisible;
-          else startIdx = curIdx - 1;
-          startIdx = Math.max(0, Math.min(startIdx, total - maxVisible));
-        }
+      // 处于系统设置界面或硬件控制界面中时，支持鼠标点选卡片 (基于当前平滑滚动坐标精确判定)
+      if (menuState.mode === "SYSTEM" || menuState.mode === "TOGGLES") {
+        const isSys = (menuState.mode === "SYSTEM");
+        const items = isSys ? (menuState.system_items || []) : (menuState.hardware_items || []);
+        const total = items.length;
+        const curScroll = (isSys ? menuSmoothScroll.SYSTEM : menuSmoothScroll.TOGGLES) || 0;
 
-        // 检查点击了哪一张卡片
-        for (let i = 0; i < maxVisible; i++) {
-          const cardY = 48 + i * 58;
-          if (cx >= 12 && cx <= 224 && cy >= cardY && cy <= cardY + 50) {
-            const realIdx = startIdx + i;
-            menuState.cursor = realIdx;
-            const item = sysItems[realIdx];
-            if (item && item.id === "version") {
+        for (let i = 0; i < total; i++) {
+          const cardY = 48 + i * 58 - curScroll;
+          if (cx >= 12 && cx <= 224 && cy >= cardY && cy <= cardY + 50 && cy >= 44 && cy <= 312) {
+            menuState.cursor = i;
+            const item = items[i];
+            if (isSys && item && item.id === "version") {
               triggerEasterEggClick();
             } else {
               sendHwButton("K3");
@@ -2047,13 +2044,22 @@
       }
     });
 
-    // 允许通过鼠标滚轮在彩蛋界面平滑滚动
+    // 允许通过鼠标滚轮在彩蛋界面和菜单界面平滑滚动
     let lastWheelTime = 0;
     eyeCanvas.addEventListener("wheel", (e) => {
+      const now = Date.now();
+      if (now - lastWheelTime < 60) return;
+
       if (menuState.mode === "EASTER_EGG") {
         e.preventDefault();
-        const now = Date.now();
-        if (now - lastWheelTime < 60) return;
+        lastWheelTime = now;
+        if (e.deltaY > 0) {
+          sendHwButton("K2");
+        } else if (e.deltaY < 0) {
+          sendHwButton("K1");
+        }
+      } else if (menuState.mode === "SYSTEM" || menuState.mode === "TOGGLES") {
+        e.preventDefault();
         lastWheelTime = now;
         if (e.deltaY > 0) {
           sendHwButton("K2");
@@ -2605,59 +2611,72 @@
         const total = hwItems.length;
         const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
 
-        // 顶栏返回箭头 + 标题 + 计数
+        const cardH = 50;
+        const cardGap = 8;
+        const cardW = 212;
+        const pitch = cardH + cardGap; // 58px
+
+        const viewportH = 264;
+        const totalContentH = total * pitch - cardGap;
+        const maxScroll = Math.max(0, totalContentH - viewportH);
+        const targetScroll = Math.max(0, Math.min(maxScroll, (curIdx - 1) * pitch));
+
+        // 60 FPS 指数平滑阻尼插值 (Damped Lerp)
+        if (typeof menuSmoothScroll.TOGGLES !== "number") menuSmoothScroll.TOGGLES = targetScroll;
+        const scrollDiff = targetScroll - menuSmoothScroll.TOGGLES;
+        if (Math.abs(scrollDiff) < 0.2) {
+          menuSmoothScroll.TOGGLES = targetScroll;
+        } else {
+          menuSmoothScroll.TOGGLES += scrollDiff * 0.22;
+        }
+        const scrollY = menuSmoothScroll.TOGGLES;
+
+        // 裁剪视口：44 <= y <= 312
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 44, 240, 268);
+        ctx.clip();
+
+        hwItems.forEach((it, idx) => {
+          const cardY = 48 + idx * pitch - scrollY;
+          if (cardY + cardH >= 40 && cardY <= 320) {
+            const isSel = (idx === curIdx);
+
+            let isOn = false;
+            if (it.id === "servo_sleep") isOn = !menuState.servo_sleeping;
+            else if (it.id === "mic") isOn = !menuState.is_mic_muted;
+            else if (it.id === "track") isOn = !!menuState.face_tracking;
+            else if (it.state !== undefined) isOn = !!it.state;
+            else if (it.val) isOn = it.val.includes("ON");
+
+            const rType = (it.type === "toggle") ? "switch" : ((it.type === "cycle") ? "badge" : "chevron");
+            const rVal = (it.type === "toggle") ? isOn : ((it.type === "cycle") ? (it.val || "九宫格") : "");
+
+            drawCanvasModernTile(ctx, 12, cardY, cardW, cardH, it.icon || "hardware", it.name, rType, rVal, isSel);
+          }
+        });
+        ctx.restore();
+
+        // 顶栏固定遮罩
+        ctx.fillStyle = MD3.surface;
+        ctx.fillRect(0, 0, 240, 44);
         ctx.strokeStyle = MD3.primary;
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
         ctx.fillStyle = MD3.onSurface;
         ctx.font = "bold 15px sans-serif";
         ctx.fillText("硬件控制", 26, 31);
-        ctx.fillStyle = MD3.onSurfaceVariant;
-        ctx.font = "11px sans-serif";
-        ctx.fillText(`${String(curIdx + 1).padStart(2, '0')}/${String(total).padStart(2, '0')}`, 192, 30);
 
-        const maxVisible = 4;
-        let startIdx = 0;
-        if (total > maxVisible) {
-          if (curIdx < 2) {
-            startIdx = 0;
-          } else if (curIdx >= total - 2) {
-            startIdx = total - maxVisible;
-          } else {
-            startIdx = curIdx - 1;
-          }
-          startIdx = Math.max(0, Math.min(startIdx, total - maxVisible));
-        }
+        // 底部微遮罩
+        ctx.fillStyle = MD3.surface;
+        ctx.fillRect(0, 312, 240, 8);
 
-        const visibleItems = hwItems.slice(startIdx, startIdx + maxVisible);
-        let cy = 48;
-        const cardH = 50;
-        const cardGap = 8;
-        const cardW = 212;
-
-        visibleItems.forEach((it, vIdx) => {
-          const realIdx = startIdx + vIdx;
-          const isSel = (realIdx === curIdx);
-
-          let isOn = false;
-          if (it.id === "servo_sleep") isOn = !menuState.servo_sleeping;
-          else if (it.id === "mic") isOn = !menuState.is_mic_muted;
-          else if (it.id === "track") isOn = !!menuState.face_tracking;
-          else if (it.state !== undefined) isOn = !!it.state;
-          else if (it.val) isOn = it.val.includes("ON");
-
-          const rType = (it.type === "toggle") ? "switch" : ((it.type === "cycle") ? "badge" : "chevron");
-          const rVal = (it.type === "toggle") ? isOn : ((it.type === "cycle") ? (it.val || "九宫格") : "");
-
-          drawCanvasModernTile(ctx, 12, cy, cardW, cardH, it.icon || "hardware", it.name, rType, rVal, isSel);
-          cy += (cardH + cardGap);
-        });
-
-        // 极简 2px 贴边胶囊滚动滑块
-        if (total > maxVisible) {
-          const thumbH = 44;
-          const maxScroll = 180;
-          const thumbY = 52 + Math.round((startIdx / (total - maxVisible)) * maxScroll);
+        // 连续平滑滚动滑块
+        if (total > 4 && maxScroll > 0) {
+          const trackY1 = 48, trackY2 = 302;
+          const trackH = trackY2 - trackY1;
+          const thumbH = Math.max(24, Math.round((viewportH / totalContentH) * trackH));
+          const thumbY = trackY1 + Math.round((Math.max(0, Math.min(scrollY, maxScroll)) / maxScroll) * (trackH - thumbH));
           ctx.fillStyle = MD3.primary;
           roundRect(ctx, 232, thumbY, 3, thumbH, 1.5, true);
         }
@@ -2680,51 +2699,63 @@
         const total = sysItems.length;
         const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
 
-        // 顶栏返回箭头 + 标题 + 计数
+        const cardH = 50;
+        const cardGap = 8;
+        const cardW = 212;
+        const pitch = cardH + cardGap; // 58px
+
+        const viewportH = 264;
+        const totalContentH = total * pitch - cardGap;
+        const maxScroll = Math.max(0, totalContentH - viewportH);
+        const targetScroll = Math.max(0, Math.min(maxScroll, (curIdx - 1) * pitch));
+
+        // 60 FPS 指数平滑阻尼插值 (Damped Lerp)
+        if (typeof menuSmoothScroll.SYSTEM !== "number") menuSmoothScroll.SYSTEM = targetScroll;
+        const scrollDiff = targetScroll - menuSmoothScroll.SYSTEM;
+        if (Math.abs(scrollDiff) < 0.2) {
+          menuSmoothScroll.SYSTEM = targetScroll;
+        } else {
+          menuSmoothScroll.SYSTEM += scrollDiff * 0.22;
+        }
+        const scrollY = menuSmoothScroll.SYSTEM;
+
+        // 裁剪视口：44 <= y <= 312
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 44, 240, 268);
+        ctx.clip();
+
+        sysItems.forEach((it, idx) => {
+          const cardY = 48 + idx * pitch - scrollY;
+          if (cardY + cardH >= 40 && cardY <= 320) {
+            const isSel = (idx === curIdx);
+            const rType = (it.type === "cycle" || it.type === "info") ? "badge" : "chevron";
+            const rVal = (it.type === "cycle" || it.type === "info") ? String(it.val) : "";
+            drawCanvasModernTile(ctx, 12, cardY, cardW, cardH, it.icon || "settings", it.name, rType, rVal, isSel);
+          }
+        });
+        ctx.restore();
+
+        // 顶栏固定遮罩
+        ctx.fillStyle = MD3.surface;
+        ctx.fillRect(0, 0, 240, 44);
         ctx.strokeStyle = MD3.primary;
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
         ctx.fillStyle = MD3.onSurface;
         ctx.font = "bold 15px sans-serif";
         ctx.fillText("系统设置", 26, 31);
-        ctx.fillStyle = MD3.onSurfaceVariant;
-        ctx.font = "11px sans-serif";
-        ctx.fillText(`${String(curIdx + 1).padStart(2, '0')}/${String(total).padStart(2, '0')}`, 192, 30);
 
-        const maxVisible = 4;
-        let startIdx = 0;
-        if (total > maxVisible) {
-          if (curIdx < 2) {
-            startIdx = 0;
-          } else if (curIdx >= total - 2) {
-            startIdx = total - maxVisible;
-          } else {
-            startIdx = curIdx - 1;
-          }
-          startIdx = Math.max(0, Math.min(startIdx, total - maxVisible));
-        }
+        // 底部微遮罩
+        ctx.fillStyle = MD3.surface;
+        ctx.fillRect(0, 312, 240, 8);
 
-        const visibleItems = sysItems.slice(startIdx, startIdx + maxVisible);
-        let cy = 48;
-        const cardH = 50;
-        const cardGap = 8;
-        const cardW = 212;
-
-        visibleItems.forEach((it, vIdx) => {
-          const realIdx = startIdx + vIdx;
-          const isSel = (realIdx === curIdx);
-
-          const rType = (it.type === "cycle" || it.type === "info") ? "badge" : "chevron";
-          const rVal = (it.type === "cycle" || it.type === "info") ? String(it.val) : "";
-
-          drawCanvasModernTile(ctx, 12, cy, cardW, cardH, it.icon || "settings", it.name, rType, rVal, isSel);
-          cy += (cardH + cardGap);
-        });
-
-        if (total > maxVisible) {
-          const thumbH = 44;
-          const maxScroll = 180;
-          const thumbY = 52 + Math.round((startIdx / (total - maxVisible)) * maxScroll);
+        // 连续平滑滚动滑块
+        if (total > 4 && maxScroll > 0) {
+          const trackY1 = 48, trackY2 = 302;
+          const trackH = trackY2 - trackY1;
+          const thumbH = Math.max(24, Math.round((viewportH / totalContentH) * trackH));
+          const thumbY = trackY1 + Math.round((Math.max(0, Math.min(scrollY, maxScroll)) / maxScroll) * (trackH - thumbH));
           ctx.fillStyle = MD3.primary;
           roundRect(ctx, 232, thumbY, 3, thumbH, 1.5, true);
         }
@@ -2739,7 +2770,7 @@
         ctx.lineWidth = 1;
         roundRect(ctx, 10, 42, 220, 266, 10, false);
 
-        // 2. 限制在视口内的正文内容 (带平滑滚动与美观排版，全部常规字重，绝不加粗)
+        // 2. 限制在视口内的正文内容 (带平滑滚动与美观排版，全部常规字重，统一主文本色，绝无加粗或颜色)
         ctx.save();
         ctx.beginPath();
         ctx.rect(10, 44, 220, 262);
@@ -2748,7 +2779,7 @@
         const letterItems = [
           { type: "text", text: "本项目只是一名老程序员" },
           { type: "text", text: "用 AI 做的能想到的" },
-          { type: "highlight", text: "比较动人的一封情书。" },
+          { type: "text", text: "比较动人的一封情书。" },
           { type: "space", val: 8 },
           { type: "text", text: "就像电影《失控玩家》一样，" },
           { type: "text", text: "把她的人物画像、你的语音、" },
@@ -2758,20 +2789,20 @@
           { type: "text", text: "学习她的习惯、她的作息，" },
           { type: "text", text: "会记录她的不舒服，" },
           { type: "text", text: "帮她定时喂猫，" },
-          { type: "highlight", text: "提醒她锅里煮的茶叶蛋马上好了……" },
+          { type: "text", text: "提醒她锅里煮的茶叶蛋马上好了……" },
           { type: "space", val: 10 },
-          { type: "highlight", text: "叫 PIG 是因为：" },
+          { type: "text", text: "叫 PIG 是因为：" },
           { type: "text", text: "首先是基于 PI 的，" },
-          { type: "quote", text: "其次做 PIG 的人是一只 🐖。" },
+          { type: "text", text: "其次做 PIG 的人是一只 🐖。" },
           { type: "space", val: 10 },
           { type: "text", text: "此时此刻，" },
           { type: "text", text: "写下这段话的老程序员" },
           { type: "text", text: "跟他的白菜遇到了很多问题。" },
           { type: "space", val: 8 },
-          { type: "highlight", text: "但他坚信一切都有解决办法，" },
-          { type: "highlight", text: "就像 PIG 会不断迭代。" },
+          { type: "text", text: "但他坚信一切都有解决办法，" },
+          { type: "text", text: "就像 PIG 会不断迭代。" },
           { type: "space", val: 8 },
-          { type: "quote", text: "而且他，真的很想念他的白菜 🥬。" },
+          { type: "text", text: "而且他，真的很想念他的白菜 🥬。" },
           { type: "space", val: 16 }
         ];
 
@@ -2783,16 +2814,8 @@
           }
           if (curY >= 30 && curY <= 315) {
             ctx.font = "13px sans-serif";
-            if (item.type === "highlight") {
-              ctx.fillStyle = MD3.primary;
-              ctx.fillText(item.text, 20, curY);
-            } else if (item.type === "quote") {
-              ctx.fillStyle = MD3.onSurface || "#e3e3e3";
-              ctx.fillText(item.text, 20, curY);
-            } else {
-              ctx.fillStyle = MD3.onSurface || "#e3e3e3";
-              ctx.fillText(item.text, 20, curY);
-            }
+            ctx.fillStyle = MD3.onSurface || "#e3e3e3";
+            ctx.fillText(item.text, 20, curY);
           }
           curY += 20;
         }
@@ -6111,16 +6134,22 @@
     // ==========================================
     function triggerEasterEggClick() {
       const now = Date.now();
-      if (now - (window._lastVerClickTime || 0) < 2500) {
+      if (now - (window._lastVerClickTime || 0) < 3000) {
         window._verClickCount = (window._verClickCount || 0) + 1;
       } else {
         window._verClickCount = 1;
       }
       window._lastVerClickTime = now;
+
+      const sysItems = menuState.system_items || [];
+      const verItem = sysItems.find(it => it.id === "version");
+
       if (window._verClickCount >= 5) {
         window._verClickCount = 0;
+        if (verItem) verItem.val = menuState.version || "v1.0.0";
         menuState.mode = "EASTER_EGG";
         menuState.easter_egg_scroll = 0;
+        window._easterEggEnterTime = Date.now();
         lastLocalNavTime = Date.now();
         fetch("/api/menu/easter_egg", { method: "POST" }).catch(() => {});
         try {
@@ -6129,8 +6158,10 @@
           snd.play().catch(() => {});
         } catch (e) {}
         showToast("📖 已在小猪屏幕上展开关于 PIG 的介绍");
-      } else if (window._verClickCount >= 2) {
-        showToast(`再按 ${5 - window._verClickCount} 次在屏幕展开项目介绍 📖`);
+      } else {
+        const remaining = 5 - window._verClickCount;
+        if (verItem) verItem.val = `再按 ${remaining} 次`;
+        showToast(`再按 ${remaining} 次在屏幕展开项目介绍 📖`);
       }
     }
   </script>

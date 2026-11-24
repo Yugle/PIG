@@ -97,6 +97,8 @@ flowchart TD
         Mic["🎤 免驱 USB 迷你直插麦克风"]
         Speaker["🔊 Y57 USB 扩音喇叭 (数字声卡+功放+喇叭一线通)"]
         Touch["👆 TTP223 电容触摸传感器 (摸头杀，隔壳感应)"]
+        Radar["📡 HLK-LD2402 24GHz 毫米波人体雷达 (人来自动唤醒/人走休眠)"]
+        Buttons["🔘 4位独立微动按键板 (K1~K4 硬件菜单离线控制)"]
         Servos["🦾 二自由度云台 (SG90 9g 舵机 × 2: Pan/Tilt)"]
     end
 
@@ -138,6 +140,8 @@ flowchart TD
     RPi --- Mic
     RPi --- Speaker
     RPi --- Touch
+    RPi --- Radar
+    RPi --- Buttons
     RPi --- Servos
 ```
 
@@ -186,7 +190,7 @@ sequenceDiagram
 
 ## 二、硬件物料清单 (BOM) 与采购精准参数 (实测满分清单)
 
-全套核心元器件淘宝/拼多多实测总成本仅约 **93 元**，无脑闭眼下单规格如下：
+全套核心元器件淘宝/拼多多实测总成本仅约 **108 元**，百元级满配全套闭眼下单规格如下：
 
 | 模块分类 | 采购精准名称 / 搜索关键词 | 核心参数与规格要求 | 实测参考成本 |
 | :--- | :--- | :--- | :--- |
@@ -196,9 +200,11 @@ sequenceDiagram
 | **视觉输入** | **1080P/720P USB 摄像头裸板模组** | **认准：720P 没有外壳 60度无畸变 1米线**（轻薄裸板约 10g，正卡 PIG 额头 9.5mm 圆孔，UVC 免驱） | ~25.9 元 |
 | **声音输入** | **树莓派 USB 迷你麦克风 直插** | 超微型直插款（无线鼠标接收器大小），免驱即插即用，插树莓派后背全向收音 | ~7.4 元 |
 | **声音输出** | **Y57 型 USB 扩音小喇叭 (一线通)** | **认准：内置数字声卡+功放+喇叭一线通 (USB直头单线)**！免电池、免充电、零底噪、不占 3.5mm 孔 | ~16.2 元 |
+| **人体感应** | **海凌科 HLK-LD2402 24GHz 毫米波雷达** | **认准：LD2402 微型人体存在感应模块 (带排针)**！24GHz FMCW，体积超微型，**能穿透塑料外壳（外壳无需挖孔破坏整体美感）**，感应走动/微动/静坐呼吸；数字 IO 高电平直连 GPIO，实现人来 0.1s 极速硬件中断唤醒、人走自动休眠垂头息屏防烧屏 | ~12.5 元 |
+| **实体按键** | **4位独立按键模块 (4-Key 轻触开关板)** | **认准：4路独立微动按键板 (带弱上拉/共地 GND)**！控制 K1(上/音量+)、K2(下/音量-)、K3(确认/唤醒/解密)、K4(返回/静音闭麦/长按关机)，实现免手机完全脱机的硬件 GUI 与系统控制闭环 | ~2.6 元 |
 | **摸头感知** | **TTP223 电容触摸传感器模块** | **认准：一路触摸传感器/点动型 (已焊排针)**，贴在头壳内侧隔空感应，实现“摸头杀”亲密互动 | ~2.8 元 |
 | **接线耗材** | **杜邦线 20cm (母对母 40P)** | 20cm 黄金长度，保证 PIG 转头 180° 与俯仰点头时不绷紧、不卡线、不扯脱插针 | ~2.0 元 |
-| **整套总计** | **全套 6 大核心电子元器件** | **全部实测认证，直接加入购物车结算** | **约 93 元** |
+| **整套总计** | **全套 8 大核心电子元器件** | **全部实测认证，百元级完整体桌面活物，直接加入购物车结算** | **约 108 元** |
 
 ---
 
@@ -229,15 +235,22 @@ graph TD
         Pin1["Pin 1: 3.3V PWR"]
         Pin2["Pin 2: 5.0V PWR"]
         Pin6["Pin 6: GND (地)"]
+        Pin7["Pin 7: GPIO 4"]
         Pin9["Pin 9: GND (地)"]
         Pin11["Pin 11: GPIO 17"]
         Pin12["Pin 12: GPIO 18 (PWM0)"]
+        Pin13["Pin 13: GPIO 27"]
         Pin15["Pin 15: GPIO 22"]
+        Pin16["Pin 16: GPIO 23"]
+        Pin17["Pin 17: 3.3V PWR"]
+        Pin18["Pin 18: GPIO 24"]
         Pin19["Pin 19: GPIO 10 (MOSI)"]
         Pin22["Pin 22: GPIO 25"]
         Pin23["Pin 23: GPIO 11 (SCLK)"]
         Pin24["Pin 24: GPIO 8 (CE0)"]
         Pin33["Pin 33: GPIO 13 (PWM1)"]
+        Pin37["Pin 37: GPIO 26"]
+        Pin39["Pin 39: GND (地)"]
         USB_A["USB 端口 1"]
         USB_B["USB 端口 2"]
         USB_C["USB 端口 3"]
@@ -265,6 +278,16 @@ graph TD
         Touch_GND["TTP223 摸头传感器 GND"]
         Touch_SIG["TTP223 摸头传感器 SIG"]
 
+        Radar_VCC["LD2402 人体雷达 VCC (3.3V)"]
+        Radar_GND["LD2402 人体雷达 GND"]
+        Radar_OUT["LD2402 人体雷达 OUT (有人高电平)"]
+
+        Btn_K1["K1 按键 (GPIO 23: 音量+/菜单上)"]
+        Btn_K2["K2 按键 (GPIO 24: 音量-/菜单下)"]
+        Btn_K3["K3 按键 (GPIO 27: 确认/唤醒/解密)"]
+        Btn_K4["K4 按键 (GPIO 4: 返回/静音/关机)"]
+        Btn_GND["4位按键公共地 (GND)"]
+
         USB_Cam["📷 USB 720P 摄像头模组"]
         USB_Mic["🎤 USB 迷你直插麦克风"]
         USB_Spk["🔊 Y57 USB 一线通扩音喇叭"]
@@ -283,6 +306,18 @@ graph TD
     Pin1 --> Touch_VCC
     Pin9 --> Touch_GND
     Pin11 --> Touch_SIG
+
+    %% HLK-LD2402 人体雷达接线
+    Pin17 --> Radar_VCC
+    Pin39 --> Radar_GND
+    Pin37 --> Radar_OUT
+
+    %% 4位独立按键接线
+    Pin16 --> Btn_K1
+    Pin18 --> Btn_K2
+    Pin13 --> Btn_K3
+    Pin7 --> Btn_K4
+    Pin9 --- Btn_GND
 
     %% 舵机信号线
     Pin12 --> Pan_PWM
@@ -322,8 +357,13 @@ graph TD
 │ • Pin 12 (GPIO 18 / PWM0)  ───> 水平舵机信号线 (Pan)         │
 │ • Pin 33 (GPIO 13 / PWM1)  ───> 俯仰舵机信号线 (Tilt)        │
 │ • Pin 11 (GPIO 17)         ───> TTP223 摸头传感器信号线 (SIG) │
-│ • Pin 1  (3.3V PWR)        ───> ST7789 屏幕 VCC & TTP223 VCC│
-│ • Pin 6 / Pin 9 (GND)      ───> 共地输入 (GND)              │
+│ • Pin 16 (GPIO 23)         ───> 实体按键 K1 (音量+ / 菜单上) │
+│ • Pin 18 (GPIO 24)         ───> 实体按键 K2 (音量- / 菜单下) │
+│ • Pin 13 (GPIO 27)         ───> 实体按键 K3 (确认 / 菜单 / 唤醒)│
+│ • Pin 7  (GPIO 4)          ───> 实体按键 K4 (返回 / 闭麦 / 关机)│
+│ • Pin 37 (GPIO 26)         ───> HLK-LD2402 毫米波雷达 (OUT)  │
+│ • Pin 1  / Pin 17 (3.3V)   ───> ST7789 / TTP223 / LD2402 VCC│
+│ • Pin 6 / Pin 9 / Pin 39   ───> 系统公共地 (GND)             │
 │ • Pin 19 (GPIO 10 / MOSI)  ───> ST7789 屏幕 SDA / DIN       │
 │ • Pin 23 (GPIO 11 / SCLK)  ───> ST7789 屏幕 SCL / CLK       │
 │ • Pin 24 (GPIO 8  / CE0)   ───> ST7789 屏幕 CS              │
