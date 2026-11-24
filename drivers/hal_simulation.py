@@ -135,7 +135,7 @@ class SimulationRobotHAL(BaseRobotHAL):
 
     def capture_image(self) -> bytes:
         now = time.time()
-        max_age_sec = 3.5
+        max_age_sec = 12.0
 
         # 1. 检查数字孪生/Web 仿真端传入的真实摄像头画面 (/tmp/pig_latest_frame.jpg)
         tmp_path = "/tmp/pig_latest_frame.jpg"

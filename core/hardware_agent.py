@@ -497,7 +497,7 @@ class HardwareAgent:
         now = time.time()
         last_cam_ts = getattr(self, "latest_camera_frame_ts", 0.0)
         if frame is None and getattr(self, "latest_camera_frame", None) is not None:
-            if now - last_cam_ts <= 3.5:
+            if now - last_cam_ts <= 12.0:
                 frame = self.latest_camera_frame
             else:
                 self.latest_camera_frame = None

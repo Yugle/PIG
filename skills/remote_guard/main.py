@@ -88,7 +88,7 @@ def _generate_synthetic_surveillance_frame(pan: float, tilt: float, desc: str, i
                 "SIGNAL ✖ CAMERA OFFLINE / NO LIVE FEED",
                 f"TIME: {now_str}",
                 f"ANGLE: Pan {pan:.1f}° / Tilt {tilt:.1f}°",
-                "STATUS: LIVE CAPTURE FAILED (STALE CACHE BLOCKED)",
+                "STATUS: NO CAMERA INPUT DETECTED",
                 "ACTION: PLEASE CONNECT CAMERA OR START WEBCAM STREAM"
             ]
         else:
@@ -107,8 +107,8 @@ def _generate_synthetic_surveillance_frame(pan: float, tilt: float, desc: str, i
 
         # 如果离线，屏幕中央醒目警示
         if not is_live:
-            banner_text = "[ ! ] NO LIVE CAMERA - HISTORICAL CACHE BLOCKED"
-            draw.text((cx - 180, cy + 60), banner_text, fill=(255, 120, 120))
+            banner_text = "[ ! ] NO CAMERA SIGNAL"
+            draw.text((cx - 100, cy + 60), banner_text, fill=(255, 120, 120))
 
         # 保存并导出 bytes
         import io
@@ -119,7 +119,7 @@ def _generate_synthetic_surveillance_frame(pan: float, tilt: float, desc: str, i
         return b""
 
 
-def _capture_frame_bytes(pan: float, tilt: float, desc: str, max_age_sec: float = 3.5) -> Tuple[bytes, bool, str]:
+def _capture_frame_bytes(pan: float, tilt: float, desc: str, max_age_sec: float = 12.0) -> Tuple[bytes, bool, str]:
     """
     按优先级从物理机摄像头或仿真推流捕获真实画面。
     严格执行 max_age_sec TTL 时效性校验，抓拍失败时绝对杜绝读取陈旧历史缓存图！
@@ -205,7 +205,7 @@ def _capture_frame_bytes(pan: float, tilt: float, desc: str, max_age_sec: float 
             pass
 
     hud_bytes = _generate_synthetic_surveillance_frame(pan, tilt, desc, is_live=False)
-    return hud_bytes, False, "未检测到实时摄像头画面输入（已严格拦截历史旧图）"
+    return hud_bytes, False, "未检测到实时摄像头画面输入"
 
 
 def _inspect_scene_with_vlm(img_bytes: bytes, user_query: str) -> str:
@@ -302,11 +302,12 @@ def run(direction="center", question="巡视当前环境并汇报状态", **kwar
     if is_live:
         vlm_summary = _inspect_scene_with_vlm(img_bytes, question)
     else:
-        vlm_summary = "⚠️ 抓拍失败：当前未检测到实时摄像头输入。为防止误导，系统已自动拦截并清理了上一次的历史缓存旧图。请确认摄像头已插好或在控制台开启推流后再试～"
+        vlm_summary = "小猪目前没有看到画面呢～请在网页端开启【📷 电脑摄像头】或者确认摄像头插好啦～"
 
     # 4. 组装并推送飞书富文本安防抓拍卡片
     target_id = kwargs.get("target_id")
     id_type = kwargs.get("id_type", "open_id")
+    card_delivered = False
     try:
         from skills.feishu_bot.feishu_client import feishu_client
         push_res = feishu_client.send_camera_snapshot_card(
@@ -317,6 +318,7 @@ def run(direction="center", question="巡视当前环境并汇报状态", **kwar
             id_type=id_type,
             is_live=is_live
         )
+        card_delivered = (push_res.get("code") == 0)
         print(f"📷 [RemoteGuard] 飞书安防卡片已投递: {push_res.get('code', push_res.get('status'))}")
     except Exception as e:
         print(f"⚠️ [RemoteGuard] 飞书卡片投递异常: {e}")
@@ -335,4 +337,4 @@ def run(direction="center", question="巡视当前环境并汇报状态", **kwar
     if is_live:
         return f"📷【家庭安防巡检已完成】\n机位：{dir_desc}\n诊断：{vlm_summary}{extra_hint}"
     else:
-        return f"⚠️【家庭安防巡检 - 抓拍未就绪】\n机位：{dir_desc}\n提示：未能获取到当前实时画面（已拦截陈旧历史图片，绝不使用上一次旧图伪装当前现场）。\n请检查摄像头是否插好或在控制台开启推流。{extra_hint}"
+        return f"📷【家庭安防巡检】\n机位：{dir_desc}\n小猪目前没看到实时画面呢，检查一下摄像头连接或者在网页端开启摄像头吧～{extra_hint}"

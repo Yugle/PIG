@@ -26,7 +26,7 @@ def _load_config():
     return {}
 
 
-def _capture_frame_bytes(max_age_sec: float = 3.5) -> tuple[bytes, str]:
+def _capture_frame_bytes(max_age_sec: float = 12.0) -> tuple[bytes, str]:
     """按优先级从不同链路获取当前摄像头一帧 JPEG 字节流，严格执行 TTL 时效校验，返回 (img_bytes, err_msg)"""
     now = time.time()
     tmp_path = "/tmp/pig_latest_frame.jpg"
@@ -106,7 +106,7 @@ def _capture_frame_bytes(max_age_sec: float = 3.5) -> tuple[bytes, str]:
         except Exception:
             pass
 
-    return b"", "未能捕获到最新实时画面（已严格拦截历史陈旧图片）：摄像头画面未开启或已断开连接。若在 Web 仿真工作台，请点击开启【📷 电脑摄像头】；若在真机，请确认免驱 USB 摄像头已插好。"
+    return b"", "小猪目前没看到画面呢～请在网页端开启【📷 电脑摄像头】或者确认摄像头插好啦～"
 
 
 def run(question="请仔细观察这张照片，告诉我你看到了什么？", **kwargs):

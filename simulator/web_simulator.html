@@ -3010,6 +3010,7 @@
           await video.play();
 
           webcamGazeEnabled = true;
+          try { localStorage.setItem("pig_webcam_auto", "1"); } catch (e) {}
           btn.innerText = "📷 电脑摄像头追踪: 开";
           btn.style.color = "var(--cyan)";
           btn.style.borderColor = "var(--cyan)";
@@ -3166,6 +3167,7 @@
       } else {
         // 关闭摄像头追踪
         webcamGazeEnabled = false;
+        try { localStorage.setItem("pig_webcam_auto", "0"); } catch (e) {}
         btn.innerText = "📷 电脑摄像头追踪: 关";
         btn.style.color = "var(--text-sub)";
         btn.style.borderColor = "var(--border-color)";
@@ -4979,6 +4981,13 @@
     } catch (e) {
       switchControlTab("motion");
     }
+
+    // 若此前用户开启过摄像头，尝试自动连接
+    try {
+      if (localStorage.getItem("pig_webcam_auto") === "1") {
+        setTimeout(() => { toggleWebcamGaze(); }, 800);
+      }
+    } catch (e) {}
 
     let _settingsDebounceTimer = null;
     function onAudioSettingsChange() {

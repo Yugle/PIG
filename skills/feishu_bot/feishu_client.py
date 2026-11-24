@@ -493,7 +493,7 @@ class FeishuClient:
                 })
 
         # 2. 机位与元数据信息
-        status_tag = "🟢 实时连线" if is_live else "🟠 离线/拦截旧图"
+        status_tag = "🟢 实时连线" if is_live else "⚪ 摄像头未开启"
         elements.append({
             "tag": "div",
             "fields": [
@@ -523,7 +523,7 @@ class FeishuClient:
 
         # 3. 智能多模态视觉环境分析 / 状态说明
         if vlm_analysis:
-            section_title = "**👁️ 现场智能环境诊断**" if is_live else "**⚠️ 抓拍状态与安全拦截说明**"
+            section_title = "**👁️ 现场智能环境诊断**" if is_live else "**📷 现场画面状态**"
             elements.append({
                 "tag": "div",
                 "text": {
@@ -545,12 +545,8 @@ class FeishuClient:
             ]
         })
 
-        if is_live:
-            title = "📷 PIG 远程安防与家庭现场巡检"
-            template = "blue"
-        else:
-            title = "⚠️ PIG 远程安防巡检 - 抓拍未就绪"
-            template = "orange"
+        title = "📷 PIG 远程安防与家庭现场巡检"
+        template = "blue" if is_live else "indigo"
 
         # 如果显式指定了发送目标 (如当前接收到消息的会话)
         if target_id and self.app_id and self.app_secret:

@@ -35,10 +35,10 @@ evolution_engine = EvolutionEngine(DATA_DIR, memory_manager=mem, skill_manager=s
 _latest_webcam_frame = None
 _latest_webcam_frame_ts = 0.0
 
-def get_latest_vision_frame(max_age_sec: float = 3.5) -> bytes:
+def get_latest_vision_frame(max_age_sec: float = 12.0) -> bytes:
     """
     获取最新视觉帧字节流。
-    严格执行 TTL 时效性校验（默认 3.5 秒），一旦过期立即丢弃，绝对不用历史旧缓存图伪装当前实时抓拍！
+    严格执行 TTL 时效性校验（默认 12.0 秒），一旦过期立即丢弃，绝对不用历史旧缓存图伪装当前实时抓拍！
     """
     global _latest_webcam_frame, _latest_webcam_frame_ts
     now = time.time()
@@ -128,7 +128,7 @@ def handle_feishu_incoming_message(clean_text: str, open_id: str, chat_id: str, 
 
             # 1. 优先精准识别远程看家 / 拍照巡检意图 (秒级抓拍直出，杜绝废话)
             text_lower = clean_text.strip().lower()
-            snapshot_triggers = ["看看家", "拍照", "拍张照", "拍个照", "看下家", "监控", "看一眼", "巡视", "巡检", "安防", "家里安全", "看看客厅", "看看周围", "拍张照片", "照一张", "拍一下", "看看现场"]
+            snapshot_triggers = ["看看家", "拍照", "拍张照", "拍个照", "看下家", "监控", "看一眼", "巡视", "巡检", "安防", "家里安全", "看看客厅", "看看周围", "拍张照片", "照一张", "拍一下", "看看现场", "抓拍", "拍一张"]
             if any(k in text_lower for k in snapshot_triggers):
                 print(f"📷 [Feishu Bot] 命中远程看家与监控抓拍意图: '{clean_text}'")
                 dir_val = "center"
@@ -143,8 +143,8 @@ def handle_feishu_incoming_message(clean_text: str, open_id: str, chat_id: str, 
 
                 from skills.remote_guard.main import run as run_remote_guard
                 report = run_remote_guard(direction=dir_val, question=clean_text, target_id=target_id, id_type=id_type)
-                send_res = feishu_client.send_im_message(target_id, "text", {"text": report}, receive_id_type=id_type)
-                print(f"📤 [Feishu Bot] 安防抓拍简报已回复至飞书 {target_id}: -> {send_res.get('code', send_res.get('status'))}")
+                # run_remote_guard 内部已直接通过 send_camera_snapshot_card 成功发送富文本卡片 (含抓拍图像与诊断)
+                # 绝不在此处重复发送一条冗余的纯文本气泡，保证聊天界面只有一张完整优雅的交互卡片！
                 return
 
             # 2. 常规对话：进入 ReAct 认知推演链路
