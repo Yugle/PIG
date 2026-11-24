@@ -1946,8 +1946,14 @@
           menuState.cursor = 0;
         }
       } else if (menuState.mode === "EASTER_EGG") {
-        if (button === "K4" || button === "K3" || button === "K1" || button === "K2") {
+        if (button === "K1") {
+          menuState.easter_egg_scroll = Math.max(0, (menuState.easter_egg_scroll || 0) - 28);
+        } else if (button === "K2") {
+          menuState.easter_egg_scroll = Math.min(330, (menuState.easter_egg_scroll || 0) + 28);
+        } else if (button === "K4" || button === "K3") {
           menuState.mode = "SYSTEM";
+          menuState.easter_egg_scroll = 0;
+          menuState.cursor = 7;
         }
       }
 
@@ -2034,6 +2040,18 @@
         }
       }
     });
+
+    // 允许通过鼠标滚轮在彩蛋界面平滑滚动
+    eyeCanvas.addEventListener("wheel", (e) => {
+      if (menuState.mode === "EASTER_EGG") {
+        e.preventDefault();
+        if (e.deltaY > 0) {
+          sendHwButton("K2");
+        } else if (e.deltaY < 0) {
+          sendHwButton("K1");
+        }
+      }
+    }, { passive: false });
 
     // ==========================================
     // Material Design 3 (Material You) 多主题调色板与组件规范
@@ -2701,55 +2719,121 @@
           roundRect(ctx, 232, thumbY, 3, thumbH, 1.5, true);
         }
       } else if (menuState.mode === "EASTER_EGG") {
-        // 顶部返回箭头 + 标题
+        const scrollY = menuState.easter_egg_scroll || 0;
+        const maxScroll = 330;
+
+        // 1. 卡片底板 (淡粉半透明底板 + 浪漫边框)
+        ctx.fillStyle = "rgba(255, 121, 198, 0.08)";
+        roundRect(ctx, 10, 42, 220, 246, 10, true);
+        ctx.strokeStyle = "rgba(255, 121, 198, 0.45)";
+        ctx.lineWidth = 1;
+        roundRect(ctx, 10, 42, 220, 246, 10, false);
+
+        // 2. 限制在视口内的正文内容 (带平滑滚动与美观排版)
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(10, 44, 220, 242);
+        ctx.clip();
+
+        const letterItems = [
+          { type: "heading", text: "「致白菜」" },
+          { type: "space", val: 4 },
+          { type: "text", text: "本项目只是一名老程序员" },
+          { type: "text", text: "用 AI 做的能想到的" },
+          { type: "quote", text: "比较动人的一封情书。" },
+          { type: "space", val: 8 },
+          { type: "text", text: "就像电影《失控玩家》一样，" },
+          { type: "text", text: "把她的人物画像、你的语音、" },
+          { type: "text", text: "你们的故事注入到 PIG 里。" },
+          { type: "space", val: 8 },
+          { type: "text", text: "PIG 会自己去学习，" },
+          { type: "text", text: "学习她的习惯、她的作息，" },
+          { type: "text", text: "会记录她的不舒服，" },
+          { type: "text", text: "帮她定时喂猫，" },
+          { type: "quote", text: "提醒她锅里煮的茶叶蛋" },
+          { type: "quote", text: "马上好了……" },
+          { type: "space", val: 10 },
+          { type: "highlight", text: "叫 PIG 是因为：" },
+          { type: "text", text: "首先是基于 PI 的，" },
+          { type: "quote", text: "其次做 PIG 的人是一只 🐖。" },
+          { type: "space", val: 10 },
+          { type: "text", text: "此时此刻，" },
+          { type: "text", text: "老程序员跟他的白菜" },
+          { type: "text", text: "遇到了很多问题。" },
+          { type: "space", val: 6 },
+          { type: "highlight", text: "但他坚信一切都有解决办法，" },
+          { type: "highlight", text: "就像 PIG 会不断迭代。" },
+          { type: "space", val: 8 },
+          { type: "heart", text: "而且他，真的很想念他的白菜 🥬」" },
+          { type: "space", val: 14 },
+          { type: "sub", text: "—— 献给白菜" },
+          { type: "sub", text: "永远相信爱的老程序员与小猪" }
+        ];
+
+        let curY = 64 - scrollY;
+        for (const item of letterItems) {
+          if (item.type === "space") {
+            curY += item.val;
+            continue;
+          }
+          if (curY >= 30 && curY <= 295) {
+            if (item.type === "heading") {
+              ctx.fillStyle = "#ff79c6";
+              ctx.font = "bold 15px sans-serif";
+              ctx.fillText(item.text, 20, curY);
+            } else if (item.type === "heart") {
+              ctx.fillStyle = "#ff69b4";
+              ctx.font = "bold 13px sans-serif";
+              ctx.fillText(item.text, 20, curY);
+            } else if (item.type === "highlight") {
+              ctx.fillStyle = "#ffd1dc";
+              ctx.font = "bold 13px sans-serif";
+              ctx.fillText(item.text, 20, curY);
+            } else if (item.type === "quote") {
+              ctx.fillStyle = "#ffb8d1";
+              ctx.font = "13px sans-serif";
+              ctx.fillText(item.text, 20, curY);
+            } else if (item.type === "sub") {
+              ctx.fillStyle = "#9aa0a6";
+              ctx.font = "11px sans-serif";
+              ctx.fillText(item.text, 24, curY);
+            } else {
+              ctx.fillStyle = MD3.onSurface || "#e3e3e3";
+              ctx.font = "13px sans-serif";
+              ctx.fillText(item.text, 20, curY);
+            }
+          }
+          curY += 20;
+        }
+        ctx.restore();
+
+        // 3. 顶部导航与遮罩 (固定在上方，遮住滚出的正文)
+        ctx.fillStyle = "#0e1116";
+        ctx.fillRect(0, 0, 240, 42);
         ctx.strokeStyle = "#ff79c6";
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
         ctx.fillStyle = "#ff79c6";
-        ctx.font = "bold 15px sans-serif";
+        ctx.font = "bold 14px sans-serif";
         ctx.fillText("💌 致白菜的一封信", 26, 31);
-        ctx.fillStyle = MD3.onSurfaceVariant;
+        ctx.fillStyle = MD3.onSurfaceVariant || "#8a8f98";
         ctx.font = "11px sans-serif";
         ctx.fillText("FOR HER", 184, 30);
 
-        // 卡片底板
-        ctx.fillStyle = "rgba(255, 121, 198, 0.08)";
-        roundRect(ctx, 10, 44, 220, 252, 12, true);
-        ctx.strokeStyle = "rgba(255, 121, 198, 0.45)";
-        ctx.lineWidth = 1;
-        roundRect(ctx, 10, 44, 220, 252, 12, false);
+        // 4. 底部状态指示与遮罩 (固定在下方)
+        ctx.fillStyle = "#0e1116";
+        ctx.fillRect(0, 288, 240, 32);
+        ctx.fillStyle = MD3.onSurfaceVariant || "#8a8f98";
+        ctx.font = "11px sans-serif";
+        ctx.fillText("▲▼ 滚轮/按键翻页 | 点击返回", 42, 308);
 
-        // 文字排版 (微调字号和间距，完整呈现在 2.4 寸机器人面部屏幕上)
-        ctx.font = "10.5px sans-serif";
-        const lines = [
-          "「本项目只是一名老程序员用AI做的",
-          "能想到的比较动人的一封情书，",
-          "就像电影《失控玩家》一样，",
-          "把她的人物画像、你的语音、",
-          "你们的故事注入到 PIG 里，",
-          "PIG 会自己学习她的作息习惯，",
-          "记录她的不舒服，帮她定时喂猫，",
-          "提醒她锅里煮的茶叶蛋马上好了...",
-          "",
-          "叫 PIG 首先是基于 PI 的，",
-          "其次做 PIG 的人是一只 🐖。",
-          "",
-          "老程序员跟白菜遇到了很多问题，",
-          "但他坚信一切都有解决办法，",
-          "就像 PIG 会迭代，而且他，",
-          "真的很想念他的白菜 🥬」"
-        ];
-        let ty = 60;
-        for (const line of lines) {
-          if (!line) { ty += 4; continue; }
-          ctx.fillStyle = (line.includes("想念") || line.includes("情书") || line.includes("🐖") || line.includes("🥬")) ? "#ff79c6" : MD3.onSurface;
-          ctx.fillText(line, 16, ty);
-          ty += 14.5;
-        }
-
-        ctx.fillStyle = MD3.onSurfaceVariant;
-        ctx.font = "10px sans-serif";
-        ctx.fillText("[按任意键或点击屏幕返回]", 58, 308);
+        // 5. 动态右侧滚动条
+        const trackY1 = 48, trackY2 = 280;
+        const trackH = trackY2 - trackY1;
+        const thumbH = Math.max(24, Math.round((200 / 550) * trackH));
+        const thumbY = trackY1 + Math.round((Math.max(0, Math.min(scrollY, maxScroll)) / maxScroll) * (trackH - thumbH));
+        ctx.fillStyle = "#ff79c6";
+        roundRect(ctx, 226, thumbY, 3, thumbH, 1.5, true);
       }
     }
 
@@ -6011,9 +6095,12 @@
             } else {
               menuState = Object.assign(menuState, data);
             }
-            // 如果后端进入了彩蛋模式，自动同步屏幕状态
+            // 如果后端进入或退出彩蛋模式，自动同步屏幕状态
             if (data.mode === "EASTER_EGG" && menuState.mode !== "EASTER_EGG") {
               menuState.mode = "EASTER_EGG";
+              menuState.easter_egg_scroll = data.easter_egg_scroll || 0;
+            } else if (data.mode !== "EASTER_EGG" && menuState.mode === "EASTER_EGG") {
+              menuState.mode = data.mode;
             }
             if ((menuState.mode === "XIAOMI_QR" || menuState.mode === "QR_CODE") && menuState.qr_base64) {
               if (!qrCodeImg) {
@@ -6045,6 +6132,7 @@
       if (window._verClickCount >= 5) {
         window._verClickCount = 0;
         menuState.mode = "EASTER_EGG";
+        menuState.easter_egg_scroll = 0;
         sendHwButton("K3");
         try {
           const snd = new Audio("/static/sounds/wake_chime.wav");

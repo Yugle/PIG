@@ -381,9 +381,11 @@ class MenuFSM:
         self.xiaomi_status_text = "等待米家App扫码授权..."
         self.xiaomi_device_count = 0
 
-        # 彩蛋状态 (连续点击系统版本号触发)
+        # 彩蛋状态 (连续点击系统版本号触发与滚动状态)
         self.version_click_count = 0
         self.last_version_click_time = 0.0
+        self.easter_egg_scroll_y = 0
+        self.easter_egg_max_scroll = 330
 
         # 锁与监听器
         self._lock = threading.RLock()
@@ -788,16 +790,22 @@ class MenuFSM:
                 self.font_bold = ImageFont.truetype(chosen_font, 16)
                 self.font_small = ImageFont.truetype(chosen_font, 12)
                 self.font_large = ImageFont.truetype(chosen_font, 20)
+                self.font_letter = ImageFont.truetype(chosen_font, 13)
+                self.font_letter_sub = ImageFont.truetype(chosen_font, 11)
             except Exception:
                 self.font_main = ImageFont.load_default()
                 self.font_bold = self.font_main
                 self.font_small = self.font_main
                 self.font_large = self.font_main
+                self.font_letter = self.font_main
+                self.font_letter_sub = self.font_main
         else:
             self.font_main = ImageFont.load_default()
             self.font_bold = self.font_main
             self.font_small = self.font_main
             self.font_large = self.font_main
+            self.font_letter = self.font_main
+            self.font_letter_sub = self.font_main
 
     def add_listener(self, cb: Callable[[Dict[str, Any]], None]):
         """注册状态变更回调 (通知 Web 端或真机屏)"""
@@ -1004,6 +1012,7 @@ class MenuFSM:
                         self.last_version_click_time = now
                         if self.version_click_count >= 5:
                             self.version_click_count = 0
+                            self.easter_egg_scroll_y = 0
                             self.current_mode = "EASTER_EGG"
                             self._notify_listeners()
                             print("💌 [MenuFSM] 触发彩蛋模式：致白菜的一封情书")
@@ -1027,10 +1036,17 @@ class MenuFSM:
                     self._notify_listeners()
                 return
 
-            # 8. 彩蛋模式 (EASTER_EGG: 致白菜的一封情书)
+            # 8. 彩蛋模式 (EASTER_EGG: 致白菜的一封情书，支持大字号与上下翻滚)
             if self.current_mode == "EASTER_EGG":
-                if button in ["K1", "K2", "K3", "K4"]:
+                if button in ["K1", "UP"]:
+                    self.easter_egg_scroll_y = max(0, self.easter_egg_scroll_y - 28)
+                    self._notify_listeners()
+                elif button in ["K2", "DOWN"]:
+                    self.easter_egg_scroll_y = min(self.easter_egg_max_scroll, self.easter_egg_scroll_y + 28)
+                    self._notify_listeners()
+                elif button in ["K4", "K3", "ESC", "ENTER"]:
                     self.current_mode = "SYSTEM"
+                    self.easter_egg_scroll_y = 0
                     self.cursor = 7  # 保持在系统版本条目上
                     self._notify_listeners()
                 return
@@ -1151,6 +1167,7 @@ class MenuFSM:
             "face_tracking": self.face_tracking_enabled,
             "servo_sleeping": self.is_servo_sleeping,
             "local_ip": ip,
+            "easter_egg_scroll": self.easter_egg_scroll_y,
             "time_left": max(0, int(self.auto_timeout - (time.time() - self.last_interaction_time)))
         }
 
@@ -1417,44 +1434,91 @@ class MenuFSM:
             draw.text((24, 248), self.xiaomi_status_text, fill=p_col if "成功" in self.xiaomi_status_text else (255, 180, 0), font=self.font_small)
             draw.text((24, 270), "绑定后可直接语音控制台灯/水壶等", fill=on_surf_var, font=self.font_small)
 
-        # H. 彩蛋模式 (EASTER_EGG: 致白菜的一封情书)
+        # H. 彩蛋模式 (EASTER_EGG: 致白菜的一封情书，支持大字号与平滑滚动)
         elif self.current_mode == "EASTER_EGG":
+            font_t = getattr(self, "font_bold", self.font_main)
+            font_body = getattr(self, "font_letter", self.font_main)
+            font_sub = getattr(self, "font_letter_sub", self.font_small)
+
+            # 1. 绘制正文卡片底框 (圆角深色底板 + 浪漫淡粉细描边)
+            draw.rounded_rectangle([10, 42, 222, 286], radius=10, fill=surf_col, outline=(255, 121, 198), width=1)
+
+            letter_items = [
+                ("heading", "「致白菜」"),
+                ("space", 4),
+                ("text", "本项目只是一名老程序员"),
+                ("text", "用 AI 做的能想到的"),
+                ("quote", "比较动人的一封情书。"),
+                ("space", 8),
+                ("text", "就像电影《失控玩家》一样，"),
+                ("text", "把她的人物画像、你的语音、"),
+                ("text", "你们的故事注入到 PIG 里。"),
+                ("space", 8),
+                ("text", "PIG 会自己去学习，"),
+                ("text", "学习她的习惯、她的作息，"),
+                ("text", "会记录她的不舒服，"),
+                ("text", "帮她定时喂猫，"),
+                ("quote", "提醒她锅里煮的茶叶蛋"),
+                ("quote", "马上好了……"),
+                ("space", 10),
+                ("highlight", "叫 PIG 是因为："),
+                ("text", "首先是基于 PI 的，"),
+                ("quote", "其次做 PIG 的人是一只猪。"),
+                ("space", 10),
+                ("text", "此时此刻，"),
+                ("text", "老程序员跟他的白菜"),
+                ("text", "遇到了很多问题。"),
+                ("space", 6),
+                ("highlight", "但他坚信一切都有解决办法，"),
+                ("highlight", "就像 PIG 会不断迭代。"),
+                ("space", 8),
+                ("heart", "而且他，真的很想念他的白菜 ♥」"),
+                ("space", 14),
+                ("sub", "—— 献给白菜"),
+                ("sub", "永远相信爱的老程序员与小猪")
+            ]
+
+            # 2. 绘制滚动正文内容 (只在卡片视口内 44 <= y <= 268 绘制可见行)
+            cur_y = 54 - self.easter_egg_scroll_y
+            for it_type, val in letter_items:
+                if it_type == "space":
+                    cur_y += val
+                    continue
+
+                if 44 <= cur_y <= 268:
+                    if it_type == "heading":
+                        draw.text((20, cur_y), val, fill=(255, 121, 198), font=font_t)
+                    elif it_type == "heart":
+                        draw.text((20, cur_y), val, fill=(255, 105, 180), font=font_body)
+                    elif it_type == "highlight":
+                        draw.text((20, cur_y), val, fill=(255, 200, 220), font=font_body)
+                    elif it_type == "quote":
+                        draw.text((20, cur_y), val, fill=(255, 160, 190), font=font_body)
+                    elif it_type == "sub":
+                        draw.text((24, cur_y), val, fill=(150, 155, 165), font=font_sub)
+                    else:
+                        draw.text((20, cur_y), val, fill=(225, 230, 235), font=font_body)
+                cur_y += 19
+
+            # 3. 绘制顶部遮罩与顶栏 (盖住滚出视口的文字)
+            draw.rectangle([0, 0, 240, 42], fill=(14, 17, 22))
             draw.line([(18, 22), (13, 27)], fill=(255, 121, 198), width=2)
             draw.line([(13, 27), (18, 32)], fill=(255, 121, 198), width=2)
-            draw.text((26, 17), "♥ 致白菜的一封信", fill=(255, 121, 198), font=self.font_bold)
-            draw.text((188, 21), "FOR HER", fill=on_surf_var, font=self.font_small)
+            draw.text((26, 17), "♥ 致白菜的一封信", fill=(255, 121, 198), font=font_t)
+            draw.text((184, 21), "FOR HER", fill=(130, 135, 145), font=font_sub)
 
-            # 居中情书卡片
-            draw.rounded_rectangle([12, 46, 228, 288], radius=14, fill=surf_col, outline=(255, 121, 198), width=1)
+            # 4. 绘制底部遮罩与提示栏
+            draw.rectangle([0, 288, 240, 320], fill=(14, 17, 22))
+            draw.text((46, 296), "▲▼ 滚动翻页 | K4 返回", fill=(140, 145, 155), font=font_sub)
 
-            letter_lines = [
-                "「本项目只是一名老程序员用AI做的",
-                "能想到的比较动人的一封情书，",
-                "就像电影《失控玩家》一样，",
-                "把她的人物画像、你的语音、",
-                "你们的故事注入到 PIG 里，",
-                "PIG 会自己学习她的作息习惯，",
-                "记录她的不舒服，帮她定时喂猫，",
-                "提醒她锅里煮的茶叶蛋好了...",
-                "",
-                "叫 PIG 首先是基于 PI 的，",
-                "其次做 PIG 的人是一只猪。",
-                "",
-                "老程序员跟白菜遇到了很多问题，",
-                "但他坚信一切都有解决办法，",
-                "就像 PIG 会迭代，而且他，",
-                "真的很想念他的白菜 ♥」"
-            ]
-            y_offset = 54
-            for line in letter_lines:
-                if not line:
-                    y_offset += 4
-                    continue
-                color = (255, 182, 193) if ("想念" in line or "情书" in line or "猪" in line or "白菜" in line) else on_surf
-                draw.text((18, y_offset), line, fill=color, font=self.font_small)
-                y_offset += 14.5
-
-            draw.text((66, 296), "[按任意键返回设置]", fill=on_surf_var, font=self.font_small)
+            # 5. 绘制右侧滚动条
+            total_h = cur_y + self.easter_egg_scroll_y - 54
+            max_s = max(1, self.easter_egg_max_scroll)
+            track_y1, track_y2 = 48, 280
+            track_h = track_y2 - track_y1
+            thumb_h = max(24, int((200 / max(1, total_h)) * track_h))
+            thumb_y = track_y1 + int((self.easter_egg_scroll_y / max_s) * (track_h - thumb_h))
+            draw.rounded_rectangle([228, thumb_y, 231, thumb_y + thumb_h], radius=1, fill=(255, 121, 198))
 
         return img
 

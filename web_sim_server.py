@@ -1804,7 +1804,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(reply_data, ensure_ascii=False).encode("utf-8"))
             return
 
-        return super().do_POST()
+        self.send_error(404, "Not Found")
 
 class ReusableThreadingServer(http.server.ThreadingHTTPServer):
     allow_reuse_address = True
