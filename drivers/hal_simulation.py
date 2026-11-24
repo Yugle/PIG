@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import math
 from .hal_base import BaseRobotHAL
@@ -133,35 +134,44 @@ class SimulationRobotHAL(BaseRobotHAL):
             pass
 
     def capture_image(self) -> bytes:
-        # 1. 优先获取数字孪生/Web 仿真端传入的真实摄像头画面 (/tmp/pig_latest_frame.jpg)
+        now = time.time()
+        max_age_sec = 3.5
+
+        # 1. 检查数字孪生/Web 仿真端传入的真实摄像头画面 (/tmp/pig_latest_frame.jpg)
         tmp_path = "/tmp/pig_latest_frame.jpg"
         if os.path.exists(tmp_path):
             try:
-                with open(tmp_path, "rb") as f:
-                    content = f.read()
-                    if len(content) > 100:
-                        return content
+                mtime = os.path.getmtime(tmp_path)
+                if now - mtime <= max_age_sec:
+                    with open(tmp_path, "rb") as f:
+                        content = f.read()
+                        if len(content) > 100:
+                            return content
+                else:
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
+        # 2. 检查主模块内存推流帧 (严格执行 TTL 校验，杜绝使用无时效保护的内存旧图)
         main_mod = sys.modules.get("__main__")
         if main_mod:
             if hasattr(main_mod, "get_latest_vision_frame"):
                 try:
-                    f = main_mod.get_latest_vision_frame()
+                    f = main_mod.get_latest_vision_frame(max_age_sec=max_age_sec)
                     if f and len(f) > 100:
                         return f
                 except Exception:
                     pass
-            if hasattr(main_mod, "_latest_webcam_frame") and main_mod._latest_webcam_frame:
-                return main_mod._latest_webcam_frame
 
+        # 3. 宿主机真实物理摄像头探测 (/dev/video0)
         if cv2 is not None:
             # Linux 环境下若不存在 /dev/video0，直接返回，避免触发 OpenCV V4L2 报警
             if sys.platform.startswith("linux") and not os.path.exists("/dev/video0"):
                 return b""
 
-            now = time.time()
             # 仿真环境下避免高频轮询不存在的宿主机摄像头
             if getattr(self, "_cam_unavailable", False) and (now - getattr(self, "_last_cam_check", 0) < 10.0):
                 return b""
@@ -171,6 +181,8 @@ class SimulationRobotHAL(BaseRobotHAL):
                     self._cam = cv2.VideoCapture(0)
                 if self._cam is not None and self._cam.isOpened():
                     self._cam_unavailable = False
+                    for _ in range(3):
+                        self._cam.grab()
                     ret, frame = self._cam.read()
                     if ret and frame is not None:
                         success, buf = cv2.imencode(".jpg", frame)
@@ -178,11 +190,11 @@ class SimulationRobotHAL(BaseRobotHAL):
                             return buf.tobytes()
                 else:
                     self._cam_unavailable = True
-            except Exception as e:
+            except Exception:
                 self._cam = None
                 self._cam_unavailable = True
 
-        # 若无物理摄像头则返回空字节
+        # 若无实时画面则返回空字节，严禁返回历史旧图
         return b""
 
     def add_touch_listener(self, callback):

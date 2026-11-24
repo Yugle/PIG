@@ -1,13 +1,13 @@
 {
   "radar": {
-    "lively": 75,
+    "lively": 76,
     "clingy": 66,
-    "sharp_tongued": 22,
+    "sharp_tongued": 24,
     "empathy": 88,
-    "curiosity": 82
+    "curiosity": 88
   },
   "intimacy_level": 2,
-  "intimacy_exp": 60,
+  "intimacy_exp": 95,
   "persona_tag": "深情敏锐探索家",
   "drift_history": [
     {
@@ -37,6 +37,41 @@
     },
     {
       "time": "2026-11-23 17:48",
+      "event": "chat",
+      "note": "日常语音交互"
+    },
+    {
+      "time": "2026-11-24 11:05",
+      "event": "chat",
+      "note": "日常语音交互"
+    },
+    {
+      "time": "2026-11-24 11:28",
+      "event": "chat",
+      "note": "日常语音交互"
+    },
+    {
+      "time": "2026-11-24 11:29",
+      "event": "chat",
+      "note": "主仆互怼调侃"
+    },
+    {
+      "time": "2026-11-24 11:29",
+      "event": "chat",
+      "note": "日常语音交互"
+    },
+    {
+      "time": "2026-11-24 11:29",
+      "event": "chat",
+      "note": "日常语音交互"
+    },
+    {
+      "time": "2026-11-24 11:30",
+      "event": "chat",
+      "note": "日常语音交互"
+    },
+    {
+      "time": "2026-11-24 11:32",
       "event": "chat",
       "note": "日常语音交互"
     }

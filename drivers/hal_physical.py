@@ -262,9 +262,12 @@ class PhysicalRobotHAL(BaseRobotHAL):
                 if self._cam is None or not self._cam.isOpened():
                     self._cam = cv2.VideoCapture(0)
                     if self._cam.isOpened():
-                        self._cam.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-                        self._cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+                        self._cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        self._cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                 if self._cam is not None and self._cam.isOpened():
+                    # 关键抗陈旧机制：V4L2 硬件驱动常有 3~5 帧积压缓存，抓拍前连续丢弃 3 帧旧缓冲，获取最新曝光
+                    for _ in range(3):
+                        self._cam.grab()
                     ret, frame = self._cam.read()
                     if ret and frame is not None:
                         success, buf = cv2.imencode(".jpg", frame)
@@ -280,18 +283,36 @@ class PhysicalRobotHAL(BaseRobotHAL):
 
         # 2. 回退机制：若 OpenCV 句柄失败，降级为 fswebcam 临时抓拍
         tmp_img = "/tmp/capture.jpg"
+        # 抓拍前务必先删除陈旧的历史临时文件，杜绝失败时误读旧图！
+        if os.path.exists(tmp_img):
+            try:
+                os.remove(tmp_img)
+            except Exception:
+                pass
         try:
-            subprocess.run(
-                ["fswebcam", "-r", "320x240", "--no-banner", tmp_img],
+            res = subprocess.run(
+                ["fswebcam", "-r", "640x480", "--no-banner", tmp_img],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=True,
                 timeout=3,
             )
-            with open(tmp_img, "rb") as f:
-                return f.read()
+            if res.returncode == 0 and os.path.exists(tmp_img):
+                with open(tmp_img, "rb") as f:
+                    data = f.read()
+                # 读完后立即清理临时文件，杜绝残存
+                try:
+                    os.remove(tmp_img)
+                except Exception:
+                    pass
+                return data
         except Exception as e:
             print(f"⚠️ [HAL-Physical] 摄像头抓拍失败: {e}")
+            if os.path.exists(tmp_img):
+                try:
+                    os.remove(tmp_img)
+                except Exception:
+                    pass
             return b""
 
     def close(self):

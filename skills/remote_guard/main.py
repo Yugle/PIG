@@ -3,8 +3,9 @@
 PIG 远程看家与监控抓拍技能 (Remote Guard & Surveillance Skill)
 核心功能：
 1. 接收远程方位指令（正视、向左、向右、俯仰），静默调整头颈舵机机位。
-2. 捕获摄像头当前一帧高保真 JPEG 图像（真机 USB/CSI 摄像头、Web 孪生摄像头，或自生成拟真监控 HUD 帧）。
-3. 调用多模态 VLM 大模型（Xiaomi MiMo-v2.6-Flash）进行家庭安防智能诊断。
+2. 捕获摄像头当前一帧高保真 JPEG 图像（真机 USB/CSI 摄像头、Web 孪生实时推流）。
+   严格执行 3.5s TTL 时效性校验，抓拍失败时坚决拦截并清理陈旧历史图片，绝不拿上一次旧图伪装当前现场！
+3. 若实时画面有效，调用多模态 VLM 大模型（Xiaomi MiMo-v2.6-Flash）进行家庭安防智能诊断。
 4. 调用飞书 OpenAPI / Webhook，将抓拍图片及富文本安防卡片秒级推送至主人手机。
 """
 
@@ -44,127 +45,178 @@ def _resolve_direction(direction_str: str) -> Tuple[float, float, str]:
     return 90.0, 90.0, "水平 90° · 俯仰 90° (正视中央机位)"
 
 
-def _generate_synthetic_surveillance_frame(pan: float, tilt: float, desc: str) -> bytes:
-    """在无物理摄像头输入或 Headless 纯仿真环境下，合成一张高清赛博风格安防监控 HUD 帧"""
+def _generate_synthetic_surveillance_frame(pan: float, tilt: float, desc: str, is_live: bool = False) -> bytes:
+    """在无物理摄像头输入或抓拍失败时，合成一张高清安防监控 HUD 状态帧"""
     try:
         from PIL import Image, ImageDraw, ImageFont
         width, height = 640, 480
-        img = Image.new("RGB", (width, height), color=(14, 18, 25))
+        # 离线时使用深红暗调，在线拟真使用赛博科技深蓝
+        bg_color = (25, 14, 14) if not is_live else (14, 18, 25)
+        accent_color = (255, 77, 79) if not is_live else (0, 229, 255)
+        grid_color = (56, 30, 30) if not is_live else (30, 42, 56)
+
+        img = Image.new("RGB", (width, height), color=bg_color)
         draw = ImageDraw.Draw(img)
 
         # 绘制浅色安防网格十字准星
         cx, cy = width // 2, height // 2
-        grid_color = (30, 42, 56)
         for x in range(0, width, 80):
             draw.line([(x, 0), (x, height)], fill=grid_color, width=1)
         for y in range(0, height, 60):
             draw.line([(0, y), (width, y)], fill=grid_color, width=1)
 
         # 瞄准准星与四角取景线
-        cyan = (0, 229, 255)
-        # 准星
-        draw.line([(cx - 24, cy), (cx + 24, cy)], fill=cyan, width=2)
-        draw.line([(cx, cy - 24), (cx, cy + 24)], fill=cyan, width=2)
-        draw.ellipse([(cx - 40, cy - 40), (cx + 40, cy + 40)], outline=cyan, width=1)
+        draw.line([(cx - 24, cy), (cx + 24, cy)], fill=accent_color, width=2)
+        draw.line([(cx, cy - 24), (cx, cy + 24)], fill=accent_color, width=2)
+        draw.ellipse([(cx - 40, cy - 40), (cx + 40, cy + 40)], outline=accent_color, width=1)
 
         # 四角取景框
         corner_len = 28
-        corners = [(20, 20), (width - 20, 20), (20, height - 20), (width - 20, height - 20)]
-        # Top-Left
-        draw.line([(20, 20), (20 + corner_len, 20)], fill=cyan, width=3)
-        draw.line([(20, 20), (20, 20 + corner_len)], fill=cyan, width=3)
-        # Top-Right
-        draw.line([(width - 20, 20), (width - 20 - corner_len, 20)], fill=cyan, width=3)
-        draw.line([(width - 20, 20), (width - 20, 20 + corner_len)], fill=cyan, width=3)
-        # Bottom-Left
-        draw.line([(20, height - 20), (20 + corner_len, height - 20)], fill=cyan, width=3)
-        draw.line([(20, height - 20), (20, height - 20 - corner_len)], fill=cyan, width=3)
-        # Bottom-Right
-        draw.line([(width - 20, height - 20), (width - 20 - corner_len, height - 20)], fill=cyan, width=3)
-        draw.line([(width - 20, height - 20), (width - 20, height - 20 - corner_len)], fill=cyan, width=3)
+        draw.line([(20, 20), (20 + corner_len, 20)], fill=accent_color, width=3)
+        draw.line([(20, 20), (20, 20 + corner_len)], fill=accent_color, width=3)
+        draw.line([(width - 20, 20), (width - 20 - corner_len, 20)], fill=accent_color, width=3)
+        draw.line([(width - 20, 20), (width - 20, 20 + corner_len)], fill=accent_color, width=3)
+        draw.line([(20, height - 20), (20 + corner_len, height - 20)], fill=accent_color, width=3)
+        draw.line([(20, height - 20), (20, height - 20 - corner_len)], fill=accent_color, width=3)
+        draw.line([(width - 20, height - 20), (width - 20 - corner_len, height - 20)], fill=accent_color, width=3)
+        draw.line([(width - 20, height - 20), (width - 20, height - 20 - corner_len)], fill=accent_color, width=3)
 
         # 文本 HUD 叠加
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        hud_lines = [
-            f"REC ● PIG HOME SENTINEL [LIVE]",
-            f"TIME: {now_str}",
-            f"ANGLE: Pan {pan:.1f}° / Tilt {tilt:.1f}°",
-            f"STATUS: SECURE / ALL CLEAR",
-            f"MODE: EMBODIED PATROL"
-        ]
+        if not is_live:
+            hud_lines = [
+                "SIGNAL ✖ CAMERA OFFLINE / NO LIVE FEED",
+                f"TIME: {now_str}",
+                f"ANGLE: Pan {pan:.1f}° / Tilt {tilt:.1f}°",
+                "STATUS: LIVE CAPTURE FAILED (STALE CACHE BLOCKED)",
+                "ACTION: PLEASE CONNECT CAMERA OR START WEBCAM STREAM"
+            ]
+        else:
+            hud_lines = [
+                "REC ● PIG HOME SENTINEL [LIVE]",
+                f"TIME: {now_str}",
+                f"ANGLE: Pan {pan:.1f}° / Tilt {tilt:.1f}°",
+                "STATUS: SECURE / ALL CLEAR",
+                "MODE: EMBODIED PATROL"
+            ]
+
         y_offset = 32
         for line in hud_lines:
             draw.text((36, y_offset), line, fill=(240, 246, 252))
             y_offset += 20
+
+        # 如果离线，屏幕中央醒目警示
+        if not is_live:
+            banner_text = "[ ! ] NO LIVE CAMERA - HISTORICAL CACHE BLOCKED"
+            draw.text((cx - 180, cy + 60), banner_text, fill=(255, 120, 120))
 
         # 保存并导出 bytes
         import io
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=90)
         return buf.getvalue()
-    except Exception as e:
+    except Exception:
         return b""
 
 
-def _capture_frame_bytes(pan: float, tilt: float, desc: str) -> bytes:
-    """按优先级从物理机摄像头或仿真桥接捕获真实画面"""
-    # 0. 优先检查主模块内存中的实时画面帧 (_latest_webcam_frame)
-    main_mod = sys.modules.get("__main__")
-    if main_mod and hasattr(main_mod, "_latest_webcam_frame") and main_mod._latest_webcam_frame:
-        if len(main_mod._latest_webcam_frame) > 100:
-            return main_mod._latest_webcam_frame
-
-    # 1. 检查实时帧桥接文件 (/tmp/pig_latest_frame.jpg)
+def _capture_frame_bytes(pan: float, tilt: float, desc: str, max_age_sec: float = 3.5) -> Tuple[bytes, bool, str]:
+    """
+    按优先级从物理机摄像头或仿真推流捕获真实画面。
+    严格执行 max_age_sec TTL 时效性校验，抓拍失败时绝对杜绝读取陈旧历史缓存图！
+    返回: (img_bytes, is_live, status_message)
+    """
+    now = time.time()
     tmp_path = "/tmp/pig_latest_frame.jpg"
+
+    # 0. 先主动检测并清理超过 max_age_sec 的陈旧临时桥接文件
     if os.path.exists(tmp_path):
         try:
-            with open(tmp_path, "rb") as f:
-                content = f.read()
-                if len(content) > 100:
-                    return content
+            mtime = os.path.getmtime(tmp_path)
+            if now - mtime > max_age_sec:
+                os.remove(tmp_path)
         except Exception:
             pass
 
-    # 2. 尝试从 HardwareAgent 获取 HAL 捕获
+    # 1. 优先检查主模块内存中的实时画面帧 (get_latest_vision_frame 严格校验 TTL)
+    main_mod = sys.modules.get("__main__")
+    if main_mod and hasattr(main_mod, "get_latest_vision_frame"):
+        try:
+            frame = main_mod.get_latest_vision_frame(max_age_sec=max_age_sec)
+            if frame and len(frame) > 100:
+                return frame, True, "实时推流画面抓拍成功"
+        except Exception:
+            pass
+
+    # 2. 检查实时帧桥接文件 (/tmp/pig_latest_frame.jpg)，必须在 TTL 窗口期内
+    if os.path.exists(tmp_path):
+        try:
+            mtime = os.path.getmtime(tmp_path)
+            if now - mtime <= max_age_sec:
+                with open(tmp_path, "rb") as f:
+                    content = f.read()
+                    if len(content) > 100:
+                        return content, True, "实时桥接帧抓拍成功"
+            else:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # 3. 尝试从 HardwareAgent 获取物理真机 HAL 捕获
     try:
         from core.hardware_agent import get_hardware_agent
         agent = get_hardware_agent()
         if agent and agent.hal:
-            frame = agent.hal.capture_image()
-            if frame and len(frame) > 100:
-                return frame
+            from drivers.hal_physical import PhysicalHAL
+            if isinstance(agent.hal, PhysicalHAL):
+                frame = agent.hal.capture_image()
+                if frame and len(frame) > 100:
+                    return frame, True, "物理摄像头抓拍成功"
     except Exception:
         pass
 
-    # 3. 尝试直接打开本地 OpenCV V4L2 摄像头
+    # 4. 尝试直接打开本地 OpenCV V4L2 摄像头 (如树莓派 USB 免驱摄像头 /dev/video0)
     try:
-        import cv2
-        cap = cv2.VideoCapture(0)
-        if cap.isOpened():
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            ret, mat = cap.read()
-            cap.release()
-            if ret and mat is not None:
-                success, buf = cv2.imencode(".jpg", mat)
-                if success:
-                    return buf.tobytes()
+        if os.path.exists("/dev/video0"):
+            import cv2
+            cap = cv2.VideoCapture(0)
+            if cap.isOpened():
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                for _ in range(3):
+                    cap.grab()
+                ret, mat = cap.read()
+                cap.release()
+                if ret and mat is not None:
+                    success, buf = cv2.imencode(".jpg", mat)
+                    if success:
+                        return buf.tobytes(), True, "V4L2 摄像头抓拍成功"
     except Exception:
         pass
 
-    # 4. 回退保障：生成赛博拟真安防监控 HUD 帧
-    return _generate_synthetic_surveillance_frame(pan, tilt, desc)
+    # 5. 所有实时源均无有效画面 -> 严禁使用陈旧历史旧图！
+    # 彻底清理残留临时文件，生成离线警示 HUD 帧
+    if os.path.exists(tmp_path):
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    hud_bytes = _generate_synthetic_surveillance_frame(pan, tilt, desc, is_live=False)
+    return hud_bytes, False, "未检测到实时摄像头画面输入（已严格拦截历史旧图）"
 
 
 def _inspect_scene_with_vlm(img_bytes: bytes, user_query: str) -> str:
-    """调用小米 MiMo 多模态 VLM 进行安防视觉诊断"""
+    """调用小米 MiMo 多模态 VLM 进行安防视觉诊断（仅对真实捕获的有效画面执行）"""
     cfg = _load_config()
     api_key = cfg.get("api_key") or cfg.get("mimo_api_key", "")
     base_url = cfg.get("base_url", "https://api.xiaomimimo.com/v1").rstrip("/")
     model = cfg.get("llm_model", "mimo-v2.6-flash")
 
     if not api_key or not img_bytes:
-        return "现场光线平稳，门窗及主要通道方位未见明显异常移动，一切安好～"
+        return "现场光线平稳，主要通道方位未见异常移动，一切安好～"
 
     b64_img = base64.b64encode(img_bytes).decode("utf-8")
     img_url = f"data:image/jpeg;base64,{b64_img}"
@@ -236,22 +288,21 @@ def run(direction="center", question="巡视当前环境并汇报状态", **kwar
     except Exception:
         pass
 
-    # 2. 抓拍实时帧
-    img_bytes = _capture_frame_bytes(target_pan, target_tilt, dir_desc)
-    if not img_bytes:
-        return "未能捕获到画面，请确认摄像头硬件已连接。"
+    # 2. 抓拍实时帧 (严格执行 TTL 校验，抓拍失败拦截陈旧历史图片)
+    img_bytes, is_live, status_msg = _capture_frame_bytes(target_pan, target_tilt, dir_desc)
 
-    # 同步写入供本地或 Web 仿真查看
+    # 仅写入独立的远程安防快照文件，绝不写回 /tmp/pig_latest_frame.jpg 污染输入源！
     try:
         with open("/tmp/pig_remote_guard_snapshot.jpg", "wb") as f:
-            f.write(img_bytes)
-        with open("/tmp/pig_latest_frame.jpg", "wb") as f:
             f.write(img_bytes)
     except Exception:
         pass
 
-    # 3. 多模态视觉智能环境诊断
-    vlm_summary = _inspect_scene_with_vlm(img_bytes, question)
+    # 3. 智能环境诊断 (仅在真实抓拍成功时调用 VLM，离线时坚决不编造或分析旧图)
+    if is_live:
+        vlm_summary = _inspect_scene_with_vlm(img_bytes, question)
+    else:
+        vlm_summary = "⚠️ 抓拍失败：当前未检测到实时摄像头输入。为防止误导，系统已自动拦截并清理了上一次的历史缓存旧图。请确认摄像头已插好或在控制台开启推流后再试～"
 
     # 4. 组装并推送飞书富文本安防抓拍卡片
     target_id = kwargs.get("target_id")
@@ -263,7 +314,8 @@ def run(direction="center", question="巡视当前环境并汇报状态", **kwar
             vlm_analysis=vlm_summary,
             direction_desc=dir_desc,
             target_id=target_id,
-            id_type=id_type
+            id_type=id_type,
+            is_live=is_live
         )
         print(f"📷 [RemoteGuard] 飞书安防卡片已投递: {push_res.get('code', push_res.get('status'))}")
     except Exception as e:
@@ -280,4 +332,7 @@ def run(direction="center", question="巡视当前环境并汇报状态", **kwar
     except Exception:
         pass
 
-    return f"📷【家庭安防巡检已完成】\n机位：{dir_desc}\n诊断：{vlm_summary}{extra_hint}"
+    if is_live:
+        return f"📷【家庭安防巡检已完成】\n机位：{dir_desc}\n诊断：{vlm_summary}{extra_hint}"
+    else:
+        return f"⚠️【家庭安防巡检 - 抓拍未就绪】\n机位：{dir_desc}\n提示：未能获取到当前实时画面（已拦截陈旧历史图片，绝不使用上一次旧图伪装当前现场）。\n请检查摄像头是否插好或在控制台开启推流。{extra_hint}"

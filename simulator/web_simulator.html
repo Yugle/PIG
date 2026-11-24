@@ -1172,7 +1172,7 @@
         </div>
 
         <!-- 标签页 3: 技能与认知 -->
-        <div id="pane-skills" class="ctrl-pane" style="display:none; display:flex; flex-direction:column; gap:10px;">
+        <div id="pane-skills" class="ctrl-pane" style="display:none; flex-direction:column; gap:10px;">
           <!-- PIG 记忆与主动关怀状态 -->
           <div style="display:flex; gap:8px;">
             <div id="memory-badge" style="flex:1; background:rgba(255,255,255,0.04); border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; font-size:0.75rem;">
@@ -1905,7 +1905,14 @@
         else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 3; }
         else if (button === "K3") {
           const cur = sysItems[menuState.cursor] || {};
-          if (cur.id === "face_id") {
+          if (cur.id === "theme") {
+            const THEME_KEYS = ["mint", "orange", "blue", "purple", "mono"];
+            const curIdx = THEME_KEYS.indexOf(menuState.theme || "mint");
+            const nextKey = THEME_KEYS[(curIdx + 1) % THEME_KEYS.length];
+            menuState.theme = nextKey;
+            cur.val = (THEMES_MD3[nextKey] || THEMES_MD3.mint).name;
+            updateActiveTheme(nextKey);
+          } else if (cur.id === "face_id") {
             menuState.mode = "FACE_ENROLL";
             menuState.face_enroll_msg = "请正对摄像头 (3s)";
             menuState.face_enroll_step = 3;
@@ -1973,25 +1980,91 @@
       }
     });
 
-// ==========================================
-    // Material Design 3 (Material You - Pixel Mint Dark Theme) Tokens & Components
     // ==========================================
-    const MD3 = {
-      surface: "#121414",           // M3 Tonal Surface
-      surfaceContainer: "#1d2424",  // M3 Card Surface
-      outline: "#3d4947",           // M3 Outline Border
-      outlineVariant: "#2d3837",
-      primary: "#7bd0c1",           // Pixel Mint Accent
-      onPrimary: "#003731",         // Deep Pine text on Mint
-      onPrimarySub: "#0e5249",      // Medium Pine subtitle
-      onSurface: "#e1e3e3",         // Main Card Title
-      onSurfaceVariant: "#97a3a0",  // Subtitle
-      trackOff: "#2d3837",
-      thumbOff: "#8f9e9b",
-      trackOffSelected: "#3a8276",
-      badgeBg: "#283b38",
-      headerLine: "#263230"
+    // Material Design 3 (Material You) 多主题调色板与组件规范
+    // ==========================================
+    const THEMES_MD3 = {
+      mint: {
+        name: "薄荷绿",
+        primary: "#7bd0c1",
+        onPrimary: "#003731",
+        surface: "#121414",
+        surfaceContainer: "#1d2424",
+        surfaceHigh: "#26302f",
+        outline: "#374442",
+        badgeBg: "#283b38",
+        iconBgSel: "#004840",
+      },
+      orange: {
+        name: "暖阳橙",
+        primary: "#ffab40",
+        onPrimary: "#4a2600",
+        surface: "#161311",
+        surfaceContainer: "#261f1a",
+        surfaceHigh: "#342a23",
+        outline: "#4c3e34",
+        badgeBg: "#382c24",
+        iconBgSel: "#5e3100",
+      },
+      blue: {
+        name: "海天蓝",
+        primary: "#82b1ff",
+        onPrimary: "#002c5e",
+        surface: "#101318",
+        surfaceContainer: "#1a202a",
+        surfaceHigh: "#242c3a",
+        outline: "#344054",
+        badgeBg: "#202c3e",
+        iconBgSel: "#003c80",
+      },
+      purple: {
+        name: "薰衣紫",
+        primary: "#d0bcff",
+        onPrimary: "#381e72",
+        surface: "#141218",
+        surfaceContainer: "#211d28",
+        surfaceHigh: "#2e2938",
+        outline: "#443c52",
+        badgeBg: "#30283e",
+        iconBgSel: "#4f2c96",
+      },
+      mono: {
+        name: "极简白",
+        primary: "#f0f0f0",
+        onPrimary: "#121212",
+        surface: "#121212",
+        surfaceContainer: "#202020",
+        surfaceHigh: "#2e2e2e",
+        outline: "#404040",
+        badgeBg: "#2c2c2c",
+        iconBgSel: "#c8c8c8",
+      }
     };
+
+    const MD3 = {
+      surface: "#121414",
+      surfaceContainer: "#1d2424",
+      surfaceHigh: "#26302f",
+      outline: "#374442",
+      primary: "#7bd0c1",
+      onPrimary: "#003731",
+      onSurface: "#e1e3e3",
+      onSurfaceVariant: "#97a3a0",
+      badgeBg: "#283b38",
+      iconBgSel: "#004840",
+    };
+
+    function updateActiveTheme(themeKey) {
+      const cur = THEMES_MD3[themeKey] || THEMES_MD3.mint;
+      MD3.primary = cur.primary;
+      MD3.onPrimary = cur.onPrimary;
+      MD3.surface = cur.surface;
+      MD3.surfaceContainer = cur.surfaceContainer;
+      MD3.surfaceHigh = cur.surfaceHigh;
+      MD3.outline = cur.outline;
+      MD3.badgeBg = cur.badgeBg;
+      MD3.iconBgSel = cur.iconBgSel;
+    }
 
     // Material Design 3 Switch 规范组件 (开启放大至 18px，关闭收缩至 12px)
     function drawToggleSwitch(ctx, x, y, width, height, isOn, isSelected) {
@@ -1999,7 +2072,7 @@
       ctx.save();
       if (isOn) {
         if (isSelected) {
-          ctx.fillStyle = "#004840";
+          ctx.fillStyle = MD3.iconBgSel;
           roundRect(ctx, x, y, width, height, radius, true);
           // 选中状态下：开启的饱满大滑块 (直径 18px)
           const kx = x + width - radius;
@@ -2020,7 +2093,7 @@
         }
       } else {
         if (isSelected) {
-          ctx.fillStyle = MD3.trackOffSelected;
+          ctx.fillStyle = MD3.surfaceHigh;
           roundRect(ctx, x, y, width, height, radius, true);
           // 选中状态下：关闭的小滑块 (直径 12px)
           const kx = x + radius;
@@ -2030,7 +2103,7 @@
           ctx.fillStyle = MD3.onPrimary;
           ctx.fill();
         } else {
-          ctx.fillStyle = MD3.trackOff;
+          ctx.fillStyle = "#2d3434";
           roundRect(ctx, x, y, width, height, radius, true);
           ctx.strokeStyle = MD3.outline;
           ctx.lineWidth = 1;
@@ -2039,7 +2112,7 @@
           const ky = y + radius;
           ctx.beginPath();
           ctx.arc(kx, ky, 6, 0, Math.PI * 2);
-          ctx.fillStyle = MD3.thumbOff;
+          ctx.fillStyle = "#8f9e9b";
           ctx.fill();
         }
       }
@@ -2057,7 +2130,7 @@
       const badgeY = centerY - badgeH / 2;
 
       if (isSelected) {
-        ctx.fillStyle = "#004840";
+        ctx.fillStyle = MD3.iconBgSel;
         roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 11, true);
         ctx.fillStyle = "#ffffff";
       } else {
@@ -2074,7 +2147,183 @@
       ctx.restore();
     }
 
-    // 2.4 寸屏幕 Canvas Material Design 3 (Pixel Mint Theme) 菜单渲染器
+    // Material Design 3 矢量微图标绘制 (18x18px)
+    function drawCanvasVectorIcon(ctx, iconName, cx, cy, color) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      if (iconName === "wifi") {
+        ctx.beginPath(); ctx.arc(cx, cy + 1, 8, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy + 2, 5, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy + 6, 2, 0, Math.PI * 2); ctx.fill();
+      } else if (iconName === "doctor") {
+        ctx.beginPath();
+        ctx.moveTo(cx - 8, cy + 1); ctx.lineTo(cx - 4, cy + 1);
+        ctx.lineTo(cx - 2, cy - 6); ctx.lineTo(cx + 1, cy + 7);
+        ctx.lineTo(cx + 3, cy - 2); ctx.lineTo(cx + 5, cy + 1);
+        ctx.lineTo(cx + 8, cy + 1); ctx.stroke();
+      } else if (iconName === "hardware") {
+        ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 9); ctx.lineTo(cx, cy - 6);
+        ctx.moveTo(cx, cy + 6); ctx.lineTo(cx, cy + 9);
+        ctx.moveTo(cx - 9, cy); ctx.lineTo(cx - 6, cy);
+        ctx.moveTo(cx + 6, cy); ctx.lineTo(cx + 9, cy);
+        ctx.stroke();
+      } else if (iconName === "settings") {
+        ctx.beginPath(); ctx.moveTo(cx - 7, cy - 4); ctx.lineTo(cx + 7, cy - 4); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx - 2, cy - 4, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx - 7, cy + 4); ctx.lineTo(cx + 7, cy + 4); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx + 3, cy + 4, 3, 0, Math.PI * 2); ctx.fill();
+      } else if (iconName === "theme" || iconName === "palette") {
+        ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx - 3, cy - 3, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 2, cy - 3, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx - 3, cy + 2, 1.2, 0, Math.PI * 2); ctx.fill();
+      } else if (iconName === "servo") {
+        ctx.beginPath(); ctx.arc(cx, cy, 6, Math.PI * 0.25, Math.PI * 1.75); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx + 4, cy - 7); ctx.lineTo(cx + 7, cy - 2); ctx.lineTo(cx + 1, cy - 4); ctx.closePath(); ctx.fill();
+      } else if (iconName === "spark") {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 8); ctx.lineTo(cx + 2, cy - 2); ctx.lineTo(cx + 8, cy); ctx.lineTo(cx + 2, cy + 2);
+        ctx.lineTo(cx, cy + 8); ctx.lineTo(cx - 2, cy + 2); ctx.lineTo(cx - 8, cy); ctx.lineTo(cx - 2, cy - 2);
+        ctx.closePath(); ctx.fill();
+      } else if (iconName === "lock") {
+        roundRect(ctx, cx - 6, cy - 2, 12, 9, 2, true);
+        ctx.beginPath(); ctx.arc(cx, cy - 2, 4, Math.PI, 0); ctx.stroke();
+      } else if (iconName === "mic") {
+        roundRect(ctx, cx - 3, cy - 7, 6, 8, 3, true);
+        ctx.beginPath(); ctx.arc(cx, cy - 2, 6, 0, Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, cy + 4); ctx.lineTo(cx, cy + 7); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx - 4, cy + 7); ctx.lineTo(cx + 4, cy + 7); ctx.stroke();
+      } else if (iconName === "eye") {
+        ctx.beginPath(); ctx.arc(cx, cy, 8, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy, 8, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+      } else if (iconName === "grid") {
+        for (let gx of [-5, 0, 5]) {
+          for (let gy of [-5, 0, 5]) {
+            ctx.beginPath(); ctx.arc(cx + gx, cy + gy, 1.2, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+      } else if (iconName === "chat") {
+        roundRect(ctx, cx - 7, cy - 6, 14, 9, 3, true);
+        ctx.beginPath(); ctx.moveTo(cx - 3, cy + 3); ctx.lineTo(cx - 5, cy + 7); ctx.lineTo(cx + 1, cy + 3); ctx.closePath(); ctx.fill();
+      } else if (iconName === "sfx") {
+        ctx.beginPath(); ctx.arc(cx - 3, cy + 3, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 4, cy, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx, cy + 3); ctx.lineTo(cx, cy - 5); ctx.lineTo(cx + 7, cy - 8); ctx.lineTo(cx + 7, cy); ctx.stroke();
+      } else if (iconName === "face") {
+        roundRect(ctx, cx - 7, cy - 7, 14, 14, 3, false); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx - 3, cy - 2, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 3, cy - 2, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, cy + 1, 4, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+      } else if (iconName === "home") {
+        ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx + 8, cy - 1); ctx.lineTo(cx - 8, cy - 1); ctx.closePath(); ctx.fill();
+        roundRect(ctx, cx - 6, cy - 1, 12, 8, 1, true);
+        ctx.fillStyle = MD3.surface; ctx.fillRect(cx - 2, cy + 2, 4, 5);
+      } else if (iconName === "voice") {
+        ctx.beginPath();
+        ctx.moveTo(cx - 6, cy - 3); ctx.lineTo(cx - 6, cy + 3);
+        ctx.moveTo(cx - 2, cy - 6); ctx.lineTo(cx - 2, cy + 6);
+        ctx.moveTo(cx + 2, cy - 8); ctx.lineTo(cx + 2, cy + 8);
+        ctx.moveTo(cx + 6, cy - 4); ctx.lineTo(cx + 6, cy + 4);
+        ctx.stroke();
+      } else if (iconName === "volume") {
+        ctx.beginPath();
+        ctx.moveTo(cx - 6, cy - 3); ctx.lineTo(cx - 3, cy - 3); ctx.lineTo(cx + 1, cy - 6);
+        ctx.lineTo(cx + 1, cy + 6); ctx.lineTo(cx - 3, cy + 3); ctx.lineTo(cx - 6, cy + 3);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 1, cy, 5, -Math.PI * 0.35, Math.PI * 0.35); ctx.stroke();
+      } else if (iconName === "clock") {
+        ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, cy - 5); ctx.lineTo(cx, cy); ctx.lineTo(cx + 4, cy); ctx.stroke();
+      } else if (iconName === "chip") {
+        ctx.strokeRect(cx - 5, cy - 5, 10, 10);
+        ctx.fillRect(cx - 2, cy - 2, 4, 4);
+      } else if (iconName === "cloud") {
+        ctx.beginPath(); ctx.arc(cx, cy - 2, 5, 0, Math.PI * 2); ctx.arc(cx - 4, cy + 1, 3, 0, Math.PI * 2); ctx.arc(cx + 4, cy + 1, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillRect(cx - 4, cy, 8, 4);
+      } else if (iconName === "restart") {
+        ctx.beginPath(); ctx.arc(cx, cy, 6, Math.PI * 0.25, Math.PI * 1.75); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + 4, cy - 7); ctx.lineTo(cx + 7, cy - 2); ctx.lineTo(cx + 1, cy - 4); ctx.closePath(); ctx.fill();
+      } else if (iconName === "power") {
+        ctx.beginPath(); ctx.arc(cx, cy, 6, Math.PI * 0.75, Math.PI * 2.25); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy - 1); ctx.stroke();
+      } else if (iconName === "camera") {
+        roundRect(ctx, cx - 7, cy - 4, 14, 10, 2, false); ctx.stroke();
+        ctx.fillRect(cx - 3, cy - 7, 6, 3);
+        ctx.beginPath(); ctx.arc(cx, cy + 1, 3, 0, Math.PI * 2); ctx.fill();
+      } else if (iconName === "trash") {
+        ctx.beginPath(); ctx.moveTo(cx - 6, cy - 5); ctx.lineTo(cx + 6, cy - 5); ctx.moveTo(cx - 2, cy - 7); ctx.lineTo(cx + 2, cy - 7); ctx.stroke();
+        roundRect(ctx, cx - 5, cy - 4, 10, 11, 1, false); ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Material Design 3 极简单行卡片绘制 (纯净单行，垂直居中，无冗余第二行)
+    function drawCanvasModernTile(ctx, x, y, w, h, icon, title, rightType, rightVal, isSel) {
+      const r = 16;
+      ctx.save();
+      if (isSel) {
+        ctx.fillStyle = MD3.primary;
+        roundRect(ctx, x, y, w, h, r, true);
+        // 左侧圆形图标底座 (30x30px)
+        ctx.fillStyle = MD3.iconBgSel;
+        ctx.beginPath(); ctx.arc(x + 25, y + h / 2, 15, 0, Math.PI * 2); ctx.fill();
+        drawCanvasVectorIcon(ctx, icon, x + 25, y + h / 2, (MD3.primary === "#f0f0f0") ? "#121212" : "#ffffff");
+
+        // 中间纯净单行标题 (垂直完美居中，无第二行)
+        ctx.fillStyle = MD3.onPrimary;
+        ctx.font = "bold 14px sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(title, x + 48, y + h / 2);
+      } else {
+        ctx.fillStyle = MD3.surfaceContainer;
+        ctx.strokeStyle = MD3.outline;
+        ctx.lineWidth = 1;
+        roundRect(ctx, x, y, w, h, r, true);
+        ctx.stroke();
+
+        ctx.fillStyle = MD3.surfaceHigh || "#26302f";
+        ctx.beginPath(); ctx.arc(x + 25, y + h / 2, 15, 0, Math.PI * 2); ctx.fill();
+        drawCanvasVectorIcon(ctx, icon, x + 25, y + h / 2, MD3.primary);
+
+        // 中间纯净单行标题 (垂直完美居中，无第二行)
+        ctx.fillStyle = MD3.onSurface;
+        ctx.font = "bold 14px sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(title, x + 48, y + h / 2);
+      }
+
+      // 右侧控件
+      if (rightType === "switch") {
+        drawToggleSwitch(ctx, x + w - 52, y + (h - 24) / 2, 42, 24, Boolean(rightVal), isSel);
+      } else if (rightType === "badge") {
+        drawValueBadge(ctx, String(rightVal), x + w - 10, y + h / 2, isSel);
+      } else if (rightType === "chevron") {
+        const chvX = x + w - 16;
+        const chvY = y + h / 2;
+        ctx.strokeStyle = isSel ? MD3.onPrimary : "#919e9b";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(chvX - 4, chvY - 5); ctx.lineTo(chvX + 1, chvY); ctx.lineTo(chvX - 4, chvY + 5);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 2.4 寸屏幕 Canvas Material Design 3 (Material You) 菜单渲染器
     function renderMenuOverlayCanvas(ctx, w, h, now) {
       if (menuState.mode === "FACE") {
         if (menuState.is_mic_muted) {
@@ -2091,65 +2340,38 @@
         return;
       }
 
-      // M3 柔和深色底 (Tonal Surface: #121414)
+      // 同步当前激活的主题配色
+      updateActiveTheme(menuState.theme || "mint");
+
+      // M3 柔和深色底 (Tonal Surface)
       ctx.fillStyle = MD3.surface;
       ctx.fillRect(0, 0, w, h);
 
-      // M3 极简顶部分割线
-      ctx.strokeStyle = MD3.headerLine;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(16, 36);
-      ctx.lineTo(224, 36);
-      ctx.stroke();
-
       if (menuState.mode === "MENU_MAIN") {
+        // 顶栏：微呼吸圆点 + 标题 + 在线状态
         ctx.fillStyle = MD3.primary;
-        ctx.font = "bold 12px sans-serif";
-        ctx.fillText("SETTINGS", 16, 24);
+        ctx.beginPath(); ctx.arc(17, 23, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.font = "bold 15px sans-serif";
+        ctx.fillStyle = MD3.onSurface;
+        ctx.fillText("控制中心", 26, 27);
+        ctx.font = "bold 11px sans-serif";
+        ctx.fillStyle = MD3.primary;
+        ctx.fillText("在线", 192, 26);
 
         const items = menuState.main_menu_items || [
-          { num: "01", title: "无线与配网", desc: "AP热点配网 / 查IP / 手机设置" },
-          { num: "02", title: "系统体检", desc: "网络延迟与外设实时排障" },
-          { num: "03", title: "硬件控制", desc: "舵机 / 麦克风 / 视线跟随" },
-          { num: "04", title: "系统设置", desc: "面容 / 音量 / 音色 / 关机" }
+          { icon: "wifi", title: "无线与配网" },
+          { icon: "doctor", title: "系统体检" },
+          { icon: "hardware", title: "硬件控制" },
+          { icon: "settings", title: "系统设置" }
         ];
 
-        const yStart = 48;
-        const cardH = 54;
+        const yStart = 50;
+        const cardH = 50;
         const cardGap = 10;
         items.forEach((it, idx) => {
           const isSel = (idx === menuState.cursor);
           const cy = yStart + idx * (cardH + cardGap);
-          if (isSel) {
-            // M3 Pixel Mint 高亮主色芯片卡片 (16px 圆角)
-            ctx.fillStyle = MD3.primary;
-            roundRect(ctx, 12, cy, 216, cardH, 16, true);
-            ctx.fillStyle = MD3.onPrimary;
-            ctx.font = "bold 14px sans-serif";
-            ctx.fillText(it.title, 22, cy + 22);
-            ctx.fillStyle = MD3.onPrimarySub;
-            ctx.font = "11px sans-serif";
-            ctx.fillText(it.desc, 22, cy + 42);
-            ctx.fillStyle = MD3.onPrimary;
-            ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", 212, cy + 32);
-          } else {
-            ctx.fillStyle = MD3.surfaceContainer;
-            ctx.strokeStyle = MD3.outline;
-            ctx.lineWidth = 1;
-            roundRect(ctx, 12, cy, 216, cardH, 16, true);
-            ctx.stroke();
-            ctx.fillStyle = MD3.onSurface;
-            ctx.font = "bold 14px sans-serif";
-            ctx.fillText(it.title, 22, cy + 22);
-            ctx.fillStyle = MD3.onSurfaceVariant;
-            ctx.font = "11px sans-serif";
-            ctx.fillText(it.desc, 22, cy + 42);
-            ctx.fillStyle = MD3.thumbOff;
-            ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", 212, cy + 32);
-          }
+          drawCanvasModernTile(ctx, 12, cy, 216, cardH, it.icon || "settings", it.title, "chevron", "", isSel);
         });
 
       } else if (menuState.mode === "QR_CODE") {
@@ -2157,11 +2379,16 @@
         const isAp = Boolean(wf.ap_mode);
         const ip = wf.ip || menuState.local_ip || location.hostname;
 
+        // 顶栏返回箭头
+        ctx.strokeStyle = MD3.primary;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
+        ctx.fillStyle = MD3.onSurface;
+        ctx.font = "bold 15px sans-serif";
+        ctx.fillText("无线配网", 26, 31);
         ctx.fillStyle = isAp ? "#f59e0b" : MD3.primary;
-        ctx.font = "bold 12px sans-serif";
-        ctx.fillText(isAp ? "AP SETUP" : "NETWORK", 16, 24);
-        ctx.fillStyle = isAp ? "#f59e0b" : MD3.primary;
-        ctx.fillText(isAp ? "HOTSPOT" : "ONLINE", 180, 24);
+        ctx.font = "bold 11px sans-serif";
+        ctx.fillText(isAp ? "热点已开启" : "已联网", 176, 30);
 
         // 居中 M3 白底卡片 (16px 圆角)
         ctx.fillStyle = "#ffffff";
@@ -2205,15 +2432,19 @@
           ctx.fillText(`IP: ${ip}:8090`, 24, 250);
           ctx.fillStyle = MD3.onSurfaceVariant;
           ctx.font = "11px sans-serif";
-          ctx.fillText("手机扫码进入后台进行配网与参数设置", 24, 272);
+          ctx.fillText("手机扫码进入后台进行配网设置", 24, 272);
         }
 
       } else if (menuState.mode === "XIAOMI_QR") {
-        ctx.fillStyle = MD3.primary;
-        ctx.font = "bold 12px sans-serif";
-        ctx.fillText("MI HOME / AUTH", 16, 24);
+        ctx.strokeStyle = MD3.primary;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
+        ctx.fillStyle = MD3.onSurface;
+        ctx.font = "bold 15px sans-serif";
+        ctx.fillText("米家授权", 26, 31);
         ctx.fillStyle = MD3.onSurfaceVariant;
-        ctx.fillText("BINDING", 188, 24);
+        ctx.font = "11px sans-serif";
+        ctx.fillText("BINDING", 188, 30);
 
         ctx.fillStyle = "#ffffff";
         roundRect(ctx, 42, 48, 156, 156, 16, true);
@@ -2249,61 +2480,58 @@
         ctx.fillText("绑定后可直接语音控制米家台灯/插座", 24, 272);
 
       } else if (menuState.mode === "DOCTOR") {
+        ctx.strokeStyle = MD3.primary;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
+        ctx.fillStyle = MD3.onSurface;
+        ctx.font = "bold 15px sans-serif";
+        ctx.fillText("系统体检", 26, 31);
         ctx.fillStyle = MD3.primary;
-        ctx.font = "bold 12px sans-serif";
-        ctx.fillText("DIAGNOSTICS", 16, 24);
-        ctx.fillStyle = MD3.onSurfaceVariant;
-        ctx.fillText("STATUS", 192, 24);
+        ctx.font = "bold 11px sans-serif";
+        ctx.fillText("HEALTH", 188, 30);
 
         const d = menuState.doctor || {};
         const diagList = [
-          { label: "WIFI IP", val: d.wifi_ip || location.hostname },
-          { label: "MIMO API", val: d.mimo_status || "正常" },
-          { label: "CAMERA", val: d.camera_status || "正常 (OK)" },
-          { label: "MICROPHONE", val: menuState.is_mic_muted ? "静音 (Muted)" : (d.mic_status || "正常") },
-          { label: "CPU TEMP", val: d.cpu_temp || "45°C" },
+          { icon: "wifi", label: "网络连接", val: (d.wifi_ip && !d.wifi_ip.includes("--")) ? "在线" : "离线" },
+          { icon: "doctor", label: "大模型接口", val: d.mimo_status || "正常" },
+          { icon: "camera", label: "视觉摄像头", val: d.camera_status || "正常" },
+          { icon: "mic", label: "麦克风矩阵", val: menuState.is_mic_muted ? "静音" : (d.mic_status || "正常") },
+          { icon: "chip", label: "处理器核心", val: d.cpu_temp || "45°C" },
         ];
 
         let cy = 48;
-        const diagH = 42;
-        const diagGap = 8;
+        const diagH = 46;
+        const diagGap = 7;
         diagList.forEach(item => {
-          ctx.fillStyle = MD3.surfaceContainer;
-          ctx.strokeStyle = MD3.outline;
-          ctx.lineWidth = 1;
-          roundRect(ctx, 12, cy, 216, diagH, 12, true);
-          ctx.stroke();
-
-          ctx.fillStyle = MD3.onSurfaceVariant;
-          ctx.font = "11px monospace";
-          ctx.fillText(item.label, 22, cy + 25);
-
-          ctx.font = "bold 12px sans-serif";
-          const isGood = item.val && (item.val.includes("正常") || item.val.includes("OK") || item.val.includes("在线") || item.val.includes("°C"));
-          ctx.fillStyle = isGood ? MD3.primary : "#f59e0b";
-          ctx.fillText(item.val, 115, cy + 25);
+          drawCanvasModernTile(ctx, 12, cy, 216, diagH, item.icon, item.label, "badge", item.val, false);
           cy += (diagH + diagGap);
         });
 
       } else if (menuState.mode === "TOGGLES") {
         const hwItems = menuState.hardware_items || [
-          { id: "servo_center", name: "舵机居中归位", val: "ACTION (90°, 90°)", type: "action" },
-          { id: "servo_test", name: "舵机动作自检", val: "TEST 摇头自检", type: "action" },
-          { id: "servo_sleep", name: "舵机休眠防抖", val: menuState.servo_sleeping ? "OFF (休眠卸力)" : "ON (通电保持)", type: "toggle", state: !menuState.servo_sleeping },
-          { id: "mic", name: "麦克风收音", val: menuState.is_mic_muted ? "OFF (已静音)" : "ON (收音中)", type: "toggle", state: !menuState.is_mic_muted },
-          { id: "track", name: "人脸视线跟随", val: menuState.face_tracking ? "ON (已开启)" : "OFF (已关闭)", type: "toggle", state: !!menuState.face_tracking },
-          { id: "gaze_mode", name: "视线算法模式", val: "九宫格灵动", type: "cycle" },
-          { id: "proactive", name: "主动关怀搭话", val: "ON (已开启)", type: "toggle", state: true },
-          { id: "sfx", name: "萌宠情绪拟声", val: "ON (已开启)", type: "toggle", state: true }
+          { id: "servo_center", icon: "servo", name: "舵机居中归位", val: "回正校准", type: "action" },
+          { id: "servo_test", icon: "spark", name: "舵机动作自检", val: "自检通过", type: "action" },
+          { id: "servo_sleep", icon: "lock", name: "舵机保持通电", val: "", type: "toggle", state: !menuState.servo_sleeping },
+          { id: "mic", icon: "mic", name: "麦克风收音", val: "", type: "toggle", state: !menuState.is_mic_muted },
+          { id: "track", icon: "eye", name: "人脸视线跟随", val: "", type: "toggle", state: !!menuState.face_tracking },
+          { id: "gaze_mode", icon: "grid", name: "视线算法模式", val: "九宫格", type: "cycle" },
+          { id: "proactive", icon: "chat", name: "主动关怀搭话", val: "", type: "toggle", state: true },
+          { id: "sfx", icon: "sfx", name: "萌宠情绪拟声", val: "", type: "toggle", state: true }
         ];
 
         const total = hwItems.length;
         const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
 
-        // 顶部 M3 标题
-        ctx.fillStyle = MD3.primary;
-        ctx.font = "bold 12px sans-serif";
-        ctx.fillText("HARDWARE", 16, 24);
+        // 顶栏返回箭头 + 标题 + 计数
+        ctx.strokeStyle = MD3.primary;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
+        ctx.fillStyle = MD3.onSurface;
+        ctx.font = "bold 15px sans-serif";
+        ctx.fillText("硬件控制", 26, 31);
+        ctx.fillStyle = MD3.onSurfaceVariant;
+        ctx.font = "11px sans-serif";
+        ctx.fillText(`${String(curIdx + 1).padStart(2, '0')}/${String(total).padStart(2, '0')}`, 192, 30);
 
         const maxVisible = 4;
         let startIdx = 0;
@@ -2320,9 +2548,9 @@
 
         const visibleItems = hwItems.slice(startIdx, startIdx + maxVisible);
         let cy = 48;
-        const cardH = 54;
-        const cardGap = 10;
-        const cardW = (total > maxVisible) ? 204 : 216;
+        const cardH = 50;
+        const cardGap = 8;
+        const cardW = 212;
 
         visibleItems.forEach((it, vIdx) => {
           const realIdx = startIdx + vIdx;
@@ -2335,94 +2563,50 @@
           else if (it.state !== undefined) isOn = !!it.state;
           else if (it.val) isOn = it.val.includes("ON");
 
-          let subTxt = "";
-          if (it.type === "toggle") {
-            if (it.id === "servo_sleep") subTxt = isOn ? "通电保持" : "休眠卸力";
-            else if (it.id === "mic") subTxt = isOn ? "收音中" : "已静音";
-            else if (it.id === "track") subTxt = isOn ? "视觉跟随开启" : "跟随已关闭";
-            else if (it.id === "proactive") subTxt = isOn ? "主动搭话开启" : "搭话已关闭";
-            else if (it.id === "sfx") subTxt = isOn ? "情绪拟声开启" : "拟声已关闭";
-            else subTxt = isOn ? "已开启" : "已关闭";
-          } else if (it.type === "action") {
-            subTxt = (it.id === "servo_center") ? "居中归位 (90°, 90°)" : (it.val || "动作健康自检");
-          } else if (it.type === "cycle") {
-            subTxt = "算法跟随设定";
-          } else {
-            subTxt = String(it.val || "");
-          }
+          const rType = (it.type === "toggle") ? "switch" : ((it.type === "cycle") ? "badge" : "chevron");
+          const rVal = (it.type === "toggle") ? isOn : ((it.type === "cycle") ? (it.val || "九宫格") : "");
 
-          if (isSel) {
-            ctx.fillStyle = MD3.primary;
-            roundRect(ctx, 12, cy, cardW, cardH, 16, true);
-            ctx.fillStyle = MD3.onPrimary;
-            ctx.font = "bold 14px sans-serif";
-            ctx.fillText(it.name, 22, cy + 22);
-            ctx.fillStyle = MD3.onPrimarySub;
-            ctx.font = "11px sans-serif";
-            ctx.fillText(subTxt, 22, cy + 42);
-          } else {
-            ctx.fillStyle = MD3.surfaceContainer;
-            ctx.strokeStyle = MD3.outline;
-            ctx.lineWidth = 1;
-            roundRect(ctx, 12, cy, cardW, cardH, 16, true);
-            ctx.stroke();
-            ctx.fillStyle = MD3.onSurface;
-            ctx.font = "bold 14px sans-serif";
-            ctx.fillText(it.name, 22, cy + 22);
-            ctx.fillStyle = MD3.onSurfaceVariant;
-            ctx.font = "11px sans-serif";
-            ctx.fillText(subTxt, 22, cy + 42);
-          }
-
-          // 右侧交互组件：M3 Switch / Tonal Badge / Chevron
-          if (it.type === "toggle") {
-            drawToggleSwitch(ctx, 12 + cardW - 52, cy + 15, 42, 24, isOn, isSel);
-          } else if (it.type === "cycle") {
-            const badgeTxt = (it.val && it.val.includes("九宫格")) ? "九宫格" : (it.val || "跟随");
-            drawValueBadge(ctx, badgeTxt, 12 + cardW - 10, cy + 27, isSel);
-          } else {
-            ctx.fillStyle = isSel ? MD3.onPrimary : MD3.thumbOff;
-            ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", 12 + cardW - 14, cy + 32);
-          }
-
+          drawCanvasModernTile(ctx, 12, cy, cardW, cardH, it.icon || "hardware", it.name, rType, rVal, isSel);
           cy += (cardH + cardGap);
         });
 
-        // M3 滚动条
+        // 极简 2px 贴边胶囊滚动滑块
         if (total > maxVisible) {
-          const trackX = 224;
-          const trackY = 48;
-          const trackH = maxVisible * (cardH + cardGap) - cardGap;
-          ctx.fillStyle = MD3.surfaceContainer;
-          roundRect(ctx, trackX, trackY, 4, trackH, 2, true);
-          const thumbH = Math.max(32, Math.round(trackH * (maxVisible / total)));
-          const maxThumbScroll = trackH - thumbH;
-          const thumbY = trackY + Math.round((startIdx / (total - maxVisible)) * maxThumbScroll);
+          const thumbH = 44;
+          const maxScroll = 180;
+          const thumbY = 52 + Math.round((startIdx / (total - maxVisible)) * maxScroll);
           ctx.fillStyle = MD3.primary;
-          roundRect(ctx, trackX, thumbY, 4, thumbH, 2, true);
+          roundRect(ctx, 232, thumbY, 3, thumbH, 1.5, true);
         }
 
       } else if (menuState.mode === "SYSTEM") {
         const sysItems = menuState.system_items || [
-          { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定", type: "action" },
-          { id: "face_clear", name: "重置主人面容", val: "RESET 清除面容", type: "action" },
-          { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗", type: "action" },
-          { id: "voice", name: "发音音色切换", val: "冰糖", type: "cycle" },
-          { id: "volume", name: "系统播报音量", val: "80%", type: "cycle" },
-          { id: "timeout", name: "屏幕息屏时间", val: "15秒", type: "cycle" },
-          { id: "version", name: "系统固件版本", val: menuState.version || "v0.1.0", type: "info" },
-          { id: "update", name: "检查系统更新", val: menuState.update_status || "点击检查更新", type: "action" },
-          { id: "restart", name: "重启机器人服务", val: "RESTART", type: "action" },
-          { id: "shutdown", name: "树莓派安全关机", val: "POWER OFF", type: "action" }
+          { id: "theme", icon: "theme", name: "系统主题风格", val: (THEMES_MD3[menuState.theme || "mint"] || THEMES_MD3.mint).name, type: "cycle" },
+          { id: "face_id", icon: "face", name: "录入主人面容", val: "", type: "action" },
+          { id: "face_clear", icon: "trash", name: "重置主人面容", val: "", type: "action" },
+          { id: "mijia", icon: "home", name: "米家扫码绑定", val: "", type: "action" },
+          { id: "voice", icon: "voice", name: "发音音色切换", val: "冰糖", type: "cycle" },
+          { id: "volume", icon: "volume", name: "系统播报音量", val: "80%", type: "cycle" },
+          { id: "timeout", icon: "clock", name: "屏幕息屏时间", val: "15秒", type: "cycle" },
+          { id: "version", icon: "chip", name: "系统固件版本", val: menuState.version || "v0.1.0", type: "info" },
+          { id: "update", icon: "cloud", name: "检查系统更新", val: menuState.update_status || "检查中", type: "action" },
+          { id: "restart", icon: "restart", name: "重启机器人服务", val: "", type: "action" },
+          { id: "shutdown", icon: "power", name: "树莓派安全关机", val: "", type: "action" }
         ];
 
         const total = sysItems.length;
         const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
 
-        ctx.fillStyle = MD3.primary;
-        ctx.font = "bold 12px sans-serif";
-        ctx.fillText("SYSTEM", 16, 24);
+        // 顶栏返回箭头 + 标题 + 计数
+        ctx.strokeStyle = MD3.primary;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
+        ctx.fillStyle = MD3.onSurface;
+        ctx.font = "bold 15px sans-serif";
+        ctx.fillText("系统设置", 26, 31);
+        ctx.fillStyle = MD3.onSurfaceVariant;
+        ctx.font = "11px sans-serif";
+        ctx.fillText(`${String(curIdx + 1).padStart(2, '0')}/${String(total).padStart(2, '0')}`, 192, 30);
 
         const maxVisible = 4;
         let startIdx = 0;
@@ -2439,72 +2623,27 @@
 
         const visibleItems = sysItems.slice(startIdx, startIdx + maxVisible);
         let cy = 48;
-        const cardH = 54;
-        const cardGap = 10;
-        const cardW = (total > maxVisible) ? 204 : 216;
+        const cardH = 50;
+        const cardGap = 8;
+        const cardW = 212;
 
         visibleItems.forEach((it, vIdx) => {
           const realIdx = startIdx + vIdx;
           const isSel = (realIdx === curIdx);
 
-          let subTxt = "";
-          if (it.id === "face_id") subTxt = "3秒抓拍面部特征认主";
-          else if (it.id === "face_clear") subTxt = "清除本地主人面部特征";
-          else if (it.id === "mijia") subTxt = "屏幕弹窗扫码绑定米家";
-          else if (it.id === "voice") subTxt = "系统播报声音风格";
-          else if (it.id === "volume") subTxt = "扬声器播报音量增益";
-          else if (it.id === "timeout") subTxt = "无操作自动息屏倒计时";
-          else if (it.id === "version") subTxt = "PIG Robot OS 核心固件";
-          else if (it.id === "update") subTxt = it.val || "点击检查远程更新";
-          else if (it.id === "restart") subTxt = "热重启核心 Python 进程";
-          else if (it.id === "shutdown") subTxt = "安全切断供电避免坏卡";
-          else subTxt = String(it.val || "");
+          const rType = (it.type === "cycle" || it.type === "info") ? "badge" : "chevron";
+          const rVal = (it.type === "cycle" || it.type === "info") ? String(it.val) : "";
 
-          if (isSel) {
-            ctx.fillStyle = MD3.primary;
-            roundRect(ctx, 12, cy, cardW, cardH, 16, true);
-            ctx.fillStyle = MD3.onPrimary;
-            ctx.font = "bold 14px sans-serif";
-            ctx.fillText(it.name, 22, cy + 22);
-            ctx.fillStyle = MD3.onPrimarySub;
-            ctx.font = "11px sans-serif";
-            ctx.fillText(subTxt, 22, cy + 42);
-          } else {
-            ctx.fillStyle = MD3.surfaceContainer;
-            ctx.strokeStyle = MD3.outline;
-            ctx.lineWidth = 1;
-            roundRect(ctx, 12, cy, cardW, cardH, 16, true);
-            ctx.stroke();
-            ctx.fillStyle = MD3.onSurface;
-            ctx.font = "bold 14px sans-serif";
-            ctx.fillText(it.name, 22, cy + 22);
-            ctx.fillStyle = MD3.onSurfaceVariant;
-            ctx.font = "11px sans-serif";
-            ctx.fillText(subTxt, 22, cy + 42);
-          }
-
-          if (it.type === "cycle" || it.type === "info") {
-            drawValueBadge(ctx, String(it.val), 12 + cardW - 10, cy + 27, isSel);
-          } else {
-            ctx.fillStyle = isSel ? MD3.onPrimary : MD3.thumbOff;
-            ctx.font = "bold 16px sans-serif";
-            ctx.fillText("›", 12 + cardW - 14, cy + 32);
-          }
-
+          drawCanvasModernTile(ctx, 12, cy, cardW, cardH, it.icon || "settings", it.name, rType, rVal, isSel);
           cy += (cardH + cardGap);
         });
 
         if (total > maxVisible) {
-          const trackX = 224;
-          const trackY = 48;
-          const trackH = maxVisible * (cardH + cardGap) - cardGap;
-          ctx.fillStyle = MD3.surfaceContainer;
-          roundRect(ctx, trackX, trackY, 4, trackH, 2, true);
-          const thumbH = Math.max(32, Math.round(trackH * (maxVisible / total)));
-          const maxThumbScroll = trackH - thumbH;
-          const thumbY = trackY + Math.round((startIdx / (total - maxVisible)) * maxThumbScroll);
+          const thumbH = 44;
+          const maxScroll = 180;
+          const thumbY = 52 + Math.round((startIdx / (total - maxVisible)) * maxScroll);
           ctx.fillStyle = MD3.primary;
-          roundRect(ctx, trackX, thumbY, 4, thumbH, 2, true);
+          roundRect(ctx, 232, thumbY, 3, thumbH, 1.5, true);
         }
       }
     }
@@ -4824,6 +4963,21 @@
         if (btn) btn.classList.toggle("active", t === tabKey);
         if (pane) pane.style.display = (t === tabKey ? (t === "skills" ? "flex" : "block") : "none");
       });
+      try {
+        localStorage.setItem("pig_control_tab", tabKey);
+      } catch (e) {}
+    }
+
+    // 页面载入时还原上次记忆的选项卡（默认姿态动作）
+    try {
+      const savedTab = localStorage.getItem("pig_control_tab");
+      if (savedTab && ["motion", "emotion", "skills"].includes(savedTab)) {
+        switchControlTab(savedTab);
+      } else {
+        switchControlTab("motion");
+      }
+    } catch (e) {
+      switchControlTab("motion");
     }
 
     let _settingsDebounceTimer = null;

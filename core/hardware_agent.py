@@ -494,8 +494,13 @@ class HardwareAgent:
         except ImportError:
             cv2 = None
 
+        now = time.time()
+        last_cam_ts = getattr(self, "latest_camera_frame_ts", 0.0)
         if frame is None and getattr(self, "latest_camera_frame", None) is not None:
-            frame = self.latest_camera_frame
+            if now - last_cam_ts <= 3.5:
+                frame = self.latest_camera_frame
+            else:
+                self.latest_camera_frame = None
 
         if frame is None and self.hal and hasattr(self.hal, "capture_image"):
             try:
@@ -504,6 +509,7 @@ class HardwareAgent:
                     nparr = np.frombuffer(img_bytes, np.uint8)
                     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                     self.latest_camera_frame = frame
+                    self.latest_camera_frame_ts = time.time()
             except Exception as e:
                 logger.warning(f"⚠️ [FaceID] 从 HAL capture_image 异常: {e}")
 
@@ -541,6 +547,7 @@ class HardwareAgent:
                     nparr = np.frombuffer(img_bytes, np.uint8)
                     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                     self.latest_camera_frame = frame
+                    self.latest_camera_frame_ts = time.time()
                     has_face, ox, oy = self.face_tracker.detect_face(frame)
                     if has_face:
                         cur_p = getattr(self.hal, "cur_pan", 90.0)

@@ -33,27 +33,57 @@ skill_mgr = SkillManager(storage_dir=DATA_DIR, memory_manager=mem)
 evolution_engine = EvolutionEngine(DATA_DIR, memory_manager=mem, skill_manager=skill_mgr)
 
 _latest_webcam_frame = None
+_latest_webcam_frame_ts = 0.0
 
-def get_latest_vision_frame():
-    """获取最新视觉帧字节流 (优先网页/客户端摄像头，其次硬件 HAL)"""
-    global _latest_webcam_frame
-    if _latest_webcam_frame and len(_latest_webcam_frame) > 100:
-        return _latest_webcam_frame
+def get_latest_vision_frame(max_age_sec: float = 3.5) -> bytes:
+    """
+    获取最新视觉帧字节流。
+    严格执行 TTL 时效性校验（默认 3.5 秒），一旦过期立即丢弃，绝对不用历史旧缓存图伪装当前实时抓拍！
+    """
+    global _latest_webcam_frame, _latest_webcam_frame_ts
+    now = time.time()
+
+    # 1. 检查内存中 Web 实时推流帧
+    if _latest_webcam_frame:
+        if now - _latest_webcam_frame_ts <= max_age_sec:
+            if len(_latest_webcam_frame) > 100:
+                return _latest_webcam_frame
+        else:
+            # 超过 TTL 主动清理内存帧，防止任何地方直接误用旧图
+            _latest_webcam_frame = None
+            _latest_webcam_frame_ts = 0.0
+
+    # 2. 检查临时桥接文件 (/tmp/pig_latest_frame.jpg)
     tmp_path = "/tmp/pig_latest_frame.jpg"
     if os.path.exists(tmp_path):
         try:
-            with open(tmp_path, "rb") as f:
-                c = f.read()
-                if len(c) > 100:
-                    return c
+            mtime = os.path.getmtime(tmp_path)
+            if now - mtime <= max_age_sec:
+                with open(tmp_path, "rb") as f:
+                    c = f.read()
+                    if len(c) > 100:
+                        return c
+            else:
+                # 超过 max_age_sec 秒的旧文件已失效，立即主动清理，防止后续任何逻辑误读
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
         except Exception:
             pass
+
+    # 3. 检查硬件 HAL（物理真机摄像头）
     if hardware_agent and hardware_agent.hal:
         try:
-            return hardware_agent.hal.capture_image()
+            from drivers.hal_physical import PhysicalHAL
+            if isinstance(hardware_agent.hal, PhysicalHAL):
+                img = hardware_agent.hal.capture_image()
+                if img and len(img) > 100:
+                    return img
         except Exception:
             pass
-    return None
+
+    return b""
 
 def load_config():
     cfg_file = os.path.join(DIRECTORY, "config.json")
@@ -405,6 +435,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith("/api/vision/snapshot") or self.path.startswith("/api/vision/latest_snapshot"):
             snap_path = "/tmp/pig_visual_qa_snapshot.jpg"
             if not os.path.exists(snap_path):
+                snap_path = "/tmp/pig_remote_guard_snapshot.jpg"
+            if not os.path.exists(snap_path):
                 snap_path = "/tmp/pig_latest_frame.jpg"
             if os.path.exists(snap_path):
                 try:
@@ -746,7 +778,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        global _latest_webcam_frame
+        global _latest_webcam_frame, _latest_webcam_frame_ts
 
         # 手机端无线配置保存 API
         if self.path == "/api/settings":
@@ -1226,6 +1258,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     img_data = img_data.split(",", 1)[1]
                 img_bytes = base64.b64decode(img_data)
                 _latest_webcam_frame = img_bytes
+                _latest_webcam_frame_ts = time.time()
                 with open("/tmp/pig_latest_frame.jpg", "wb") as f:
                     f.write(img_bytes)
 
@@ -1248,6 +1281,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     img_data = img_data.split(",", 1)[1]
                 img_bytes = base64.b64decode(img_data)
                 _latest_webcam_frame = img_bytes
+                _latest_webcam_frame_ts = time.time()
                 try:
                     with open("/tmp/pig_latest_frame.jpg", "wb") as f:
                         f.write(img_bytes)

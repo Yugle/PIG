@@ -443,7 +443,8 @@ class FeishuClient:
         vlm_analysis: str,
         direction_desc: str = "水平 90° · 俯仰 90° (正视前方)",
         target_id: Optional[str] = None,
-        id_type: str = "open_id"
+        id_type: str = "open_id",
+        is_live: bool = True
     ) -> Dict[str, Any]:
         """
         构建并发送【📷 PIG 远程安防与家庭现场巡检】富文本卡片
@@ -459,13 +460,13 @@ class FeishuClient:
             elements.append({
                 "tag": "img",
                 "img_key": img_key,
-                "alt": {"tag": "plain_text", "content": "PIG 实时现场抓拍"},
+                "alt": {"tag": "plain_text", "content": "PIG 现场抓拍画面" if is_live else "PIG 抓拍离线状态帧"},
                 "mode": "fit_horizontal"
             })
         else:
             # 若因权限未开通导致无法内嵌图片，提供明确说明与一键直达开通按钮
             auth_url = f"https://open.feishu.cn/app/{self.app_id}/auth?q=im:resource:upload,im:resource&op_from=openapi&token_type=tenant" if self.app_id else ""
-            hint_md = "⚠️ **[现场照片已成功捕获，但飞书应用权限受限]**\n"
+            hint_md = "⚠️ **[现场照片已生成/捕获，但飞书应用权限受限]**\n"
             if auth_url:
                 hint_md += f"飞书自建应用当前未勾选 **[上传图片或文件 (im:resource:upload)]** 权限，导致图片无法直接内嵌在聊天中。\n👉 **[点击这里一键前往开通权限]({auth_url})** 开通后即可直接在聊天框看图！"
             else:
@@ -492,6 +493,7 @@ class FeishuClient:
                 })
 
         # 2. 机位与元数据信息
+        status_tag = "🟢 实时连线" if is_live else "🟠 离线/拦截旧图"
         elements.append({
             "tag": "div",
             "fields": [
@@ -508,17 +510,25 @@ class FeishuClient:
                         "tag": "lark_md",
                         "content": f"**📐 镜头机位**\n{direction_desc}"
                     }
+                },
+                {
+                    "is_short": True,
+                    "text": {
+                        "tag": "lark_md",
+                        "content": f"**📶 信号状态**\n{status_tag}"
+                    }
                 }
             ]
         })
 
-        # 3. 智能多模态视觉环境分析
+        # 3. 智能多模态视觉环境分析 / 状态说明
         if vlm_analysis:
+            section_title = "**👁️ 现场智能环境诊断**" if is_live else "**⚠️ 抓拍状态与安全拦截说明**"
             elements.append({
                 "tag": "div",
                 "text": {
                     "tag": "lark_md",
-                    "content": f"**👁️ 现场智能环境诊断**\n{vlm_analysis}"
+                    "content": f"{section_title}\n{vlm_analysis}"
                 }
             })
 
@@ -535,8 +545,12 @@ class FeishuClient:
             ]
         })
 
-        title = "📷 PIG 远程安防与家庭现场巡检"
-        template = "blue"
+        if is_live:
+            title = "📷 PIG 远程安防与家庭现场巡检"
+            template = "blue"
+        else:
+            title = "⚠️ PIG 远程安防巡检 - 抓拍未就绪"
+            template = "orange"
 
         # 如果显式指定了发送目标 (如当前接收到消息的会话)
         if target_id and self.app_id and self.app_secret:

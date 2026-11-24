@@ -26,65 +26,87 @@ def _load_config():
     return {}
 
 
-def _capture_frame_bytes() -> tuple[bytes, str]:
-    """按优先级从不同链路获取当前摄像头一帧 JPEG 字节流，返回 (img_bytes, err_msg)"""
-    # 0. 优先检查主模块内存中的实时画面帧 (_latest_webcam_frame 或 get_latest_vision_frame)
-    main_mod = sys.modules.get("__main__")
-    if main_mod:
-        if hasattr(main_mod, "get_latest_vision_frame"):
-            try:
-                frame = main_mod.get_latest_vision_frame()
-                if frame and len(frame) > 100:
-                    return frame, ""
-            except Exception:
-                pass
-        if hasattr(main_mod, "_latest_webcam_frame") and main_mod._latest_webcam_frame:
-            return main_mod._latest_webcam_frame, ""
-
-    # 1. 检查仿真端或实时帧桥接文件 (/tmp/pig_latest_frame.jpg)
+def _capture_frame_bytes(max_age_sec: float = 3.5) -> tuple[bytes, str]:
+    """按优先级从不同链路获取当前摄像头一帧 JPEG 字节流，严格执行 TTL 时效校验，返回 (img_bytes, err_msg)"""
+    now = time.time()
     tmp_path = "/tmp/pig_latest_frame.jpg"
+
+    # 0. 先主动检测并清理超过 TTL 的陈旧临时桥接文件
     if os.path.exists(tmp_path):
         try:
             mtime = os.path.getmtime(tmp_path)
-            age = time.time() - mtime
-            # 若帧文件超过 15 秒未更新，且不是真机 USB 摄像头，提示画面静止
-            if age > 15.0 and not (os.path.exists("/dev/video0") or os.environ.get("PIG_IS_RPI")):
-                return b"", "未能捕获到最新画面：摄像头画面已超过15秒未更新（已暂停/关闭）。请在页面上方或对话框右上角点击开启【📷 摄像头】后再试哦～"
-            with open(tmp_path, "rb") as f:
-                content = f.read()
-                if len(content) > 100:
-                    return content, ""
+            if now - mtime > max_age_sec:
+                os.remove(tmp_path)
         except Exception:
             pass
 
-    # 2. 尝试从 HardwareAgent 获取 HAL 捕获 (SimulationHAL 或 PhysicalHAL)
+    # 1. 优先检查主模块内存中的实时画面帧 (get_latest_vision_frame 严格校验 TTL)
+    main_mod = sys.modules.get("__main__")
+    if main_mod and hasattr(main_mod, "get_latest_vision_frame"):
+        try:
+            frame = main_mod.get_latest_vision_frame(max_age_sec=max_age_sec)
+            if frame and len(frame) > 100:
+                return frame, ""
+        except Exception:
+            pass
+
+    # 2. 检查实时帧桥接文件 (/tmp/pig_latest_frame.jpg)，必须在 TTL 窗口期内
+    if os.path.exists(tmp_path):
+        try:
+            mtime = os.path.getmtime(tmp_path)
+            if now - mtime <= max_age_sec:
+                with open(tmp_path, "rb") as f:
+                    content = f.read()
+                    if len(content) > 100:
+                        return content, ""
+            else:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # 3. 尝试从 HardwareAgent 获取物理真机 HAL 捕获
     try:
         from core.hardware_agent import get_hardware_agent
         agent = get_hardware_agent()
         if agent and agent.hal:
-            frame = agent.hal.capture_image()
-            if frame and len(frame) > 100:
-                return frame, ""
+            from drivers.hal_physical import PhysicalHAL
+            if isinstance(agent.hal, PhysicalHAL):
+                frame = agent.hal.capture_image()
+                if frame and len(frame) > 100:
+                    return frame, ""
     except Exception:
         pass
 
-    # 3. 尝试直接打开本地 OpenCV V4L2 摄像头 (如树莓派 USB 免驱裸板 /dev/video0)
+    # 4. 尝试直接打开本地 OpenCV V4L2 摄像头 (如树莓派 USB 免驱裸板 /dev/video0)
     try:
-        import cv2
-        cap = cv2.VideoCapture(0)
-        if cap.isOpened():
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            ret, mat = cap.read()
-            cap.release()
-            if ret and mat is not None:
-                success, buf = cv2.imencode(".jpg", mat)
-                if success:
-                    return buf.tobytes(), ""
+        if os.path.exists("/dev/video0"):
+            import cv2
+            cap = cv2.VideoCapture(0)
+            if cap.isOpened():
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                for _ in range(3):
+                    cap.grab()
+                ret, mat = cap.read()
+                cap.release()
+                if ret and mat is not None:
+                    success, buf = cv2.imencode(".jpg", mat)
+                    if success:
+                        return buf.tobytes(), ""
     except Exception:
         pass
 
-    return b"", "未能捕获到画面：若在 Web 仿真工作台，请点击开启【📷 电脑摄像头】；若在真机，请确认免驱 USB 摄像头已插好。"
+    # 清理潜在残留旧文件
+    if os.path.exists(tmp_path):
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    return b"", "未能捕获到最新实时画面（已严格拦截历史陈旧图片）：摄像头画面未开启或已断开连接。若在 Web 仿真工作台，请点击开启【📷 电脑摄像头】；若在真机，请确认免驱 USB 摄像头已插好。"
 
 
 def run(question="请仔细观察这张照片，告诉我你看到了什么？", **kwargs):
