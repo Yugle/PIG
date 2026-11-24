@@ -1320,11 +1320,11 @@
             <div class="pip-buttons-bar" id="pipButtonsBar">
               <button class="pip-hw-btn" id="btnK1" onclick="sendHwButton('K1')" title="K1 (上键 / 音量+) [快捷键: W 或 ↑]">▲ 上</button>
               <button class="pip-hw-btn" id="btnK2" onclick="sendHwButton('K2')" title="K2 (下键 / 音量-) [快捷键: S 或 ↓]">▼ 下</button>
-              <button class="pip-hw-btn pip-btn-primary" id="btnK3" onclick="sendHwButton('K3')" oncontextmenu="event.preventDefault(); sendHwButton('K3', 'long_press');" title="K3 (短按快照提问 / 右键或按M进入系统菜单) [快捷键: Enter / M]">● 确认</button>
+              <button class="pip-hw-btn pip-btn-primary" id="btnK3" onclick="sendHwButton('K3')" title="K3 (确认 / 打开系统菜单) [快捷键: Enter / M]">● 确认</button>
               <button class="pip-hw-btn pip-btn-danger" id="btnK4" onclick="sendHwButton('K4')" title="K4 (返回 / 闭麦打断) [快捷键: Esc]">✕ 返回</button>
             </div>
             <div style="font-size: 0.65rem; color: var(--text-sub); text-align: center; margin-top: 4px; line-height: 1.2;">
-              按 <b>M</b> 打开菜单 | <b>W/S/Enter/Esc</b>
+              按 <b>Enter / M</b> 打开菜单 | <b>W/S/Enter/Esc</b>
             </div>
           </div>
         </div>
@@ -1420,6 +1420,14 @@
     }
 
     function renderEyeFrame(now) {
+      // 处于菜单/设置模式下：纯实色背景，严禁绘制底层眼球微动与眨眼，彻底杜绝下层动效透光与闪烁！
+      if (typeof menuState !== "undefined" && menuState && menuState.mode !== "FACE") {
+        eyeCtx.fillStyle = "#0a0a0c";
+        eyeCtx.fillRect(0, 0, 240, 320);
+        renderMenuOverlayCanvas(eyeCtx, 240, 320, now);
+        return;
+      }
+
       // 1. 拟真眨眼动力学
       let blinkScale = 1.0;
       if (!isBlinking && now >= nextBlinkTime) {
@@ -1671,18 +1679,32 @@
       update_status: "点击检查更新",
       qr_base64: "",
       main_menu_items: [
-        { num: "01", title: "无线与配网", desc: "AP热点配网 / 查IP / 手机设置" },
-        { num: "02", title: "系统体检", desc: "网络延迟与外设实时排障" },
-        { num: "03", title: "硬件开关", desc: "麦克风静音 / 追踪 / 休眠" },
-        { num: "04", title: "系统设置", desc: "固件版本 / 系统更新 / 电源管理" }
+        { id: "qr", num: "01", title: "无线与配网", desc: "AP热点配网 / 查IP / 手机设置" },
+        { id: "doctor", num: "02", title: "系统体检", desc: "网络延迟与外设实时排障" },
+        { id: "toggles", num: "03", title: "硬件控制", desc: "舵机归位 / 自检 / 麦克风 / 追踪" },
+        { id: "system", num: "04", title: "系统设置", desc: "面容 / 音量 / 音色 / 息屏 / 关机" }
+      ],
+      hardware_items: [
+        { id: "servo_center", name: "舵机居中归位", val: "ACTION (90°, 90°)", type: "action" },
+        { id: "servo_test", name: "舵机动作自检", val: "TEST 摇头点头自检", type: "action" },
+        { id: "servo_sleep", name: "舵机休眠防抖", val: "ON (通电保持)", type: "toggle", state: true },
+        { id: "mic", name: "麦克风收音", val: "ON (收音中)", type: "toggle", state: true },
+        { id: "track", name: "人脸视线跟随", val: "ON (已开启)", type: "toggle", state: true },
+        { id: "gaze_mode", name: "视线算法模式", val: "九宫格灵动", type: "cycle" },
+        { id: "proactive", name: "主动关怀搭话", val: "ON (已开启)", type: "toggle", state: true },
+        { id: "sfx", name: "萌宠情绪拟声", val: "ON (已开启)", type: "toggle", state: true }
       ],
       system_items: [
-        { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定" },
-        { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗" },
-        { id: "version", name: "系统固件版本", val: "--" },
-        { id: "update", name: "检查系统更新", val: "点击检查更新" },
-        { id: "restart", name: "重启机器人服务", val: "平滑重载" },
-        { id: "shutdown", name: "树莓派安全关机", val: "系统断电" }
+        { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定", type: "action" },
+        { id: "face_clear", name: "重置主人面容", val: "RESET 清除面容", type: "action" },
+        { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗", type: "action" },
+        { id: "voice", name: "发音音色切换", val: "冰糖", type: "cycle" },
+        { id: "volume", name: "系统播报音量", val: "80%", type: "cycle" },
+        { id: "timeout", name: "屏幕息屏时间", val: "15秒", type: "cycle" },
+        { id: "version", name: "系统固件版本", val: "v0.1.0", type: "info" },
+        { id: "update", name: "检查系统更新", val: "点击检查更新", type: "action" },
+        { id: "restart", name: "重启机器人服务", val: "RESTART", type: "action" },
+        { id: "shutdown", name: "树莓派安全关机", val: "POWER OFF", type: "action" }
       ],
       doctor: {
         wifi_ip: location.hostname,
@@ -1783,11 +1805,10 @@
 
       // 1. 本地极速 0ms 响应 (绝对安全边界钳制 Clamping，彻底根除快速连续按造成的跳顶与反复跳)
       if (menuState.mode === "FACE") {
-        if (button === "K3" && eventType === "long_press") {
+        if (button === "K3") {
+          // 点击确认 -> 进入主菜单 (绝不触发快照发问答)
           menuState.mode = "MENU_MAIN";
           menuState.cursor = 0;
-        } else if (button === "K3") {
-          sendQuickChip("看看我手里拿的什么");
         } else if (button === "K4") {
           if (eventType === "long_press") {
             menuState.servo_sleeping = !menuState.servo_sleeping;
@@ -1798,7 +1819,7 @@
         }
       } else if (menuState.mode === "XIAOMI_QR") {
         if (button === "K4") {
-          menuState.mode = "FACE";
+          menuState.mode = "SYSTEM";
           fetch("/api/xiaomi/qr_dismiss_screen", { method: "POST" }).catch(() => {});
         } else if (button === "K3") {
           if (menuState.xiaomi_qr) menuState.xiaomi_qr.status = "正在向服务器刷新二维码...";
@@ -1842,22 +1863,25 @@
       } else if (menuState.mode === "DOCTOR") {
         if (button === "K4" || button === "K3") menuState.mode = "MENU_MAIN";
       } else if (menuState.mode === "TOGGLES") {
-        const togLen = (menuState.toggle_items && menuState.toggle_items.length) || 3;
+        const hwItems = menuState.hardware_items || [];
+        const togLen = hwItems.length || 8;
         if (button === "K1") menuState.cursor = (menuState.cursor - 1 + togLen) % togLen;
         else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % togLen;
         else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 2; }
         else if (button === "K3") {
-          if (menuState.cursor === 0) menuState.is_mic_muted = !menuState.is_mic_muted;
-          else if (menuState.cursor === 1) menuState.face_tracking = !menuState.face_tracking;
-          else if (menuState.cursor === 2) menuState.servo_sleeping = !menuState.servo_sleeping;
+          const item = hwItems[menuState.cursor] || {};
+          if (item.id === "mic") menuState.is_mic_muted = !menuState.is_mic_muted;
+          else if (item.id === "track") menuState.face_tracking = !menuState.face_tracking;
+          else if (item.id === "servo_sleep") menuState.servo_sleeping = !menuState.servo_sleeping;
         }
       } else if (menuState.mode === "SYSTEM") {
-        const sysLen = (menuState.system_items && menuState.system_items.length) || 6;
+        const sysItems = menuState.system_items || [];
+        const sysLen = sysItems.length || 10;
         if (button === "K1") menuState.cursor = (menuState.cursor - 1 + sysLen) % sysLen;
         else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % sysLen;
         else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 3; }
         else if (button === "K3") {
-          const cur = (menuState.system_items && menuState.system_items[menuState.cursor]) || {};
+          const cur = sysItems[menuState.cursor] || {};
           if (cur.id === "face_id") {
             menuState.mode = "FACE_ENROLL";
             menuState.face_enroll_msg = "请正对摄像头 (3s)";
@@ -1944,8 +1968,8 @@
         return;
       }
 
-      // 菜单模式背景：纯正哑光深色浮层
-      ctx.fillStyle = "rgba(10, 10, 12, 0.96)";
+      // 菜单模式背景：纯正工业哑光深灰 (100% 不透明，彻底消除底层透光闪烁)
+      ctx.fillStyle = "#0a0a0c";
       ctx.fillRect(0, 0, w, h);
 
       // 顶部极简信息栏
@@ -2185,80 +2209,122 @@
         ctx.fillText("[OK] 重新检测       [ESC] 返回", 30, 306);
 
       } else if (menuState.mode === "TOGGLES") {
+        const hwItems = menuState.hardware_items || [
+          { id: "servo_center", name: "舵机居中归位", val: "ACTION (90°, 90°)" },
+          { id: "servo_test", name: "舵机动作自检", val: "TEST 摇头点头自检" },
+          { id: "servo_sleep", name: "舵机休眠防抖", val: menuState.servo_sleeping ? "OFF (休眠卸力)" : "ON (通电保持)" },
+          { id: "mic", name: "麦克风收音", val: menuState.is_mic_muted ? "OFF (已静音)" : "ON (收音中)" },
+          { id: "track", name: "人脸视线跟随", val: menuState.face_tracking ? "ON (已开启)" : "OFF (已关闭)" },
+          { id: "gaze_mode", name: "视线算法模式", val: "九宫格灵动" },
+          { id: "proactive", name: "主动关怀搭话", val: "ON (已开启)" },
+          { id: "sfx", name: "萌宠情绪拟声", val: "ON (已开启)" }
+        ];
+
+        const total = hwItems.length;
+        const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
+
+        // 顶部标题与当前索引数字标牌 (例如 03/08)
         ctx.fillStyle = "#94949b";
         ctx.font = "bold 11px monospace";
         ctx.fillText("03 / HARDWARE", 16, 24);
-        ctx.fillStyle = "#686870";
-        ctx.fillText("SWITCH", 188, 24);
+        ctx.fillStyle = "#ff6700";
+        ctx.font = "bold 11px monospace";
+        const countTxt = `${String(curIdx + 1).padStart(2, '0')}/${String(total).padStart(2, '0')}`;
+        ctx.fillText(countTxt, 186, 24);
 
-        const toggleList = [
-          { name: "麦克风收音", on: !menuState.is_mic_muted },
-          { name: "人脸视线跟随", on: menuState.face_tracking },
-          { name: "舵机工作状态", on: !menuState.servo_sleeping },
-        ];
+        // 可视窗口滚动计算 (一屏显示 4 项，保证光标在可视区内，边界自动平滑卷动)
+        const maxVisible = 4;
+        let startIdx = 0;
+        if (total > maxVisible) {
+          if (curIdx < 2) {
+            startIdx = 0;
+          } else if (curIdx >= total - 2) {
+            startIdx = total - maxVisible;
+          } else {
+            startIdx = curIdx - 1;
+          }
+          startIdx = Math.max(0, Math.min(startIdx, total - maxVisible));
+        }
 
-        let cy = 52;
-        toggleList.forEach((tg, idx) => {
-          const isSel = (idx === menuState.cursor);
-          const statusTxt = tg.on ? "ON" : "OFF";
+        const visibleItems = hwItems.slice(startIdx, startIdx + maxVisible);
+        let cy = 44;
+        const cardH = 50;
+        const cardGap = 6;
+        const cardW = (total > maxVisible) ? 204 : 216;
+
+        visibleItems.forEach((it, vIdx) => {
+          const realIdx = startIdx + vIdx;
+          const isSel = (realIdx === curIdx);
 
           if (isSel) {
             ctx.fillStyle = "#ffffff";
-            roundRect(ctx, 12, cy, 216, 54, 8, true);
+            roundRect(ctx, 12, cy, cardW, cardH, 6, true);
             ctx.fillStyle = "#000000";
             ctx.font = "bold 13px sans-serif";
-            ctx.fillText(`0${idx + 1}  ${tg.name}`, 22, cy + 24);
+            ctx.fillText(`${String(realIdx + 1).padStart(2, '0')}  ${it.name}`, 22, cy + 20);
             ctx.fillStyle = "#55555c";
-            ctx.font = "11px sans-serif";
-            ctx.fillText(`当前状态: ${statusTxt}`, 22, cy + 44);
-
-            // 右侧胶囊标牌
+            ctx.font = "11px monospace";
+            ctx.fillText(String(it.val), 22, cy + 38);
             ctx.fillStyle = "#000000";
-            roundRect(ctx, 168, cy + 16, 44, 24, 4, true);
-            ctx.fillStyle = "#ffffff";
-            ctx.font = "bold 11px monospace";
-            ctx.fillText(statusTxt, 180, cy + 32);
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText("›", cardW, cy + 28);
           } else {
             ctx.fillStyle = "#121215";
             ctx.strokeStyle = "#222226";
             ctx.lineWidth = 1;
-            roundRect(ctx, 12, cy, 216, 54, 8, true);
+            roundRect(ctx, 12, cy, cardW, cardH, 6, true);
             ctx.stroke();
-
             ctx.fillStyle = "#d1d1d6";
             ctx.font = "bold 13px sans-serif";
-            ctx.fillText(`0${idx + 1}  ${tg.name}`, 22, cy + 24);
+            ctx.fillText(`${String(realIdx + 1).padStart(2, '0')}  ${it.name}`, 22, cy + 20);
             ctx.fillStyle = "#787880";
-            ctx.font = "11px sans-serif";
-            ctx.fillText(`当前状态: ${statusTxt}`, 22, cy + 44);
-
-            // 右侧胶囊标牌
-            ctx.fillStyle = "#222226";
-            roundRect(ctx, 168, cy + 16, 44, 24, 4, true);
-            ctx.fillStyle = tg.on ? "#10b981" : "#8e8e93";
-            ctx.font = "bold 11px monospace";
-            ctx.fillText(statusTxt, 180, cy + 32);
+            ctx.font = "11px monospace";
+            ctx.fillText(String(it.val), 22, cy + 38);
+            ctx.fillStyle = "#4a4a50";
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillText("›", cardW, cy + 28);
           }
-          cy += 66;
+          cy += (cardH + cardGap);
         });
 
+        // 极简工业细轨滚动条
+        if (total > maxVisible) {
+          const trackX = 224;
+          const trackY = 44;
+          const trackH = maxVisible * (cardH + cardGap) - cardGap;
+          ctx.fillStyle = "#1c1c20";
+          roundRect(ctx, trackX, trackY, 4, trackH, 2, true);
+          const thumbH = Math.max(28, Math.round(trackH * (maxVisible / total)));
+          const maxThumbScroll = trackH - thumbH;
+          const thumbY = trackY + Math.round((startIdx / (total - maxVisible)) * maxThumbScroll);
+          ctx.fillStyle = "#ff6700";
+          roundRect(ctx, trackX, thumbY, 4, thumbH, 2, true);
+        }
+
+        // 底部防遮挡实色保护底栏
+        ctx.fillStyle = "#0a0a0c";
+        ctx.fillRect(0, 280, 240, 40);
         ctx.strokeStyle = "#222226";
         ctx.beginPath();
-        ctx.moveTo(16, 288);
-        ctx.lineTo(224, 288);
+        ctx.moveTo(16, 284);
+        ctx.lineTo(224, 284);
         ctx.stroke();
         ctx.fillStyle = "#66666e";
         ctx.font = "10px sans-serif";
-        ctx.fillText("[▲▼] 移动    [OK] 切换    [ESC] 返回", 24, 306);
+        ctx.fillText("[▲▼] 移动    [OK] 切换/执行    [ESC] 返回", 24, 304);
 
       } else if (menuState.mode === "SYSTEM") {
         const sysItems = menuState.system_items || [
           { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定" },
+          { id: "face_clear", name: "重置主人面容", val: "RESET 清除面容" },
           { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗" },
-          { id: "version", name: "系统固件版本", val: menuState.version || "--" },
+          { id: "voice", name: "发音音色切换", val: "冰糖" },
+          { id: "volume", name: "系统播报音量", val: "80%" },
+          { id: "timeout", name: "屏幕息屏时间", val: "15秒" },
+          { id: "version", name: "系统固件版本", val: menuState.version || "v0.1.0" },
           { id: "update", name: "检查系统更新", val: menuState.update_status || "点击检查更新" },
-          { id: "restart", name: "重启机器人服务", val: "平滑重载" },
-          { id: "shutdown", name: "树莓派安全关机", val: "系统断电" }
+          { id: "restart", name: "重启机器人服务", val: "RESTART" },
+          { id: "shutdown", name: "树莓派安全关机", val: "POWER OFF" }
         ];
 
         const total = sysItems.length;
@@ -5580,13 +5646,19 @@
 
     // 定期轻量同步菜单与屏幕模式 (保持真机与仿真器、语音交互多端绝对一致)
     async function syncMenuState() {
-      if (Date.now() - lastLocalNavTime < 1200 || hwButtonQueue.length > 0) return;
+      if (Date.now() - lastLocalNavTime < 2500 || hwButtonQueue.length > 0) return;
       try {
         const res = await fetch("/api/menu/state");
         if (res.ok) {
           const data = await res.json();
           if (data) {
-            menuState = Object.assign(menuState, data);
+            // 当用户在操作菜单时 (非 FACE 模式)，绝不让后台定时轮询覆盖本地 cursor 与 mode，彻底消除反复跳变闪烁！
+            if (menuState.mode !== "FACE") {
+              const { cursor, mode, ...rest } = data;
+              menuState = Object.assign(menuState, rest);
+            } else {
+              menuState = Object.assign(menuState, data);
+            }
             if ((menuState.mode === "XIAOMI_QR" || menuState.mode === "QR_CODE") && menuState.qr_base64) {
               if (!qrCodeImg) {
                 qrCodeImg = new Image();

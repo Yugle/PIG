@@ -526,14 +526,11 @@ class MenuFSM:
             # 1. 处于默认灵动表情模式 (FACE)
             if self.current_mode == "FACE":
                 if button == "K3":
-                    if event_type == "long_press":
-                        # 长按确认 -> 激活主菜单
-                        self.current_mode = "MENU_MAIN"
-                        self.cursor = 0
-                        self._notify_listeners()
-                    else:
-                        # 短按确认 -> 一键快照问答/唤醒
-                        self._trigger_snapshot_action()
+                    # 点击确认键 -> 直接激活主菜单 (绝不触发快照发问答)
+                    self.current_mode = "MENU_MAIN"
+                    self.cursor = 0
+                    self._notify_listeners()
+                    return
                 elif button == "K4":
                     if event_type == "long_press":
                         # 长按返回 -> 舵机一键休眠切换
