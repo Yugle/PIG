@@ -1287,7 +1287,7 @@
         </div>
 
         <!-- 📷 电脑真实摄像头实时人脸注视追踪 HUD 监视小窗 -->
-        <div id="webcamHudModal" style="display:none; position:absolute; top:56px; left:12px; width:160px; background:rgba(13, 17, 23, 0.92); border:1px solid var(--cyan); border-radius:8px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:30; backdrop-filter:blur(6px);">
+        <div id="webcamHudModal" style="display:none; position:absolute; bottom:65px; left:20px; width:160px; background:rgba(13, 17, 23, 0.92); border:1px solid var(--cyan); border-radius:8px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:30; backdrop-filter:blur(6px);">
           <div style="background:rgba(0, 229, 255, 0.15); padding:4px 8px; font-size:0.75rem; color:var(--cyan); font-weight:600; display:flex; justify-content:space-between; align-items:center;">
             <span>📷 视觉注视 HUD</span>
             <span id="webcamFpsBadge" style="font-size:0.7rem; color:#7ee787;">0 FPS</span>
@@ -1310,34 +1310,6 @@
           <button class="btn" style="background:#ffb020; color:#0d1117; font-weight:bold; padding:5px 20px; border:none; border-radius:6px; cursor:pointer;" onclick="dismissAlarmModal()">👌 我知道了 / 关闭提醒</button>
         </div>
 
-        <!-- 🚗 M5 具身动力底盘无线 BLE 遥控 & 传感器 HUD 浮窗 -->
-        <div id="chassisHudPanel" style="position:absolute; bottom:16px; left:16px; width:218px; background:rgba(13, 17, 23, 0.86); border:1px solid rgba(0, 229, 255, 0.35); border-radius:12px; padding:10px; box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:15; backdrop-filter:blur(8px); display:flex; flex-direction:column; gap:7px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.74rem;">
-            <span style="font-weight:700; color:var(--cyan);">🚗 四轮 N20 仿真底盘</span>
-            <button onclick="resetChassisSim()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border-color); color:var(--text-main); border-radius:5px; padding:2px 6px; font-size:0.66rem; cursor:pointer;" title="将小车复位回桌面中心 (0, 0)">🔄 复位</button>
-          </div>
-          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; user-select:none;">
-            <div></div>
-            <button class="view-btn" style="padding:6px 0; font-weight:700;" onmousedown="startBtnDrive(0.85, 0)" onmouseup="stopBtnDrive()" onmouseleave="stopBtnDrive()" ontouchstart="event.preventDefault();startBtnDrive(0.85, 0)" ontouchend="stopBtnDrive()" title="前进 (快捷键 W)">W ▲</button>
-            <div></div>
-            <button class="view-btn" style="padding:6px 0; font-weight:700;" onmousedown="startBtnDrive(0, -0.85)" onmouseup="stopBtnDrive()" onmouseleave="stopBtnDrive()" ontouchstart="event.preventDefault();startBtnDrive(0, -0.85)" ontouchend="stopBtnDrive()" title="原地左转 (快捷键 A)">A ↺</button>
-            <button class="view-btn" style="padding:6px 0; font-weight:700; color:#f87171; border-color:rgba(248,113,113,0.4);" onclick="stopBtnDrive()" title="紧急刹车 (快捷键 Space)">⏹ 停</button>
-            <button class="view-btn" style="padding:6px 0; font-weight:700;" onmousedown="startBtnDrive(0, 0.85)" onmouseup="stopBtnDrive()" onmouseleave="stopBtnDrive()" ontouchstart="event.preventDefault();startBtnDrive(0, 0.85)" ontouchend="stopBtnDrive()" title="原地右转 (快捷键 D)">D ↻</button>
-            <div></div>
-            <button class="view-btn" style="padding:6px 0; font-weight:700;" onmousedown="startBtnDrive(-0.75, 0)" onmouseup="stopBtnDrive()" onmouseleave="stopBtnDrive()" ontouchstart="event.preventDefault();startBtnDrive(-0.75, 0)" ontouchend="stopBtnDrive()" title="后退 (快捷键 S)">S ▼</button>
-            <div></div>
-          </div>
-          <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.68rem; color:var(--text-sub); font-family:monospace; background:rgba(0,0,0,0.35); padding:4px 6px; border-radius:6px;">
-            <span id="chassisPoseText">(0.00, 0.00) 0°</span>
-            <span id="chassisTofText" style="color:#7ee787;">📡 200cm</span>
-          </div>
-          <div style="display:flex; justify-content:space-between; gap:4px; font-size:0.66rem;">
-            <button id="cliffGuardBtn" onclick="toggleChassisGuard('cliff')" style="flex:1; background:rgba(16,185,129,0.16); color:#34d399; border:1px solid rgba(16,185,129,0.4); border-radius:5px; padding:3px 4px; cursor:pointer;" title="开启后到桌子边缘会自动急刹回退">🛡️ 防跌落: 开</button>
-            <button id="tofGuardBtn" onclick="toggleChassisGuard('tof')" style="flex:1; background:rgba(16,185,129,0.16); color:#34d399; border:1px solid rgba(16,185,129,0.4); border-radius:5px; padding:3px 4px; cursor:pointer;" title="开启后前方 <12.5cm 激光测到杯子会自动急刹">🚧 激光防撞: 开</button>
-          </div>
-          <div id="chassisAlertBanner" style="display:none; font-size:0.68rem; color:#fbbf24; background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.4); border-radius:5px; padding:4px 6px; line-height:1.25;"></div>
-        </div>
-
         <!-- 3D 视窗角标：画中画屏幕特写 (可展开/折叠) -->
         <div class="pip-screen-container" id="pipContainer">
           <div class="pip-header">
@@ -1354,7 +1326,7 @@
               <button class="pip-hw-btn pip-btn-danger" id="btnK4" onclick="sendHwButton('K4')" title="K4 (返回 / 闭麦打断) [快捷键: Esc]">✕ 返回</button>
             </div>
             <div style="font-size: 0.65rem; color: var(--text-sub); text-align: center; margin-top: 4px; line-height: 1.2;">
-              待机 <b>WASD</b> 控车 · <b>M/Enter</b> 进菜单
+              按 <b>Enter / M</b> 打开菜单 | <b>W/S/Enter/Esc</b>
             </div>
           </div>
         </div>
@@ -2007,166 +1979,11 @@
       processHwButtonQueue();
     }
 
-    // ==========================================
-    // 🚗 M5 具身动力底盘键盘 WASD / 摇杆遥控控制器
-    // ==========================================
-    const chassisKeys = new Set();
-    let chassisHeartbeatTimer = null;
-    let chassisBtnActive = false;
-    let chassisTarget = {
-      x: 0, z: 0, yaw_deg: 0, linear: 0, angular: 0,
-      wheel_l: 0, wheel_r: 0, tof_mm: 2000,
-      cliff_left: false, cliff_right: false, cliff_guard: true, tof_guard: true
-    };
-    let chassisSmooth = { x: 0, z: 0, yaw_deg: 0 };
-    let alertHideTimer = null;
-
-    function applyChassisStateUI(st, isAlert = false) {
-      if (!st || typeof st.x === "undefined") return;
-      chassisTarget = Object.assign({}, chassisTarget, st);
-
-      const poseEl = document.getElementById("chassisPoseText");
-      if (poseEl) poseEl.innerText = `(${Number(st.x).toFixed(2)}, ${Number(st.z).toFixed(2)}) ${Math.round(st.yaw_deg || 0)}°`;
-
-      const tofEl = document.getElementById("chassisTofText");
-      if (tofEl) {
-        const cm = Math.round((st.tof_mm || 2000) / 10);
-        tofEl.innerText = `📡 ${cm}cm`;
-        tofEl.style.color = cm <= 16 ? "#f87171" : (cm <= 35 ? "#fbbf24" : "#7ee787");
-      }
-
-      const cgBtn = document.getElementById("cliffGuardBtn");
-      if (cgBtn && typeof st.cliff_guard === "boolean") {
-        cgBtn.innerText = st.cliff_guard ? "🛡️ 防跌落: 开" : "🛡️ 防跌落: 关";
-        cgBtn.style.background = st.cliff_guard ? "rgba(16,185,129,0.16)" : "rgba(255,255,255,0.06)";
-        cgBtn.style.color = st.cliff_guard ? "#34d399" : "#8b949e";
-      }
-
-      const tgBtn = document.getElementById("tofGuardBtn");
-      if (tgBtn && typeof st.tof_guard === "boolean") {
-        tgBtn.innerText = st.tof_guard ? "🚧 激光防撞: 开" : "🚧 激光防撞: 关";
-        tgBtn.style.background = st.tof_guard ? "rgba(16,185,129,0.16)" : "rgba(255,255,255,0.06)";
-        tgBtn.style.color = st.tof_guard ? "#34d399" : "#8b949e";
-      }
-
-      const alertBanner = document.getElementById("chassisAlertBanner");
-      if (alertBanner && st.guard_triggered && st.guard_message) {
-        alertBanner.style.display = "block";
-        alertBanner.innerText = st.guard_message;
-        if (alertHideTimer) clearTimeout(alertHideTimer);
-        alertHideTimer = setTimeout(() => { alertBanner.style.display = "none"; }, 2600);
-        if (isAlert && typeof playChirp === "function") playChirp("surprise_squeak");
-      }
-    }
-
-    function sendChassisMove(lin, ang) {
-      fetch("/api/chassis/move", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ linear: lin, angular: ang, duration: 0 })
-      }).then(r => r.json()).then(d => {
-        if (d && d.chassis) applyChassisStateUI(d.chassis);
-      }).catch(() => {});
-    }
-
-    function computeKeysVector() {
-      let lin = 0, ang = 0;
-      if (chassisKeys.has("w") || chassisKeys.has("arrowup")) lin += 0.85;
-      if (chassisKeys.has("s") || chassisKeys.has("arrowdown")) lin -= 0.75;
-      if (chassisKeys.has("a") || chassisKeys.has("arrowleft")) ang -= 0.85;
-      if (chassisKeys.has("d") || chassisKeys.has("arrowright")) ang += 0.85;
-      return { lin: Math.max(-1, Math.min(1, lin)), ang: Math.max(-1, Math.min(1, ang)) };
-    }
-
-    function syncChassisFromKeys() {
-      const { lin, ang } = computeKeysVector();
-      if (lin === 0 && ang === 0) {
-        if (chassisHeartbeatTimer) { clearInterval(chassisHeartbeatTimer); chassisHeartbeatTimer = null; }
-        fetch("/api/chassis/stop", { method: "POST" }).then(r => r.json()).then(d => {
-          if (d && d.chassis) applyChassisStateUI(d.chassis);
-        }).catch(() => {});
-      } else {
-        sendChassisMove(lin, ang);
-        if (!chassisHeartbeatTimer) {
-          chassisHeartbeatTimer = setInterval(() => {
-            const cur = computeKeysVector();
-            if (cur.lin === 0 && cur.ang === 0) {
-              clearInterval(chassisHeartbeatTimer);
-              chassisHeartbeatTimer = null;
-            } else {
-              sendChassisMove(cur.lin, cur.ang);
-            }
-          }, 350);
-        }
-      }
-    }
-
-    function startBtnDrive(lin, ang) {
-      chassisBtnActive = true;
-      sendChassisMove(lin, ang);
-      if (chassisHeartbeatTimer) clearInterval(chassisHeartbeatTimer);
-      chassisHeartbeatTimer = setInterval(() => {
-        if (chassisBtnActive) sendChassisMove(lin, ang);
-      }, 350);
-    }
-
-    function stopBtnDrive() {
-      chassisBtnActive = false;
-      chassisKeys.clear();
-      if (chassisHeartbeatTimer) { clearInterval(chassisHeartbeatTimer); chassisHeartbeatTimer = null; }
-      fetch("/api/chassis/stop", { method: "POST" }).then(r => r.json()).then(d => {
-        if (d && d.chassis) applyChassisStateUI(d.chassis);
-      }).catch(() => {});
-    }
-
-    function resetChassisSim() {
-      chassisKeys.clear();
-      chassisBtnActive = false;
-      if (chassisHeartbeatTimer) { clearInterval(chassisHeartbeatTimer); chassisHeartbeatTimer = null; }
-      fetch("/api/chassis/reset", { method: "POST" }).then(r => r.json()).then(d => {
-        if (d && d.chassis) applyChassisStateUI(d.chassis);
-        if (typeof playChirp === "function") playChirp("wake_chime");
-      }).catch(() => {});
-    }
-
-    function toggleChassisGuard(kind) {
-      const payload = kind === "cliff"
-        ? { cliff_guard: !chassisTarget.cliff_guard }
-        : { tof_guard: !chassisTarget.tof_guard };
-      fetch("/api/chassis/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      }).then(r => r.json()).then(d => {
-        if (d && d.chassis) applyChassisStateUI(d.chassis);
-      }).catch(() => {});
-    }
-
-    // 键盘全局快捷键监听 (待机FACE下 WASD/方向键/Space 控车; 菜单打开时自动切换为 K1/K2 菜单导航)
+    // 键盘全局快捷键监听 (W/S/Enter/M/Esc，包含长按自动重复节流保护)
     let lastKeyRepeatTime = 0;
-    const driveKeyNames = new Set(["w", "s", "a", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
-
     window.addEventListener("keydown", (e) => {
       const activeEl = document.activeElement;
       if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) return;
-
-      const k = e.key.toLowerCase();
-      const inMenu = menuState && menuState.mode && menuState.mode !== "FACE";
-
-      if (!inMenu && driveKeyNames.has(k)) {
-        e.preventDefault();
-        if (!chassisKeys.has(k)) {
-          chassisKeys.add(k);
-          syncChassisFromKeys();
-        }
-        return;
-      }
-
-      if (!inMenu && e.code === "Space") {
-        e.preventDefault();
-        stopBtnDrive();
-        return;
-      }
 
       if (e.repeat && Date.now() - lastKeyRepeatTime < 110) {
         e.preventDefault();
@@ -2190,18 +2007,6 @@
         e.preventDefault();
         sendHwButton("K4", "click");
       }
-    });
-
-    window.addEventListener("keyup", (e) => {
-      const k = e.key.toLowerCase();
-      if (chassisKeys.has(k)) {
-        chassisKeys.delete(k);
-        syncChassisFromKeys();
-      }
-    });
-
-    window.addEventListener("blur", () => {
-      if (chassisKeys.size > 0 || chassisBtnActive) stopBtnDrive();
     });
 
     // 允许通过鼠标直接点击屏幕画布进行交互 (支持点击版本号解密彩蛋)
@@ -3055,7 +2860,7 @@
     scene.background = new THREE.Color(0x0e131a);
 
     const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(0.14, 0.28, 0.54);
+    camera.position.set(0, 0.18, 0.42);
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
@@ -3065,7 +2870,7 @@
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.target.set(0, 0.10, 0);
+    controls.target.set(0, 0.085, 0);
 
     // 灯光
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
@@ -3077,87 +2882,13 @@
     scene.add(dirLight);
 
     const pointLight = new THREE.PointLight(0x00e5ff, 1.0, 0.6);
-    pointLight.position.set(0, 0.16, 0.1);
+    pointLight.position.set(0, 0.12, 0.1);
     scene.add(pointLight);
 
-    // 桌面仿真物理沙盘 (1.24m × 0.84m，四周亮青色边缘线标示悬崖边界)
-    const grid = new THREE.GridHelper(1.6, 32, 0x00e5ff, 0x21262d);
-    grid.position.y = -0.002;
+    // 网格底盘
+    const grid = new THREE.GridHelper(1, 20, 0x00e5ff, 0x21262d);
+    grid.position.y = 0;
     scene.add(grid);
-
-    const deskMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(1.24, 0.012, 0.84),
-      new THREE.MeshStandardMaterial({ color: 0x141b24, roughness: 0.75, metalness: 0.15 })
-    );
-    deskMesh.position.y = -0.006;
-    deskMesh.receiveShadow = true;
-    scene.add(deskMesh);
-
-    // 桌沿安全提示荧光边线
-    const deskEdgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.24, 0.002, 0.84));
-    const deskEdge = new THREE.LineSegments(deskEdgeGeo, new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.55 }));
-    deskEdge.position.y = 0.001;
-    scene.add(deskEdge);
-
-    // ArUco 回家锚点小标靶贴纸 (位于桌面原点 (0,0))
-    const arucoPad = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.055, 0.055),
-      new THREE.MeshBasicMaterial({ color: 0xe5e7eb })
-    );
-    arucoPad.rotation.x = -Math.PI / 2;
-    arucoPad.position.set(0, 0.0006, 0);
-    scene.add(arucoPad);
-    const arucoInner = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.036, 0.036),
-      new THREE.MeshBasicMaterial({ color: 0x111827 })
-    );
-    arucoInner.rotation.x = -Math.PI / 2;
-    arucoInner.position.set(0, 0.0009, 0);
-    scene.add(arucoInner);
-
-    // 桌面模拟障碍物 (精确对应后端 DEFAULT_DESK_OBSTACLES 坐标)
-    // 1. 陶瓷马克杯 (0.16, 0.28)
-    const mugGroup = new THREE.Group();
-    mugGroup.position.set(0.16, 0, 0.28);
-    const mugBody = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.040, 0.038, 0.092, 24),
-      new THREE.MeshStandardMaterial({ color: 0xf9fafb, roughness: 0.25, metalness: 0.05 })
-    );
-    mugBody.position.y = 0.046;
-    mugBody.castShadow = true;
-    mugGroup.add(mugBody);
-    const coffeeTop = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.035, 0.035, 0.004, 24),
-      new THREE.MeshStandardMaterial({ color: 0x4a2c16, roughness: 0.2 })
-    );
-    coffeeTop.position.y = 0.090;
-    mugGroup.add(coffeeTop);
-    const mugHandle = new THREE.Mesh(
-      new THREE.TorusGeometry(0.018, 0.0045, 10, 20, Math.PI),
-      new THREE.MeshStandardMaterial({ color: 0xf9fafb, roughness: 0.25 })
-    );
-    mugHandle.rotation.z = -Math.PI / 2;
-    mugHandle.position.set(0.038, 0.048, 0);
-    mugGroup.add(mugHandle);
-    scene.add(mugGroup);
-
-    // 2. 笔筒方块 (-0.24, 0.22)
-    const holderMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.072, 0.095, 0.072),
-      new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.55, metalness: 0.35 })
-    );
-    holderMesh.position.set(-0.24, 0.0475, 0.22);
-    holderMesh.castShadow = true;
-    scene.add(holderMesh);
-
-    // 3. 桌面摆件 (0.34, -0.16)
-    const toyMesh = new THREE.Mesh(
-      new THREE.DodecahedronGeometry(0.042, 0),
-      new THREE.MeshStandardMaterial({ color: 0xa371f7, roughness: 0.3, metalness: 0.2 })
-    );
-    toyMesh.position.set(0.34, 0.038, -0.16);
-    toyMesh.castShadow = true;
-    scene.add(toyMesh);
 
     // 材质与纹理定义
     const matWhite = new THREE.MeshStandardMaterial({ color: 0xf4f5f7, roughness: 0.35, metalness: 0.1 });
@@ -3165,9 +2896,6 @@
     const matBezel = new THREE.MeshStandardMaterial({ color: 0x101317, roughness: 0.6, metalness: 0.3 });
     const matLens = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.95 });
     const matSilver = new THREE.MeshStandardMaterial({ color: 0xc8cdd4, roughness: 0.25, metalness: 0.85 });
-    const matStainless = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.28, metalness: 0.88 });
-    const matBrass = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.85 });
-    const matRubber = new THREE.MeshStandardMaterial({ color: 0x111418, roughness: 0.85, metalness: 0.05 });
     const matServoBlue = new THREE.MeshStandardMaterial({ color: 0x194b99, roughness: 0.4, metalness: 0.2 });
     const matLedRed = new THREE.MeshBasicMaterial({ color: 0xff2233 });
     const matLedGreen = new THREE.MeshBasicMaterial({ color: 0x00ff66 });
@@ -3183,123 +2911,9 @@
       toneMapped: false
     });
 
-    // 0. 整车移动根坐标系 (robotRootGroup: X/Z 位移 + Y 航向旋转)
-    const robotRootGroup = new THREE.Group();
-    scene.add(robotRootGroup);
-
-    // 0.5 不锈钢 93×90mm 双层四轮 N20 动力底盘 (高 49mm, 夹层 20mm)
-    const chassisGroup = new THREE.Group();
-    robotRootGroup.add(chassisGroup);
-
-    // 下层不锈钢底板 (66mm x 86mm)
-    const lowerDeck = new THREE.Mesh(new THREE.BoxGeometry(0.066, 0.002, 0.086), matStainless);
-    lowerDeck.position.y = 0.017;
-    lowerDeck.castShadow = true;
-    chassisGroup.add(lowerDeck);
-
-    // 4 根黄铜六角支撑柱 (层高 20mm)
-    const standoffGeom = new THREE.CylinderGeometry(0.0025, 0.0025, 0.020, 6);
-    [[-0.024, -0.028], [0.024, -0.028], [-0.024, 0.028], [0.024, 0.028]].forEach(p => {
-      const st = new THREE.Mesh(standoffGeom, matBrass);
-      st.position.set(p[0], 0.028, p[1]);
-      chassisGroup.add(st);
-    });
-
-    // 夹层内部隐藏模块 (蓝色 ESP32-C3 + 紫色 DRV8833 + 黑色绝缘垫)
-    const espBoard = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.004, 0.023), matServoBlue);
-    espBoard.position.set(-0.012, 0.021, 0.006);
-    chassisGroup.add(espBoard);
-    const drvBoard = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.004, 0.018), new THREE.MeshStandardMaterial({ color: 0x6b21a8, roughness: 0.4 }));
-    drvBoard.position.set(0.012, 0.021, -0.008);
-    chassisGroup.add(drvBoard);
-
-    // 上层不锈钢顶板 (90mm × 93mm，高度 40mm 处)
-    const upperDeck = new THREE.Mesh(new THREE.BoxGeometry(0.090, 0.002, 0.093), matStainless);
-    upperDeck.position.y = 0.039;
-    upperDeck.castShadow = true;
-    upperDeck.receiveShadow = true;
-    chassisGroup.add(upperDeck);
-
-    // 上方隐藏充电宝/电池夹层块 (位于不锈钢顶板与树莓派之间，紧贴树莓派下方，带 Micro-USB 供电短线)
-    const pwrBankMesh = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.012, 0.084), matDark);
-    pwrBankMesh.position.set(0, 0.046, 0);
-    pwrBankMesh.castShadow = true;
-    chassisGroup.add(pwrBankMesh);
-
-    // 外部唯一的 1 根 Micro-USB 黑色供电短线 (从充电宝侧孔弯上去插入树莓派供电口)
-    const pwrWireCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.032, 0.046, -0.032),
-      new THREE.Vector3(-0.046, 0.052, -0.032),
-      new THREE.Vector3(-0.040, 0.063, -0.032)
-    ]);
-    const pwrWireMesh = new THREE.Mesh(
-      new THREE.TubeGeometry(pwrWireCurve, 12, 0.0018, 8, false),
-      matRubber
-    );
-    chassisGroup.add(pwrWireMesh);
-
-    // 4 只微型 N20 减速电机 + 大花纹橡胶轮胎 (轮半径 21mm，底面正好压在 y=0 桌面)
-    const wheelsLeft = [];
-    const wheelsRight = [];
-    function createWheelAssembly(isLeftSide, zPos) {
-      const sideSign = isLeftSide ? 1 : -1; // +X 为机器人左侧, -X 为右侧
-      const motor = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.012, 0.012), matBrass);
-      motor.position.set(sideSign * 0.026, 0.021, zPos);
-      chassisGroup.add(motor);
-
-      const wheelGroup = new THREE.Group();
-      wheelGroup.position.set(sideSign * 0.043, 0.021, zPos);
-
-      const tireGeo = new THREE.CylinderGeometry(0.021, 0.021, 0.017, 24);
-      tireGeo.rotateZ(Math.PI / 2);
-      const tire = new THREE.Mesh(tireGeo, matRubber);
-      tire.castShadow = true;
-      wheelGroup.add(tire);
-
-      const hubGeo = new THREE.CylinderGeometry(0.013, 0.013, 0.0175, 16);
-      hubGeo.rotateZ(Math.PI / 2);
-      const hub = new THREE.Mesh(hubGeo, matWhite);
-      wheelGroup.add(hub);
-
-      // 辐条刻度条 (方便肉眼清晰看到轮胎正反转滚动)
-      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.022, 0.003), matDark);
-      wheelGroup.add(spoke);
-
-      chassisGroup.add(wheelGroup);
-      if (isLeftSide) wheelsLeft.push(wheelGroup);
-      else wheelsRight.push(wheelGroup);
-    }
-    createWheelAssembly(true, 0.028);
-    createWheelAssembly(true, -0.028);
-    createWheelAssembly(false, 0.028);
-    createWheelAssembly(false, -0.028);
-
-    // 车头防跌落双红外探头指示点 (TCRT5000) & 前向 VL53L0X 激光雷达光束
-    const cliffLedL = new THREE.Mesh(new THREE.SphereGeometry(0.0025, 10, 10), matLedGreen);
-    cliffLedL.position.set(0.036, 0.016, 0.046);
-    chassisGroup.add(cliffLedL);
-    const cliffLedR = new THREE.Mesh(new THREE.SphereGeometry(0.0025, 10, 10), matLedGreen);
-    cliffLedR.position.set(-0.036, 0.016, 0.046);
-    chassisGroup.add(cliffLedR);
-
-    const tofModule = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.008, 0.005), new THREE.MeshStandardMaterial({ color: 0x7c3aed }));
-    tofModule.position.set(0, 0.036, 0.047);
-    chassisGroup.add(tofModule);
-
-    const laserMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.35 });
-    const laserBeamGeo = new THREE.CylinderGeometry(0.001, 0.006, 1.0, 8);
-    laserBeamGeo.rotateX(Math.PI / 2);
-    laserBeamGeo.translate(0, 0, 0.5); // 原点在探头发射口，向 +Z 延伸
-    const laserBeamMesh = new THREE.Mesh(laserBeamGeo, laserMat);
-    laserBeamMesh.position.set(0, 0.036, 0.050);
-    laserBeamMesh.scale.z = 0.25;
-    chassisGroup.add(laserBeamMesh);
-
-    // 1. 树莓派 3B 机箱底座 (Pi 3B Base Case，稳稳坐落于动力底盘顶面电池之上)
+    // 1. 树莓派 3B 机箱底座 (Pi 3B Base Case)
     // 真实尺寸: 宽 76mm (X), 高 28mm (Y), 深 102mm (Z)
     const baseGroup = new THREE.Group();
-    baseGroup.position.y = 0.052; // 坐在底盘+扁平电源上方
-    robotRootGroup.add(baseGroup);
     
     // 底座外壳主体 (白色哑光 ABS)
     const baseGeom = new THREE.BoxGeometry(0.076, 0.026, 0.102);
@@ -3376,6 +2990,8 @@
     servoPanMesh.position.set(0, 0.028 + 0.008, 0);
     baseGroup.add(servoPanMesh);
 
+    scene.add(baseGroup);
+
     // 2. 脖子水平旋转轴 (Yaw / Pan 关节，由水平舵机驱动)
     const neckYawGroup = new THREE.Group();
     neckYawGroup.position.set(0, 0.036, 0);
@@ -3448,14 +3064,12 @@
 
     // 视角切换与画中画切换控制
     function setCameraView(view) {
-      const rx = robotRootGroup.position.x;
-      const rz = robotRootGroup.position.z;
       if (view === "close") {
-        camera.position.set(rx + 0.08, 0.22, rz + 0.30);
-        controls.target.set(rx, 0.13, rz);
+        camera.position.set(0, 0.13, 0.26);
+        controls.target.set(0, 0.088, 0);
       } else {
-        camera.position.set(rx + 0.14, 0.28, rz + 0.54);
-        controls.target.set(rx, 0.10, rz);
+        camera.position.set(0, 0.18, 0.40);
+        controls.target.set(0, 0.088, 0);
       }
       controls.update();
     }
@@ -5185,16 +4799,8 @@
         return;
       }
 
-      if (ev.type === "chassis_state" || ev.type === "chassis_alert") {
-        if (ev.chassis) applyChassisStateUI(ev.chassis, ev.type === "chassis_alert");
-        return;
-      }
-
       if (ev.type === "connected" || ev.type === "init") {
-        if (ev.status) {
-          updateHardwareStatusUI(ev.status);
-          if (ev.status.chassis) applyChassisStateUI(ev.status.chassis);
-        }
+        if (ev.status) updateHardwareStatusUI(ev.status);
         return;
       }
 
@@ -5856,7 +5462,6 @@
     initDigitalTwinSync();
     fetchHardwareStatus();
     fetchProactiveCareStatus();
-    fetch("/api/chassis").then(r => r.json()).then(d => { if (d && d.chassis) applyChassisStateUI(d.chassis); }).catch(() => {});
 
     // ==========================================
     // 3. 麦克风录音与百度 ASR 语音识别
@@ -5999,53 +5604,6 @@
       // 映射到弧度 (90度为中间)
       neckYawGroup.rotation.y = -THREE.MathUtils.degToRad(currentPan - 90);
       headPitchGroup.rotation.x = THREE.MathUtils.degToRad(currentTilt - 90);
-
-      // 🚗 平滑同步 3D 底盘桌面位移、航向角、四轮差速旋转与激光测距视觉反馈
-      if (typeof chassisTarget !== "undefined" && typeof robotRootGroup !== "undefined") {
-        const prevX = robotRootGroup.position.x;
-        const prevZ = robotRootGroup.position.z;
-
-        chassisSmooth.x += (chassisTarget.x - chassisSmooth.x) * 0.28;
-        chassisSmooth.z += (chassisTarget.z - chassisSmooth.z) * 0.28;
-
-        // 最短角度路径插值 yaw
-        let dYaw = ((chassisTarget.yaw_deg - chassisSmooth.yaw_deg + 540) % 360) - 180;
-        chassisSmooth.yaw_deg = (chassisSmooth.yaw_deg + dYaw * 0.28 + 360) % 360;
-
-        robotRootGroup.position.x = chassisSmooth.x;
-        robotRootGroup.position.z = chassisSmooth.z;
-        robotRootGroup.rotation.y = THREE.MathUtils.degToRad(chassisSmooth.yaw_deg);
-
-        // 视点柔和伴随底盘移动，让用户边拖 OrbitControls 边跟拍也不会丢视角
-        const deltaX = robotRootGroup.position.x - prevX;
-        const deltaZ = robotRootGroup.position.z - prevZ;
-        if (Math.abs(deltaX) > 1e-6 || Math.abs(deltaZ) > 1e-6) {
-          camera.position.x += deltaX;
-          camera.position.z += deltaZ;
-          controls.target.x += deltaX;
-          controls.target.z += deltaZ;
-        }
-
-        // 四轮转动视觉同步
-        const wl = Number(chassisTarget.wheel_l || 0);
-        const wr = Number(chassisTarget.wheel_r || 0);
-        wheelsLeft.forEach(w => { w.rotation.x += wl * 0.18; });
-        wheelsRight.forEach(w => { w.rotation.x += wr * 0.18; });
-
-        // 激光测距束长度与警戒色彩同步
-        if (typeof laserBeamMesh !== "undefined" && laserBeamMesh) {
-          const distM = Math.max(0.03, Math.min(0.45, (chassisTarget.tof_mm || 2000) / 1000.0));
-          laserBeamMesh.scale.z = distM;
-          laserBeamMesh.material.color.setHex(
-            (chassisTarget.tof_mm || 2000) <= 140 ? 0xff3b30 : ((chassisTarget.tof_mm || 2000) <= 280 ? 0xfbbf24 : 0x00e5ff)
-          );
-        }
-        // TCRT5000 悬崖探头指示灯 (亮红灯报警)
-        if (cliffLedL && cliffLedR) {
-          cliffLedL.material = chassisTarget.cliff_left ? matLedRed : matLedGreen;
-          cliffLedR.material = chassisTarget.cliff_right ? matLedRed : matLedGreen;
-        }
-      }
 
       // 保持 Canvas 2.4" 面部纹理高帧率 60 FPS 呼吸与微表情动力学
       if (typeof renderEyeFrame === "function") {

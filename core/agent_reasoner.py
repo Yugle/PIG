@@ -55,8 +55,7 @@ ACTION_SKILLS = {
     "play_action", "execute_action", "do_action", "run_action", "perform_action",
     "pomodoro", "xiaomi_iot", "med_tracker", "dice_roll",
     "install_skill", "uninstall_skill", "create_skill",
-    "register_master_face", "register_face", "record_face", "bind_master_face", "face_id",
-    "chassis_control"
+    "register_master_face", "register_face", "record_face", "bind_master_face", "face_id"
 }
 
 def is_action_skill(tool_name: str, tool_args: Dict[str, Any]) -> bool:

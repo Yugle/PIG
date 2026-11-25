@@ -364,20 +364,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         # 静默所有高频 HTTP 访问日志，避免控制台与后台任务缓冲区溢出导致容器杀进程
         return
 
-    def _read_json_body(self):
-        content_length = int(self.headers.get("Content-Length", 0))
-        post_data = self.rfile.read(content_length) if content_length > 0 else b""
-        try:
-            return json.loads(post_data.decode("utf-8")) if post_data else {}
-        except Exception:
-            return {}
-
-    def _send_json(self, payload, status_code=200):
-        self.send_response(status_code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
-
     def do_HEAD(self):
         if self.path in ["/settings", "/settings.html"]:
             self.send_response(200)
@@ -726,12 +712,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "enabled": cfg.get("radar_presence_wake", True),
                 "away_sleep_timeout_sec": idle_fsm.away_sleep_timeout_sec
             }, ensure_ascii=False).encode("utf-8"))
-            return
-
-        # 获取 3D 具身动力底盘状态 (位置、航向、轮速、防跌落/激光测距)
-        if self.path in ["/api/chassis", "/api/chassis/status"]:
-            ch = hardware_agent.get_chassis_state() if hardware_agent else {}
-            self._send_json({"status": "ok", "chassis": ch})
             return
 
 
@@ -1375,34 +1355,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "detected": detected,
                 "message": f"毫米波雷达状态已切换为: {'有人在场 (0.1s极速中断唤醒)' if detected else '无人离席 (启动自动低功耗休眠倒计时)'}"
             }, ensure_ascii=False).encode("utf-8"))
-            return
-
-        # 具身动力底盘遥控与配置 POST 接口
-        if self.path == "/api/chassis/move":
-            body = self._read_json_body()
-            lin = float(body.get("linear", 0.0))
-            ang = float(body.get("angular", 0.0))
-            dur = float(body.get("duration", 0.0))
-            st = hardware_agent.move_chassis(lin, ang, dur) if hardware_agent else {}
-            self._send_json({"status": "ok", "chassis": st})
-            return
-
-        if self.path == "/api/chassis/stop":
-            st = hardware_agent.stop_chassis() if hardware_agent else {}
-            self._send_json({"status": "ok", "chassis": st})
-            return
-
-        if self.path == "/api/chassis/reset":
-            st = hardware_agent.reset_chassis() if hardware_agent else {}
-            self._send_json({"status": "ok", "chassis": st})
-            return
-
-        if self.path == "/api/chassis/config":
-            body = self._read_json_body()
-            cliff_g = body.get("cliff_guard")
-            tof_g = body.get("tof_guard")
-            st = hardware_agent.set_chassis_guards(cliff_guard=cliff_g, tof_guard=tof_g) if hardware_agent else {}
-            self._send_json({"status": "ok", "chassis": st})
             return
 
 
