@@ -11,7 +11,7 @@ pyaudio>=0.2.14
 sherpa-onnx>=1.10.0
 pypinyin>=0.51.0
 openwakeword>=0.5.0
-pyncm>=1.7.0
+# pyncm>=1.7.0  # 可选：netease_music 已内置 WEAPI，不依赖 pyncm
 qrcode>=7.4.2
 
 # Remote API Server
