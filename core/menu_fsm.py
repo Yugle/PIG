@@ -413,7 +413,7 @@ class MenuFSM:
         from core.version import version_manager
         self.version_manager = version_manager
         self.version_str = self.version_manager.current_version
-        self.update_status = "点击检查更新"
+        self.update_status = "检查更新"
         self._sync_system_items()
 
         # 诊断体检数据缓存
@@ -539,7 +539,7 @@ class MenuFSM:
             {"id": "volume", "icon": "volume", "name": "播报音量", "val": f"{vol}%", "type": "cycle"},
             {"id": "timeout", "icon": "clock", "name": "息屏时间", "val": timeout_txt, "type": "cycle"},
             {"id": "version", "icon": "chip", "name": "固件版本", "val": ver_val, "type": "info"},
-            {"id": "update", "icon": "cloud", "name": "系统更新", "val": self.update_status, "type": "action"},
+            {"id": "update", "icon": "cloud", "name": "检查更新", "val": self.update_status, "type": "action"},
             {"id": "restart", "icon": "restart", "name": "重启服务", "val": "", "type": "action"},
             {"id": "shutdown", "icon": "power", "name": "安全关机", "val": "", "type": "action"},
         ]
@@ -860,9 +860,9 @@ class MenuFSM:
         threading.Thread(target=_worker, daemon=True, name="FaceEnrollWorker").start()
 
     def check_system_update_async(self):
-        """后台异步真实检查 OTA 系统更新 (通过 git remote tags 真实探测，零 mock)"""
+        """后台异步真实检查 OTA 更新 (通过 git remote tags 真实探测，优先 origin/Gitee)"""
         with self._lock:
-            self.update_status = "检查远程更新中..."
+            self.update_status = "检查中..."
             self._sync_system_items()
             self._notify_listeners()
 
@@ -870,13 +870,13 @@ class MenuFSM:
             try:
                 res = self.version_manager.check_update_sync()
                 with self._lock:
-                    self.update_status = res.get("status", "已是最新版本")
+                    self.update_status = res.get("status", "已是最新")
                     self.version_str = self.version_manager.current_version
                     self._sync_system_items()
                     self._notify_listeners()
-            except Exception as e:
+            except Exception:
                 with self._lock:
-                    self.update_status = f"检查出错: {e}"
+                    self.update_status = "检查失败"
                     self._sync_system_items()
                     self._notify_listeners()
 
@@ -1614,7 +1614,7 @@ class MenuFSM:
                     is_selected = (idx == cur_idx)
                     item_type = item.get("type", "")
                     r_val = str(item.get("val", ""))
-                    show_badge = item_type in ["cycle", "info"] or (bool(r_val) and item_type == "action" and r_val != "点击检查更新")
+                    show_badge = item_type in ["cycle", "info"] or (bool(r_val) and item_type == "action" and r_val not in ("点击检查更新", "检查更新"))
                     r_type = "badge" if show_badge else "chevron"
 
                     _draw_modern_tile(

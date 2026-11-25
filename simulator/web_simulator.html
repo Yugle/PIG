@@ -1722,7 +1722,7 @@
       servo_sleeping: false,
       local_ip: location.hostname || "127.0.0.1",
       version: "--",
-      update_status: "点击检查更新",
+      update_status: "检查更新",
       qr_base64: "",
       main_menu_items: [
         { id: "qr", icon: "wifi", num: "01", title: "无线与配网", desc: "AP热点配网 / 查IP / 手机设置" },
@@ -1758,9 +1758,9 @@
         { id: "volume", name: "播报音量", val: "80%", type: "cycle" },
         { id: "timeout", name: "息屏时间", val: "15秒", type: "cycle" },
         { id: "version", name: "固件版本", val: "v0.1.0", type: "info" },
-        { id: "update", name: "检查系统更新", val: "点击检查更新", type: "action" },
-        { id: "restart", name: "重启机器人服务", val: "RESTART", type: "action" },
-        { id: "shutdown", name: "树莓派安全关机", val: "POWER OFF", type: "action" }
+        { id: "update", name: "检查更新", val: "检查更新", type: "action" },
+        { id: "restart", name: "重启服务", val: "", type: "action" },
+        { id: "shutdown", name: "安全关机", val: "", type: "action" }
       ],
       doctor: {
         wifi_ip: location.hostname,
@@ -2053,7 +2053,7 @@
             menuState.face_enroll_msg = "请正对摄像头 (3s)";
             menuState.face_enroll_step = 3;
           } else if (cur.id === "update") {
-            cur.val = "检查更新中...";
+            cur.val = "检查中...";
             fetch("/api/system/update_check", { method: "POST" })
               .then(r => r.json())
               .then(d => {
@@ -2871,7 +2871,7 @@
               { id: "volume", icon: "volume", name: "播报音量", val: "80%", type: "cycle" },
               { id: "timeout", icon: "clock", name: "息屏时间", val: "15秒", type: "cycle" },
               { id: "version", icon: "chip", name: "固件版本", val: menuState.version || "v0.1.0", type: "info" },
-              { id: "update", icon: "cloud", name: "系统更新", val: menuState.update_status || "点击检查更新", type: "action" },
+              { id: "update", icon: "cloud", name: "检查更新", val: menuState.update_status || "检查更新", type: "action" },
               { id: "restart", icon: "restart", name: "重启服务", val: "", type: "action" },
               { id: "shutdown", icon: "power", name: "安全关机", val: "", type: "action" }
             ]);
@@ -2911,7 +2911,7 @@
           if (cardY + cardH >= 40 && cardY <= 320) {
             const isSel = (idx === curIdx);
             const rVal = it.val !== undefined ? String(it.val) : "";
-            const showBadge = (it.type === "cycle" || it.type === "info" || (rVal && it.type === "action" && rVal !== "点击检查更新"));
+            const showBadge = (it.type === "cycle" || it.type === "info" || (rVal && it.type === "action" && rVal !== "点击检查更新" && rVal !== "检查更新"));
             const rType = showBadge ? "badge" : "chevron";
             drawCanvasModernTile(ctx, 12, cardY, cardW, cardH, it.icon || "settings", it.name, rType, rVal, isSel);
           }

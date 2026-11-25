@@ -139,13 +139,13 @@ def check_ota_update(timeout_sec: float = 8.0) -> Dict:
                 "has_update": False,
                 "current_version": current_ver,
                 "latest_version": current_ver,
-                "status": f"检查失败 ({error_msg})"
+                "status": "检查失败"
             }
         return {
             "has_update": False,
             "current_version": current_ver,
             "latest_version": current_ver,
-            "status": f"已是最新版本 ({current_ver})"
+            "status": "已是最新"
         }
 
     # 解析所有合规的语义化 Tag
@@ -160,7 +160,7 @@ def check_ota_update(timeout_sec: float = 8.0) -> Dict:
             "has_update": False,
             "current_version": current_ver,
             "latest_version": current_ver,
-            "status": f"已是最新版本 ({current_ver})"
+            "status": "已是最新"
         }
 
     # 排序找到最高版本
@@ -172,14 +172,14 @@ def check_ota_update(timeout_sec: float = 8.0) -> Dict:
             "has_update": True,
             "current_version": current_ver,
             "latest_version": latest_tag,
-            "status": f"发现新固件 {latest_tag}"
+            "status": f"新版 {latest_tag}"
         }
     else:
         return {
             "has_update": False,
             "current_version": current_ver,
             "latest_version": latest_tag,
-            "status": f"已是最新版本 ({current_ver})"
+            "status": "已是最新"
         }
 
 
@@ -236,7 +236,7 @@ class VersionManager:
     def __init__(self):
         self._lock = threading.RLock()
         self._current_version = get_current_version()
-        self._update_status = "已是最新版本"
+        self._update_status = "已是最新"
         self._has_update = False
         self._latest_version = self._current_version
 
