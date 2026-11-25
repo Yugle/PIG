@@ -516,6 +516,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "robot_name": cur_cfg.get("bot_name") or cur_cfg.get("robot_name", "PIG"),
                 "user_name": cur_cfg.get("user_name", "胖虎"),
                 "mimo_voice": cur_cfg.get("mimo_voice", "冰糖"),
+                "wakeword_keywords": cur_cfg.get("wakeword_keywords", ["你好小猪", "小猪小猪", "小猪同学"]),
                 "face_tracking": hardware_agent.cfg.get("face_tracking", True),
                 "is_mic_muted": menu_fsm.is_mic_muted,
                 "servo_sleeping": menu_fsm.is_servo_sleeping,
@@ -1013,7 +1014,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         cur_cfg = json.load(f)
                 else:
                     cur_cfg = {}
-                for k in ["api_key", "llm_model", "robot_name", "bot_name", "user_name", "mimo_voice", "pan_trim", "tilt_trim"]:
+                for k in ["api_key", "llm_model", "robot_name", "bot_name", "user_name", "mimo_voice", "pan_trim", "tilt_trim", "wakeword_keywords"]:
                     if k in body:
                         cur_cfg[k] = body[k]
                 if "face_tracking" in body:

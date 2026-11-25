@@ -411,6 +411,10 @@
         <option value="温柔男声">温柔男声</option>
       </select>
     </div>
+    <div class="form-group">
+      <label>中文语音唤醒词 (逗号分隔，免训练直换)</label>
+      <input type="text" id="wakeKeywordsInput" value="你好小猪, 小猪小猪, 小猪同学" placeholder="你好小猪, 小猪小猪" />
+    </div>
     <button class="btn btn-secondary" onclick="savePersonaConfig()">保存称呼与人设</button>
   </section>
 
@@ -573,6 +577,10 @@
           if (data.robot_name) document.getElementById("robotNameInput").value = data.robot_name;
           if (data.user_name) document.getElementById("userNameInput").value = data.user_name;
           if (data.mimo_voice) document.getElementById("voiceSelect").value = data.mimo_voice;
+          if (data.wakeword_keywords) {
+            const kwStr = Array.isArray(data.wakeword_keywords) ? data.wakeword_keywords.join(", ") : data.wakeword_keywords;
+            document.getElementById("wakeKeywordsInput").value = kwStr;
+          }
           
           document.getElementById("micSwitch").checked = !data.is_mic_muted;
           document.getElementById("trackingSwitch").checked = !!data.face_tracking;
@@ -621,11 +629,12 @@
       const robot_name = document.getElementById("robotNameInput").value.trim();
       const user_name = document.getElementById("userNameInput").value.trim();
       const mimo_voice = document.getElementById("voiceSelect").value;
+      const wakeword_keywords = document.getElementById("wakeKeywordsInput").value.trim();
       try {
         const res = await fetch("/api/settings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ robot_name, user_name, mimo_voice })
+          body: JSON.stringify({ robot_name, user_name, mimo_voice, wakeword_keywords })
         });
         if (res.ok) showToast("人设已同步");
       } catch (e) {
