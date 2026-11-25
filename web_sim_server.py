@@ -443,7 +443,8 @@ if hardware_agent and hardware_agent.hal:
             from drivers.eye_renderer import EyeRenderer
             renderer = EyeRenderer()
             last_black = False
-            print("📺 [PhysicalScreen] 物理屏幕渲染线程已启动 (240x320)")
+            last_frame_bytes = None
+            print("📺 [PhysicalScreen] 物理屏幕渲染线程已启动 (240x320, 脏帧去重)")
             while True:
                 try:
                     if getattr(menu_fsm, "_shutting_down", False):
@@ -452,6 +453,7 @@ if hardware_agent and hardware_agent.hal:
                         if not last_black:
                             hardware_agent.hal.display_face(Image.new("RGB", (240, 320), (0, 0, 0)))
                             last_black = True
+                            last_frame_bytes = None
                         time.sleep(0.15)
                         continue
                     last_black = False
@@ -461,10 +463,13 @@ if hardware_agent and hardware_agent.hal:
                     else:
                         frame = Image.new("RGB", (240, 320), (10, 12, 16))
                     frame = menu_fsm.render_pil_overlay(frame)
-                    hardware_agent.hal.display_face(frame)
+                    frame_bytes = frame.tobytes()
+                    if frame_bytes != last_frame_bytes:
+                        hardware_agent.hal.display_face(frame)
+                        last_frame_bytes = frame_bytes
                 except Exception as e:
                     print(f"⚠️ [PhysicalScreen] 渲染异常: {e}")
-                time.sleep(0.07)
+                time.sleep(0.05)
 
         threading.Thread(target=_physical_screen_render_loop, daemon=True).start()
 
