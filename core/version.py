@@ -6,14 +6,36 @@ Zero-mock implementation:
 - Compares SemVer versions dynamically.
 """
 
+import json
 import os
 import re
 import subprocess
 import threading
+import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 DIRECTORY = Path(__file__).resolve().parent.parent
+
+
+def get_ota_url() -> str:
+    """
+    获取自定义 OTA 版本检查 URL（如部署在 Vercel 的 https://ota.yourdomain.com/version.json）。
+    优先级: 环境变量 PIG_OTA_URL > config.json 中的 ota_url。
+    """
+    env_url = os.environ.get("PIG_OTA_URL", "").strip()
+    if env_url:
+        return env_url
+    cfg_file = DIRECTORY / "config.json"
+    if cfg_file.exists():
+        try:
+            data = json.loads(cfg_file.read_text(encoding="utf-8"))
+            url = str(data.get("ota_url", "")).strip()
+            if url:
+                return url
+        except Exception:
+            pass
+    return ""
 
 
 def parse_semver(tag_str: str) -> Tuple[int, int, int]:
@@ -94,12 +116,67 @@ def get_current_version() -> str:
     return "v0.1.0-dev"
 
 
+def _build_check_result(current_ver: str, latest_tag: str, changelog: str = "") -> Dict:
+    """根据当前版本与远端最新版本构造统一返回结构"""
+    current_tuple = parse_semver(current_ver)
+    latest_tuple = parse_semver(latest_tag)
+    if latest_tuple > current_tuple:
+        res = {
+            "has_update": True,
+            "current_version": current_ver,
+            "latest_version": latest_tag,
+            "status": f"新版 {latest_tag}",
+        }
+    else:
+        res = {
+            "has_update": False,
+            "current_version": current_ver,
+            "latest_version": latest_tag or current_ver,
+            "status": "已是最新",
+        }
+    if changelog:
+        res["changelog"] = changelog
+    return res
+
+
+def check_ota_via_url(ota_url: str, current_ver: str, timeout_sec: float = 4.0) -> Optional[Dict]:
+    """
+    通过 Vercel 等静态 HTTPS 接口检查 version.json。
+    成功返回结果字典，失败返回 None（由调用方自动回退到 Git 探测）。
+    """
+    try:
+        req = urllib.request.Request(
+            ota_url,
+            headers={"User-Agent": "PIG-Robot-OTA/1.0", "Cache-Control": "no-cache"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            if resp.status != 200:
+                return None
+            data = json.loads(resp.read().decode("utf-8"))
+        latest_tag = str(data.get("latest_version") or data.get("version") or "").strip()
+        if not latest_tag or parse_semver(latest_tag) <= (0, 0, 0):
+            return None
+        changelog = str(data.get("changelog") or "").strip()
+        res = _build_check_result(current_ver, latest_tag, changelog=changelog)
+        res["source"] = "vercel"
+        return res
+    except Exception:
+        return None
+
+
 def check_ota_update(timeout_sec: float = 8.0) -> Dict:
     """
-    真实检查远程 OTA 更新 (通过 git ls-remote --tags 探测远程最新标签)
+    真实检查远程 OTA 更新:
+    1. 若配置了 ota_url（如 Vercel 自定义域名），优先请求 version.json
+    2. 未配置或请求失败时，回退至 git ls-remote --tags (origin / github)
     """
     current_ver = get_current_version()
-    current_tuple = parse_semver(current_ver)
+
+    ota_url = get_ota_url()
+    if ota_url:
+        url_res = check_ota_via_url(ota_url, current_ver, timeout_sec=min(timeout_sec, 4.0))
+        if url_res is not None:
+            return url_res
 
     remote_tags: List[str] = []
     error_msg = None
@@ -165,39 +242,33 @@ def check_ota_update(timeout_sec: float = 8.0) -> Dict:
 
     # 排序找到最高版本
     valid_tags.sort(key=lambda x: x[0], reverse=True)
-    latest_tuple, latest_tag = valid_tags[0]
-
-    if latest_tuple > current_tuple:
-        return {
-            "has_update": True,
-            "current_version": current_ver,
-            "latest_version": latest_tag,
-            "status": f"新版 {latest_tag}"
-        }
-    else:
-        return {
-            "has_update": False,
-            "current_version": current_ver,
-            "latest_version": latest_tag,
-            "status": "已是最新"
-        }
+    _, latest_tag = valid_tags[0]
+    return _build_check_result(current_ver, latest_tag)
 
 
 def perform_ota_update(target_tag: Optional[str] = None) -> Dict:
     """
-    真实执行 OTA 代码拉取与版本切换
+    真实执行 OTA 代码拉取与版本切换（优先 origin，失败回退 github）
     """
     try:
         # 1. 同步拉取远程 Tags
-        fetch_res = subprocess.run(
-            ["git", "fetch", "--tags", "origin"],
-            capture_output=True,
-            text=True,
-            timeout=20,
-            cwd=DIRECTORY
-        )
-        if fetch_res.returncode != 0:
-            return {"success": False, "error": f"拉取失败: {fetch_res.stderr.strip()}"}
+        active_remote = None
+        last_err = ""
+        for remote in ("origin", "github"):
+            fetch_res = subprocess.run(
+                ["git", "fetch", "--tags", remote],
+                capture_output=True,
+                text=True,
+                timeout=20,
+                cwd=DIRECTORY
+            )
+            if fetch_res.returncode == 0:
+                active_remote = remote
+                break
+            last_err = fetch_res.stderr.strip()
+
+        if not active_remote:
+            return {"success": False, "error": f"拉取失败: {last_err}"}
 
         # 2. 检出目标 Tag 或主分支
         if target_tag:
@@ -212,7 +283,7 @@ def perform_ota_update(target_tag: Optional[str] = None) -> Dict:
                 return {"success": False, "error": f"检出标签失败: {checkout_res.stderr.strip()}"}
         else:
             pull_res = subprocess.run(
-                ["git", "pull", "--ff-only", "origin", "main"],
+                ["git", "pull", "--ff-only", active_remote, "main"],
                 capture_output=True,
                 text=True,
                 timeout=15,
@@ -257,6 +328,16 @@ class VersionManager:
             self._update_status = res["status"]
             self._has_update = res["has_update"]
             self._latest_version = res["latest_version"]
+        return res
+
+    def perform_ota_update(self, target_tag: Optional[str] = None) -> Dict:
+        res = perform_ota_update(target_tag)
+        if res.get("success"):
+            with self._lock:
+                self._current_version = get_current_version()
+                self._update_status = "已是最新"
+                self._has_update = False
+                self._latest_version = self._current_version
         return res
 
 

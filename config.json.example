@@ -28,5 +28,6 @@
   "non_verbal_audio": true,
   "idle_fsm": true,
   "run_mode": "twin",
-  "simulation": false
+  "simulation": false,
+  "ota_url": ""
 }
