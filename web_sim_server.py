@@ -1460,8 +1460,30 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(500, str(e))
             return
 
-        # 小米米家直接在屏幕弹窗显示绑定二维码 (不走浏览器弹窗)
-        if self.path in ["/api/xiaomi/qr_start_screen", "/api/xiaomi/qr_start"]:
+        # 小米米家网页端直接生成扫码二维码
+        if self.path == "/api/xiaomi/qr_start":
+            try:
+                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
+                qr_auth_manager.start_qr_session()
+                qr_b64 = qr_auth_manager.get_qr_base64()
+                if not qr_b64:
+                    self._send_json({
+                        "status": "error",
+                        "message": qr_auth_manager.error_msg or "生成米家二维码失败"
+                    })
+                else:
+                    self._send_json({
+                        "status": "ok",
+                        "qr_base64": qr_b64,
+                        "qr_url": qr_auth_manager.qr_url,
+                        "login_url": qr_auth_manager.login_url,
+                    })
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        # 小米米家在屏幕弹窗显示绑定二维码
+        if self.path == "/api/xiaomi/qr_start_screen":
             try:
                 menu_fsm.show_xiaomi_qr_on_screen()
                 self.send_response(200)

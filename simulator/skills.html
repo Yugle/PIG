@@ -466,18 +466,21 @@
           img.src = d.qr_base64;
           img.style.display = "inline-block";
         }
-        tip.innerText = "请打开手机网易云音乐 App「扫一扫」确认登录";
+        tip.innerText = skillId === "xiaomi_iot"
+          ? "请打开手机米家 App「扫一扫」确认授权"
+          : "请打开手机网易云音乐 App「扫一扫」确认登录";
         if (pollTimers[skillId]) clearInterval(pollTimers[skillId]);
         pollTimers[skillId] = setInterval(async () => {
           const sr = await fetch(pollEp).then(r => r.json()).catch(() => null);
           if (!sr) return;
           if (sr.message) tip.innerText = sr.message;
-          if (sr.code === 803 || sr.logged_in) {
+          else if (sr.error) tip.innerText = sr.error;
+          if (sr.status === "success" || sr.code === 803 || sr.logged_in) {
             clearInterval(pollTimers[skillId]);
             box.style.display = "none";
             showToast("账号绑定成功！");
             loadSkillConfigs();
-          } else if (sr.code === 800 || sr.code === 8821 || sr.status === "blocked") {
+          } else if (sr.status === "expired" || sr.status === "error" || sr.code === 800 || sr.code === 8821 || sr.status === "blocked") {
             clearInterval(pollTimers[skillId]);
           }
         }, 2000);
