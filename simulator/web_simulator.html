@@ -1785,10 +1785,9 @@
       const m = menuState.mode || "";
       const isQrScreen = (m === "QR_CODE" || m === "XIAOMI_QR" || m === "NETEASE_QR" || m === "SKILLS_QR");
       if (!isQrScreen || !menuState.qr_base64 || menuState.qr_mode !== m) {
-        if (qrCodeMode !== m) {
-          qrCodeLoaded = false;
-          qrCodeMode = "";
-        }
+        qrCodeLoaded = false;
+        qrCodeMode = "";
+        if (qrCodeImg && !isQrScreen) qrCodeImg.removeAttribute("src");
         return;
       }
       if (!qrCodeImg) {
@@ -1901,8 +1900,7 @@
           resetScreenQrCache();
           if (isNcm && menuState.netease_qr) menuState.netease_qr.status = "正在刷新网易云二维码...";
           if (!isNcm && menuState.xiaomi_qr) menuState.xiaomi_qr.status = "正在向服务器刷新二维码...";
-          fetch(isNcm ? "/api/netease/qr_start_screen" : "/api/xiaomi/qr_start_screen", { method: "POST" }).catch(() => {});
-          setTimeout(syncMenuState, 300);
+          setTimeout(syncMenuState, 500);
         }
       } else if (menuState.mode === "MENU_MAIN") {
         const mainItems = menuState.main_menu_items || [
@@ -1990,17 +1988,17 @@
           if (cur.id === "mijia") {
             resetScreenQrCache();
             menuState.mode = "XIAOMI_QR";
-            fetch("/api/xiaomi/qr_start_screen", { method: "POST" }).catch(() => {});
-            setTimeout(syncMenuState, 400);
+            if (menuState.xiaomi_qr) menuState.xiaomi_qr.status = "获取米家二维码中...";
+            setTimeout(syncMenuState, 500);
           } else if (cur.id === "netease") {
             resetScreenQrCache();
             menuState.mode = "NETEASE_QR";
-            fetch("/api/netease/qr_start_screen", { method: "POST" }).catch(() => {});
-            setTimeout(syncMenuState, 400);
+            if (menuState.netease_qr) menuState.netease_qr.status = "获取网易云二维码中...";
+            setTimeout(syncMenuState, 500);
           } else if (cur.id === "skills_portal") {
             resetScreenQrCache();
             menuState.mode = "SKILLS_QR";
-            setTimeout(syncMenuState, 150);
+            setTimeout(syncMenuState, 200);
           }
         }
       } else if (menuState.mode === "SYSTEM") {
@@ -6585,12 +6583,17 @@
         if (res.ok) {
           const data = await res.json();
           if (data) {
-            // 当用户在操作菜单时 (非 FACE 模式)，绝不让后台定时轮询覆盖本地 cursor 与 mode，彻底消除反复跳变闪烁！
-            if (menuState.mode !== "FACE") {
+            const prevNcmLogged = Boolean(menuState.netease_qr && menuState.netease_qr.logged_in);
+            const wasQrMode = ["XIAOMI_QR", "NETEASE_QR", "SKILLS_QR"].includes(menuState.mode);
+            // 当用户在操作菜单时 (非 FACE 模式)，不让轮询覆盖菜单内导航；但扫码弹窗由后端完成登录或退出时同步回 FACE
+            if (menuState.mode !== "FACE" && !(wasQrMode && data.mode === "FACE")) {
               const { cursor, mode, easter_egg_scroll, ...rest } = data;
               menuState = Object.assign(menuState, rest);
             } else {
               menuState = Object.assign(menuState, data);
+            }
+            if (!prevNcmLogged && data.netease_qr && data.netease_qr.logged_in) {
+              showToast(`🎉 网易云登录成功！欢迎 ${data.netease_qr.nickname || "会员"}`);
             }
             // 如果后端进入或退出彩蛋模式，自动同步屏幕状态
             if (data.mode === "EASTER_EGG" && menuState.mode !== "EASTER_EGG") {

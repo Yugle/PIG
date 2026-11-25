@@ -841,6 +841,22 @@ class MenuFSM:
             self.current_mode = "FACE"
             self._notify_listeners()
 
+    def _build_netease_qr_dict(self) -> Dict[str, Any]:
+        logged_in = False
+        nickname = ""
+        try:
+            from skills.netease_music.netease_client import netease_client
+            logged_in = bool(netease_client.logged_in)
+            nickname = netease_client.nickname or ""
+        except Exception:
+            pass
+        return {
+            "active": (self.current_mode == "NETEASE_QR"),
+            "status": self.netease_status_text,
+            "logged_in": logged_in,
+            "nickname": nickname,
+        }
+
     def enter_easter_egg(self):
         """进入关于本项目(PIG)自白彩蛋模式"""
         with self._lock:
@@ -1039,12 +1055,13 @@ class MenuFSM:
                 print(f"⚠️ [MenuFSM] 状态监听器异常: {e}")
 
     def _timeout_loop(self):
-        """后台检测 15 秒无操作自动退出到灵动表情"""
+        """后台检测无操作自动退出到灵动表情（二维码扫码与面容录入给足 180 秒窗口，避免 15 秒误退出断掉轮询）"""
         while self._running:
             time.sleep(1.0)
             with self._lock:
                 if self.current_mode != "FACE":
-                    if time.time() - self.last_interaction_time > self.auto_timeout:
+                    limit_sec = 180.0 if self.current_mode in ("XIAOMI_QR", "NETEASE_QR", "QR_CODE", "SKILLS_QR", "FACE_ENROLL") else self.auto_timeout
+                    if time.time() - self.last_interaction_time > limit_sec:
                         self.current_mode = "FACE"
                         self.cursor = 0
                         self._notify_listeners()
@@ -1461,10 +1478,7 @@ class MenuFSM:
                 "status": self.xiaomi_status_text,
                 "device_count": self.xiaomi_device_count
             },
-            "netease_qr": {
-                "active": (self.current_mode == "NETEASE_QR"),
-                "status": self.netease_status_text
-            },
+            "netease_qr": self._build_netease_qr_dict(),
             "settings_url": f"http://{ip}:8090/settings",
             "skills_url": f"http://{ip}:8090/skills",
             "qr_mode": self.current_mode if self.current_mode in ["QR_CODE", "XIAOMI_QR", "NETEASE_QR", "SKILLS_QR"] else "",
