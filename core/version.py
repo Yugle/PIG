@@ -12,27 +12,44 @@ import re
 import subprocess
 import threading
 import urllib.request
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 DIRECTORY = Path(__file__).resolve().parent.parent
 
 
+def normalize_ota_url(raw_url: str) -> str:
+    """
+    规范化 OTA 地址：允许用户直接填写域名（如 ota.example.com 或 https://ota.example.com），
+    自动补全 https:// 与 /version.json；若已包含具体路径则保持原样。
+    """
+    url = str(raw_url or "").strip()
+    if not url:
+        return ""
+    if "://" not in url:
+        url = f"https://{url}"
+    parsed = urlparse(url)
+    if not parsed.path or parsed.path == "/":
+        url = url.rstrip("/") + "/version.json"
+    return url
+
+
 def get_ota_url() -> str:
     """
-    获取自定义 OTA 版本检查 URL（如部署在 Vercel 的 https://ota.yourdomain.com/version.json）。
+    获取自定义 OTA 版本检查 URL（如部署在 Vercel 的 ota.yourdomain.com）。
     优先级: 环境变量 PIG_OTA_URL > config.json 中的 ota_url。
     """
     env_url = os.environ.get("PIG_OTA_URL", "").strip()
     if env_url:
-        return env_url
+        return normalize_ota_url(env_url)
     cfg_file = DIRECTORY / "config.json"
     if cfg_file.exists():
         try:
             data = json.loads(cfg_file.read_text(encoding="utf-8"))
             url = str(data.get("ota_url", "")).strip()
             if url:
-                return url
+                return normalize_ota_url(url)
         except Exception:
             pass
     return ""
