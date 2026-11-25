@@ -28,7 +28,7 @@
   },
   "config_schema": {
     "title": "网易云音乐账号与曲库",
-    "summary": "未登录默认走公网免登录模式可畅听免费歌曲与热歌榜；扫码绑定账号可解锁个人每日推荐与黑胶 VIP 完整曲库。",
+    "summary": "支持手机扫码登录与 Cookie (MUSIC_U) 绑定；若扫码遇网易云风控拦截(8821)，可在网页版 music.163.com 登录后按 F12 复制 MUSIC_U 值填入下方。",
     "config_section": "none",
     "screen_menu": true,
     "status_endpoint": "/api/netease/status",
@@ -41,6 +41,13 @@
       "poll_endpoint": "/api/netease/qr_status",
       "logout_endpoint": "/api/netease/logout"
     },
-    "fields": []
+    "fields": [
+      {
+        "key": "music_u",
+        "label": "Cookie 登录 / 8821 风控备选 (MUSIC_U)",
+        "type": "password",
+        "placeholder": "粘贴浏览器 music.163.com 的 MUSIC_U Cookie 值"
+      }
+    ]
   }
 }

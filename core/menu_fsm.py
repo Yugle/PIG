@@ -763,6 +763,8 @@ class MenuFSM:
         """在机器人 2.4 寸屏幕上直接弹窗显示网易云音乐登录二维码"""
         print("🎵 [MenuFSM] 触发屏幕弹窗显示网易云音乐绑定二维码")
         with self._lock:
+            self._ncm_qr_seq = getattr(self, "_ncm_qr_seq", 0) + 1
+            cur_seq = self._ncm_qr_seq
             self.current_mode = "NETEASE_QR"
             self.netease_status_text = "获取网易云二维码中..."
             self.netease_qr_bytes = b""
@@ -774,6 +776,8 @@ class MenuFSM:
                 import base64
                 from skills.netease_music.netease_client import netease_client
                 res = netease_client.start_qr_login()
+                if cur_seq != getattr(self, "_ncm_qr_seq", 0):
+                    return
                 if res.get("status") != "ok":
                     with self._lock:
                         self.netease_status_text = res.get("message", "获取二维码失败")
@@ -787,12 +791,16 @@ class MenuFSM:
                     except Exception:
                         raw_png = b""
                 with self._lock:
+                    if cur_seq != getattr(self, "_ncm_qr_seq", 0):
+                        return
                     self.netease_qr_bytes = raw_png
                     self.netease_status_text = "打开网易云App 扫一扫"
                     self._notify_listeners()
 
-                while self.current_mode == "NETEASE_QR":
+                while self.current_mode == "NETEASE_QR" and cur_seq == getattr(self, "_ncm_qr_seq", 0):
                     time.sleep(1.2)
+                    if cur_seq != getattr(self, "_ncm_qr_seq", 0):
+                        break
                     st = netease_client.check_qr_status()
                     code = int(st.get("code", 0))
                     if code == 803 or st.get("logged_in"):
@@ -802,7 +810,7 @@ class MenuFSM:
                             self._notify_listeners()
                         time.sleep(2.2)
                         with self._lock:
-                            if self.current_mode == "NETEASE_QR":
+                            if self.current_mode == "NETEASE_QR" and cur_seq == getattr(self, "_ncm_qr_seq", 0):
                                 self.current_mode = "FACE"
                                 self._notify_listeners()
                         break
@@ -815,6 +823,11 @@ class MenuFSM:
                         with self._lock:
                             self.netease_status_text = "已扫码，请在手机确认登录"
                             self._notify_listeners()
+                    elif code == 8821 or st.get("status") in ("blocked", "error"):
+                        with self._lock:
+                            self.netease_status_text = "风控拦截8821 请在/skills填Cookie"
+                            self._notify_listeners()
+                        break
             except Exception as e:
                 with self._lock:
                     self.netease_status_text = f"网易云认证异常: {e}"

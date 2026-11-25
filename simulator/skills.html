@@ -441,9 +441,9 @@
             tip.innerText = "🎉 扫码绑定成功！";
             showToast("扫码绑定成功！");
             loadSkillConfigs();
-          } else if (sr.status === "expired" || sr.code === 800) {
+          } else if (sr.status === "expired" || sr.code === 800 || sr.status === "blocked" || sr.code === 8821) {
             clearInterval(pollTimers[skillId]);
-            tip.innerText = "⚠️ 二维码已过期，请重新点击生成。";
+            tip.innerText = "⚠️ " + (sr.message || "二维码已失效或被风控拦截，请改用 MUSIC_U Cookie 登录。");
           }
         }, 2000);
       } catch (e) {
@@ -477,7 +477,7 @@
             box.style.display = "none";
             showToast("账号绑定成功！");
             loadSkillConfigs();
-          } else if (sr.code === 800) {
+          } else if (sr.code === 800 || sr.code === 8821 || sr.status === "blocked") {
             clearInterval(pollTimers[skillId]);
           }
         }, 2000);

@@ -807,7 +807,11 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
         if self.path == "/api/netease/qr_status":
             from skills.netease_music.netease_client import netease_client
-            self._send_json(netease_client.check_qr_status())
+            st = netease_client.check_qr_status()
+            if st.get("code") == 803 or st.get("logged_in"):
+                menu_fsm._sync_skill_items()
+                menu_fsm._notify_listeners()
+            self._send_json(st)
             return
 
         if self.path.startswith("/api/netease/audio"):
@@ -1552,7 +1556,20 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/api/netease/logout":
             from skills.netease_music.netease_client import netease_client
             netease_client.logout()
+            menu_fsm._sync_skill_items()
+            menu_fsm._notify_listeners()
             self._send_json({"status": "ok", "auth": netease_client.get_auth_status()})
+            return
+
+        if self.path == "/api/netease/cookie_login":
+            from skills.netease_music.netease_client import netease_client
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
+            res = netease_client.login_with_cookie(body.get("cookie", ""))
+            if res.get("status") == "ok":
+                menu_fsm._sync_skill_items()
+                menu_fsm._notify_listeners()
+            self._send_json(res)
             return
 
         if self.path == "/api/netease/control":
@@ -1928,6 +1945,17 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             values = req.get("values") if isinstance(req.get("values"), dict) else {}
             if not sid:
                 self._send_json({"status": "error", "message": "缺少 skill_id"}, status_code=400)
+                return
+
+            if sid == "netease_music" and values.get("music_u"):
+                from skills.netease_music.netease_client import netease_client
+                login_res = netease_client.login_with_cookie(values.get("music_u", ""))
+                if login_res.get("status") != "ok":
+                    self._send_json(login_res)
+                    return
+                menu_fsm._sync_skill_items()
+                menu_fsm._notify_listeners()
+                self._send_json({"status": "ok", "skill_id": sid, "auth": login_res, "state": menu_fsm.get_state()})
                 return
 
             cur_cfg = load_config()
