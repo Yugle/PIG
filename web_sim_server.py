@@ -398,21 +398,32 @@ def on_agent_event_broadcast(event_dict):
 
 hardware_agent.register_event_listener(on_agent_event_broadcast)
 hardware_agent.current_emotion = "NORMAL"
+_sync_behavior_seq = 0
 
-def _sync_hardware_behaviors(behaviors, default_emotion="HAPPY"):
+def _sync_hardware_behaviors(behaviors, default_emotion="HAPPY", hold_sec=6.0):
     """将网页/飞书对话生成的表情与舵机动作序列同步到真机屏幕和舵机"""
+    global _sync_behavior_seq
     if not hardware_agent:
         return
+    _sync_behavior_seq += 1
+    my_seq = _sync_behavior_seq
     seq = list(behaviors or [])
     if not seq and default_emotion:
-        seq = [{"emotion": default_emotion, "pan": 90, "tilt": 85, "delay": 1800}]
+        seq = [{"emotion": default_emotion, "pan": 90, "tilt": 85, "delay": 1000}]
 
     def _runner():
         try:
+            total_hold = max(float(hold_sec), len(seq) * 1.0)
             if hasattr(hardware_agent, "mark_action_playing"):
-                hardware_agent.mark_action_playing(max(2.0, len(seq) * 1.2))
+                hardware_agent.mark_action_playing(total_hold + 1.0)
+            last_emo = default_emotion or "NORMAL"
+            elapsed = 0.0
             for step in seq:
-                emo = str(step.get("emotion") or default_emotion or "NORMAL").upper()
+                if _sync_behavior_seq != my_seq:
+                    return
+                emo = str(step.get("emotion") or last_emo or "NORMAL").upper()
+                if emo != "NORMAL":
+                    last_emo = emo
                 hardware_agent.current_emotion = emo
                 pan = step.get("pan")
                 tilt = step.get("tilt")
@@ -421,9 +432,19 @@ def _sync_hardware_behaviors(behaviors, default_emotion="HAPPY"):
                         hardware_agent.hal.set_angles(float(pan), float(tilt), smooth=True)
                     except Exception:
                         pass
-                delay_ms = int(step.get("delay") or 1000)
-                time.sleep(max(0.2, min(delay_ms / 1000.0, 5.0)))
-            time.sleep(0.8)
+                dt = max(0.3, min(int(step.get("delay") or 1000) / 1000.0, 5.0))
+                time.sleep(dt)
+                elapsed += dt
+            # 若动作序列很短，继续保持主表情到 hold_sec，避免真机一闪而过
+            if _sync_behavior_seq == my_seq and last_emo != "NORMAL" and elapsed < total_hold:
+                hardware_agent.current_emotion = last_emo
+                remain = total_hold - elapsed
+                while remain > 0 and _sync_behavior_seq == my_seq:
+                    step_t = min(0.5, remain)
+                    time.sleep(step_t)
+                    remain -= step_t
+            if _sync_behavior_seq != my_seq:
+                return
             hardware_agent.current_emotion = "NORMAL"
             if hardware_agent.hal:
                 try:
@@ -1183,7 +1204,19 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        global _latest_webcam_frame, _latest_webcam_frame_ts
+        global _latest_webcam_frame, _latest_webcam_frame_ts, _sync_behavior_seq
+
+        # 网页直接同步真机屏幕表情
+        if self.path == "/api/hardware/emotion":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            body = json.loads(post_data.decode("utf-8")) if post_data else {}
+            emo = str(body.get("emotion") or "NORMAL").upper()
+            if hardware_agent is not None:
+                _sync_behavior_seq += 1
+                hardware_agent.current_emotion = emo
+            self._send_json({"status": "ok", "emotion": emo})
+            return
 
         # 手机端无线配置保存 API
         if self.path == "/api/settings":
@@ -2221,6 +2254,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
             seq = 0
             print(f"👉 [Stream Start] User text: {user_text}", flush=True)
+            if hardware_agent is not None:
+                _sync_behavior_seq += 1
+                hardware_agent.current_emotion = "THINKING"
+            stream_reply_len = 0
             try:
                 for event in reasoner.run_react_loop_stream(
                     user_text=user_text,
@@ -2235,6 +2272,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         sentence_text = event.get("text", "").strip()
                         if sentence_text:
                             seq += 1
+                            stream_reply_len += len(sentence_text)
                             # 1. 立即将文本切片推至前端渲染（零延时上屏）
                             payload = {
                                 "type": "chunk",
@@ -2261,8 +2299,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         _drain_ready_audio(force_all=False)
 
                     elif ev_type == "done":
-                        # 同步真机屏幕表情与舵机动作
-                        _sync_hardware_behaviors(event.get("behaviors"), default_emotion="HAPPY")
+                        # 同步真机屏幕表情与舵机动作（按回复长度保持表情时长）
+                        hold_s = max(6.0, min(stream_reply_len * 0.25, 12.0))
+                        _sync_hardware_behaviors(event.get("behaviors"), default_emotion="HAPPY", hold_sec=hold_s)
                         # 在发送 done 前排空并送达所有已合成的音频切片
                         _drain_ready_audio(force_all=True)
                         msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
@@ -2375,7 +2414,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         reply_data["visual_snapshot"] = f"/api/vision/snapshot?t={int(time.time()*1000)}"
                     if reply_data["behaviors"] and hardware_agent and hasattr(hardware_agent, "mark_action_playing"):
                         hardware_agent.mark_action_playing(3.0)
-                    _sync_hardware_behaviors(reply_data.get("behaviors"), default_emotion="HAPPY")
+                    hold_s = max(6.0, min(len(str(reply_data.get("reply") or "")) * 0.25, 12.0))
+                    _sync_hardware_behaviors(reply_data.get("behaviors"), default_emotion="HAPPY", hold_sec=hold_s)
                 except Exception as e:
                     print(f"⚠️ [Web-LLM ReAct Loop Error]: {e}")
                     reply_data["reply"] = f"抱歉主人，执行过程遇到异常错误：{e}，未能完成操作。"

@@ -1451,8 +1451,17 @@
     }
 
     function setEmotion(emo) {
-      targetEmotion = (emo || "NORMAL").toUpperCase();
+      const nextEmo = (emo || "NORMAL").toUpperCase();
+      const changed = (nextEmo !== currentEmotion);
+      targetEmotion = nextEmo;
       currentEmotion = targetEmotion;
+      if (changed) {
+        fetch("/api/hardware/emotion", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ emotion: targetEmotion })
+        }).catch(() => {});
+      }
       const tag = document.getElementById("current-emotion-tag");
       if (tag) tag.innerText = "表情: " + targetEmotion;
       if (typeof pointLight !== "undefined" && pointLight) {
