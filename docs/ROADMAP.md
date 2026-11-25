@@ -164,7 +164,7 @@ flowchart TD
    - `DRV8833 OUT1 / OUT2` ──► 左轮 N20 电机
    - `DRV8833 OUT3 / OUT4` ──► 右轮 N20 电机
 4. **防跌落探头（可选）**：
-   - 左/右 `TCRT5000` 的 `DO` 引脚 ──► `ESP32-C3 GPIO 2`、`GPIO 3`（供电接 `3.3V / GND`）
+   - 左/右 `TCRT5000` 的 `DO` 引脚 ──► `ESP32-C3 GPIO 1`、`GPIO 3`（避开 `GPIO 2/8/9` 引导脚，供电接 `3.3V / GND`）
 
 ---
 
