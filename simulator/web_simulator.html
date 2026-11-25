@@ -2547,7 +2547,7 @@
           qrCodeImg.src = menuState.qr_base64;
           qrCodeLoaded = true;
         }
-        if (qrCodeLoaded && qrCodeImg && (qrCodeImg.complete || menuState.qr_base64)) {
+        if (menuState.qr_base64 && qrCodeLoaded && qrCodeImg && qrCodeImg.complete) {
           try {
             ctx.drawImage(qrCodeImg, 48, 54, 144, 144);
           } catch (e) {
@@ -2603,7 +2603,7 @@
           qrCodeImg.src = menuState.qr_base64;
           qrCodeLoaded = true;
         }
-        if (qrCodeLoaded && qrCodeImg && (qrCodeImg.complete || menuState.qr_base64)) {
+        if (menuState.qr_base64 && qrCodeLoaded && qrCodeImg && qrCodeImg.complete) {
           try {
             ctx.drawImage(qrCodeImg, 48, 54, 144, 144);
           } catch (e) {

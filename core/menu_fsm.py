@@ -879,19 +879,18 @@ class MenuFSM:
 
     def get_qr_png_bytes(self) -> bytes:
         """生成并返回当前模式匹配的 QR 码 PNG 字节流"""
-        # 0. 处于网易云音乐扫码弹窗
-        if self.current_mode == "NETEASE_QR" and self.netease_qr_bytes:
-            return self.netease_qr_bytes
+        # 0. 处于网易云音乐扫码弹窗 (绝不回退到配网二维码)
+        if self.current_mode == "NETEASE_QR":
+            return self.netease_qr_bytes or b""
 
-        # 1. 处于米家扫码绑定弹窗
+        # 1. 处于米家扫码绑定弹窗 (绝不回退到配网二维码)
         if self.current_mode == "XIAOMI_QR":
             try:
                 from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
                 raw = qr_auth_manager.get_qr_png_bytes()
-                if raw:
-                    return raw
+                return raw or b""
             except Exception:
-                pass
+                return b""
 
         # 2. 处于无线与配网页 (QR_CODE)
         if wifi_manager.ap_mode:
