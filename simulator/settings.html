@@ -577,6 +577,14 @@
           document.getElementById("micSwitch").checked = !data.is_mic_muted;
           document.getElementById("trackingSwitch").checked = !!data.face_tracking;
           document.getElementById("servoSleepSwitch").checked = !!data.servo_sleeping;
+          if (data.cur_pan !== undefined) {
+            document.getElementById("panRange").value = Math.round(data.cur_pan);
+            document.getElementById("panVal").innerText = Math.round(data.cur_pan) + "°";
+          }
+          if (data.cur_tilt !== undefined) {
+            document.getElementById("tiltRange").value = Math.round(data.cur_tilt);
+            document.getElementById("tiltVal").innerText = Math.round(data.cur_tilt) + "°";
+          }
 
           document.getElementById("diagIp").innerText = data.local_ip || location.hostname;
           document.getElementById("diagTemp").innerText = data.cpu_temp || "45°C";
@@ -673,7 +681,20 @@
     }
 
     async function saveServoTrim() {
-      showToast("零点已保存");
+      const pan_trim = parseFloat(document.getElementById("panRange").value) - 90;
+      const tilt_trim = parseFloat(document.getElementById("tiltRange").value) - 90;
+      try {
+        const res = await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pan_trim, tilt_trim })
+        });
+        if (res.ok) {
+          showToast(`零点偏置已保存 (${pan_trim >= 0 ? "+" : ""}${pan_trim}°, ${tilt_trim >= 0 ? "+" : ""}${tilt_trim}°)`);
+        }
+      } catch (e) {
+        alert("保存零点失败: " + e);
+      }
     }
 
     async function runDoctorCheck() {

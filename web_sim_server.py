@@ -92,6 +92,81 @@ def load_config():
             return json.load(f)
     return {}
 
+
+def apply_runtime_config(cur_cfg: dict, updates: dict):
+    """统一将设置页 (/settings) 与 3D 控制台保存的配置热同步至内存、舵机、菜单与 SSE 客户端"""
+    # 别名字段统一对齐
+    if "api_key" in updates:
+        cur_cfg["mimo_api_key"] = cur_cfg["api_key"]
+    elif "mimo_api_key" in updates:
+        cur_cfg["api_key"] = cur_cfg["mimo_api_key"]
+
+    if "mimo_voice" in updates:
+        cur_cfg["tts_voice"] = cur_cfg["mimo_voice"]
+    elif "tts_voice" in updates:
+        cur_cfg["mimo_voice"] = cur_cfg["tts_voice"]
+
+    if "robot_name" in updates:
+        cur_cfg["bot_name"] = cur_cfg["robot_name"]
+    elif "bot_name" in updates:
+        cur_cfg["robot_name"] = cur_cfg["bot_name"]
+
+    # 持久化至 config.json
+    cfg_file = os.path.join(DIRECTORY, "config.json")
+    with open(cfg_file, "w", encoding="utf-8") as f:
+        json.dump(cur_cfg, f, ensure_ascii=False, indent=2)
+
+    # 同步长期记忆称谓
+    if "user_name" in updates and mem:
+        mem.set_user_name(cur_cfg.get("user_name", ""))
+    if ("bot_name" in updates or "robot_name" in updates) and mem:
+        mem.set_bot_name(cur_cfg.get("bot_name") or cur_cfg.get("robot_name", ""))
+
+    # 同步全局配置与 HardwareAgent
+    server_cfg.clear()
+    server_cfg.update(cur_cfg)
+    if hardware_agent:
+        hardware_agent.cfg.update(cur_cfg)
+
+    # 视觉注视开关热同步
+    if "face_tracking" in updates:
+        ft_on = bool(updates["face_tracking"])
+        face_tracker.set_enabled(ft_on)
+        if hardware_agent:
+            hardware_agent.set_face_tracking(ft_on)
+        if menu_fsm:
+            menu_fsm.face_tracking_enabled = ft_on
+
+    if "proactive_care" in updates and proactive_care:
+        proactive_care.set_enabled(bool(updates["proactive_care"]))
+
+    # 麦克风静音 / 舵机休眠 / 零点偏置同步至 HAL 与 3D 仿真视窗
+    if hardware_agent and hardware_agent.hal and hasattr(hardware_agent.hal, "update_servo_config"):
+        if any(k in updates for k in ["pan_trim", "tilt_trim", "pan_invert", "tilt_invert", "pan_min", "pan_max", "tilt_min", "tilt_max", "servo_speed"]):
+            hardware_agent.hal.update_servo_config(cur_cfg)
+
+    if menu_fsm:
+        if "is_mic_muted" in updates:
+            menu_fsm.is_mic_muted = bool(updates["is_mic_muted"])
+        if "servo_sleeping" in updates:
+            sleep_on = bool(updates["servo_sleeping"])
+            menu_fsm.is_servo_sleeping = sleep_on
+            menu_fsm._apply_servo_sleep(sleep_on)
+            if hardware_agent:
+                pan_now = getattr(hardware_agent.hal, "cur_pan", 90.0)
+                tilt_now = getattr(hardware_agent.hal, "cur_tilt", 120.0 if sleep_on else 90.0)
+                hardware_agent.emit_event("pose_sync", {
+                    "pan": pan_now,
+                    "tilt": tilt_now,
+                    "emotion": "SLEEPY" if sleep_on else "NORMAL"
+                })
+        menu_fsm._sync_hardware_items()
+        menu_fsm._sync_system_items()
+        menu_fsm._notify_listeners()
+
+    if hardware_agent:
+        hardware_agent.emit_event("config_updated", {"updates": list(updates.keys())})
+
 server_cfg = load_config()
 from skills.feishu_bot.feishu_client import feishu_client
 if "feishu" in server_cfg:
@@ -432,12 +507,16 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             response_data = {
                 "api_key": cur_cfg.get("api_key", ""),
                 "llm_model": cur_cfg.get("llm_model", "mimo-v2.6-flash"),
-                "robot_name": cur_cfg.get("robot_name", "PIG"),
+                "robot_name": cur_cfg.get("bot_name") or cur_cfg.get("robot_name", "PIG"),
                 "user_name": cur_cfg.get("user_name", "胖虎"),
                 "mimo_voice": cur_cfg.get("mimo_voice", "冰糖"),
                 "face_tracking": hardware_agent.cfg.get("face_tracking", True),
                 "is_mic_muted": menu_fsm.is_mic_muted,
                 "servo_sleeping": menu_fsm.is_servo_sleeping,
+                "cur_pan": getattr(hardware_agent.hal, "cur_pan", 90.0) if (hardware_agent and hardware_agent.hal) else 90.0,
+                "cur_tilt": getattr(hardware_agent.hal, "cur_tilt", 90.0) if (hardware_agent and hardware_agent.hal) else 90.0,
+                "pan_trim": cur_cfg.get("pan_trim", 0.0),
+                "tilt_trim": cur_cfg.get("tilt_trim", 0.0),
                 "local_ip": state["local_ip"],
                 "cpu_temp": state["doctor"].get("cpu_temp", "45°C"),
                 "mimo_status": state["doctor"].get("mimo_status", "正常 (OK)"),
@@ -928,20 +1007,11 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         cur_cfg = json.load(f)
                 else:
                     cur_cfg = {}
-                for k in ["api_key", "llm_model", "robot_name", "user_name", "mimo_voice"]:
+                for k in ["api_key", "llm_model", "robot_name", "bot_name", "user_name", "mimo_voice", "pan_trim", "tilt_trim"]:
                     if k in body:
                         cur_cfg[k] = body[k]
-                        if k == "api_key":
-                            cur_cfg["mimo_api_key"] = body[k]
                 if "face_tracking" in body:
                     cur_cfg["face_tracking"] = bool(body["face_tracking"])
-                    hardware_agent.cfg["face_tracking"] = bool(body["face_tracking"])
-                    menu_fsm.face_tracking_enabled = bool(body["face_tracking"])
-                if "is_mic_muted" in body:
-                    menu_fsm.is_mic_muted = bool(body["is_mic_muted"])
-                if "servo_sleeping" in body:
-                    menu_fsm.is_servo_sleeping = bool(body["servo_sleeping"])
-                    menu_fsm._apply_servo_sleep(menu_fsm.is_servo_sleeping)
                 if "feishu" in body and isinstance(body["feishu"], dict):
                     cur_cfg.setdefault("feishu", {}).update(body["feishu"])
                     from skills.feishu_bot.feishu_client import feishu_client
@@ -949,8 +1019,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     if feishu_client.app_id and feishu_client.app_secret:
                         feishu_client.start_ws_service(handle_feishu_incoming_message)
 
-                with open(cfg_file, "w", encoding="utf-8") as f:
-                    json.dump(cur_cfg, f, ensure_ascii=False, indent=2)
+                apply_runtime_config(cur_cfg, body)
 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -1092,6 +1161,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 tilt = float(body.get("tilt", 90))
                 if hardware_agent and hardware_agent.hal:
                     hardware_agent.hal.set_angles(pan, tilt, smooth=True)
+                    actual_pan = getattr(hardware_agent.hal, "cur_pan", pan)
+                    actual_tilt = getattr(hardware_agent.hal, "cur_tilt", tilt)
+                    hardware_agent.emit_event("pose_sync", {"pan": actual_pan, "tilt": actual_tilt})
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
@@ -1397,24 +1469,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         continue
                     cfg[k] = v
 
-                cfg_file = os.path.join(DIRECTORY, "config.json")
-                with open(cfg_file, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, ensure_ascii=False, indent=2)
-
-                # 同步热生效
-                if "user_name" in updates:
-                    mem.set_user_name(updates["user_name"])
-                if "bot_name" in updates or "robot_name" in updates:
-                    new_b = updates.get("bot_name") or updates.get("robot_name")
-                    mem.set_bot_name(new_b)
-                if "face_tracking" in updates:
-                    face_tracker.set_enabled(bool(updates["face_tracking"]))
-                    if hardware_agent:
-                        hardware_agent.set_face_tracking(bool(updates["face_tracking"]))
-                if "proactive_care" in updates:
-                    proactive_care.set_enabled(bool(updates["proactive_care"]))
-                if hardware_agent:
-                    hardware_agent.cfg.update(cfg)
+                apply_runtime_config(cfg, updates)
 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")

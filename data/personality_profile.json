@@ -4,10 +4,10 @@
     "clingy": 66,
     "sharp_tongued": 24,
     "empathy": 88,
-    "curiosity": 90
+    "curiosity": 92
   },
   "intimacy_level": 3,
-  "intimacy_exp": 5,
+  "intimacy_exp": 15,
   "persona_tag": "好奇温柔小智囊",
   "drift_history": [
     {
@@ -82,6 +82,16 @@
     },
     {
       "time": "2026-11-24 16:44",
+      "event": "chat",
+      "note": "日常语音交互"
+    },
+    {
+      "time": "2026-11-25 15:02",
+      "event": "chat",
+      "note": "日常语音交互"
+    },
+    {
+      "time": "2026-11-25 15:03",
       "event": "chat",
       "note": "日常语音交互"
     }
