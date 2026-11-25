@@ -130,8 +130,11 @@ class PhysicalRobotHAL(BaseRobotHAL):
         self.screen = None
         if spi is not None and st7789 is not None:
             try:
-                serial_spi = spi(port=spi_port, device=spi_device, gpio_DC=dc_pin, gpio_RST=rst_pin)
+                serial_spi = spi(port=spi_port, device=spi_device, gpio_DC=dc_pin, gpio_RST=rst_pin, bus_speed_hz=32000000)
                 self.screen = st7789(serial_spi, width=240, height=320, rotate=0)
+                # 覆盖 luma.lcd 默认横屏 MADCTL(0x70) 与反色 INVON(0x21)，适配 GMT024 竖屏 240x320 正色显示
+                self.screen.command(0x36, 0x00)
+                self.screen.command(0x20)
                 print("📺 [HAL-Physical] ST7789 屏幕初始化成功")
             except Exception as e:
                 print(f"⚠️ [HAL-Physical] ST7789 屏幕初始化失败: {e}")
