@@ -40,8 +40,12 @@ _WEAPI_NONCE = b"0CoJUm6Qyw8W8jud"
 
 def _weapi_encrypt(payload: Dict[str, Any]) -> Dict[str, str]:
     """构造网易云 Web 版 WEAPI 加密请求参数"""
-    from Crypto.Cipher import AES
-    from Crypto.Util.Padding import pad
+    try:
+        from Cryptodome.Cipher import AES
+        from Cryptodome.Util.Padding import pad
+    except ImportError:
+        from Crypto.Cipher import AES
+        from Crypto.Util.Padding import pad
 
     def _aes_cbc(plain: str, key: bytes) -> str:
         cipher = AES.new(key, AES.MODE_CBC, b"0102030405060708")
