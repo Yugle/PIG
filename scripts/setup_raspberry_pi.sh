@@ -84,6 +84,7 @@ $SUDO apt-get install -y --no-install-recommends \
     libasound2-dev \
     portaudio19-dev \
     ffmpeg \
+    mpv \
     alsa-utils \
     fswebcam \
     bzip2 \

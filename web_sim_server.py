@@ -445,6 +445,20 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         # 静默所有高频 HTTP 访问日志，避免控制台与后台任务缓冲区溢出导致容器杀进程
         return
 
+    def _read_json_body(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b""
+        try:
+            return json.loads(post_data.decode("utf-8")) if post_data else {}
+        except Exception:
+            return {}
+
+    def _send_json(self, payload, status_code=200):
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
     def do_HEAD(self):
         if self.path in ["/settings", "/settings.html"]:
             self.send_response(200)
@@ -775,6 +789,60 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "action": "touch_triggered"}, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 网易云音乐状态、扫码轮询与音频流代理 API
+        if self.path == "/api/netease/status":
+            from skills.netease_music.netease_client import netease_client
+            from skills.netease_music.player import music_player
+            self._send_json({
+                "status": "ok",
+                "auth": netease_client.get_auth_status(),
+                "music": music_player.get_state(),
+            })
+            return
+
+        if self.path == "/api/netease/qr_status":
+            from skills.netease_music.netease_client import netease_client
+            self._send_json(netease_client.check_qr_status())
+            return
+
+        if self.path.startswith("/api/netease/audio"):
+            from skills.netease_music.player import music_player
+            from skills.netease_music.netease_client import netease_client
+            tr = music_player.current_track()
+            target_url = tr.get("url", "") if tr else ""
+            if not target_url and "id=" in self.path:
+                try:
+                    sid = int(self.path.split("id=")[-1].split("&")[0])
+                    target_url = netease_client._resolve_track_url(sid) or ""
+                except Exception:
+                    target_url = ""
+            if not target_url:
+                self.send_error(404, "No playable track URL")
+                return
+            try:
+                import requests as req_lib
+                fwd_headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://music.163.com/"}
+                if "Range" in self.headers:
+                    fwd_headers["Range"] = self.headers["Range"]
+                upstream = req_lib.get(target_url, headers=fwd_headers, stream=True, timeout=10)
+                self.send_response(upstream.status_code)
+                self.send_header("Content-Type", upstream.headers.get("Content-Type", "audio/mpeg"))
+                if "Content-Length" in upstream.headers:
+                    self.send_header("Content-Length", upstream.headers["Content-Length"])
+                if "Content-Range" in upstream.headers:
+                    self.send_header("Content-Range", upstream.headers["Content-Range"])
+                self.send_header("Accept-Ranges", "bytes")
+                self.end_headers()
+                for chunk in upstream.iter_content(chunk_size=32768):
+                    if chunk:
+                        self.wfile.write(chunk)
+            except Exception as e:
+                try:
+                    self.send_error(502, str(e))
+                except Exception:
+                    pass
             return
 
         # 获取毫米波雷达状态 (HLK-LD2402 24GHz FMCW)
@@ -1444,6 +1512,29 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "action": "barge_in_triggered"}, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 网易云音乐扫码登录与播放控制 API
+        if self.path == "/api/netease/qr_start":
+            from skills.netease_music.netease_client import netease_client
+            self._send_json(netease_client.start_qr_login())
+            return
+
+        if self.path == "/api/netease/logout":
+            from skills.netease_music.netease_client import netease_client
+            netease_client.logout()
+            self._send_json({"status": "ok", "auth": netease_client.get_auth_status()})
+            return
+
+        if self.path == "/api/netease/control":
+            from skills.netease_music.main import run as netease_run
+            from skills.netease_music.player import music_player
+            body = self._read_json_body()
+            act = body.get("action", "play")
+            q = body.get("query", "")
+            val = str(body.get("value", ""))
+            msg = netease_run(action=act, query=q, value=val)
+            self._send_json({"status": "ok", "message": msg, "music": music_player.get_state()})
             return
 
         # 人脸视觉注视追踪开关切换

@@ -1315,6 +1315,20 @@
           <button class="btn" style="background:#ffb020; color:#0d1117; font-weight:bold; padding:5px 20px; border:none; border-radius:6px; cursor:pointer;" onclick="dismissAlarmModal()">👌 我知道了 / 关闭提醒</button>
         </div>
 
+        <!-- 🎵 网易云音乐迷你播放浮窗 (放歌时自动亮起，停播自动隐藏) -->
+        <audio id="simMusicAudio" preload="none" onended="controlMusic('next')"></audio>
+        <div id="musicPlayerHud" style="display:none; position:absolute; bottom:16px; left:16px; max-width:255px; background:rgba(13, 17, 23, 0.88); border:1px solid rgba(239, 68, 68, 0.45); border-radius:12px; padding:8px 12px; box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:20; backdrop-filter:blur(8px);">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+            <span style="font-size:0.75rem; font-weight:700; color:#f87171; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="musicTitleText">🎵 网易云音乐</span>
+            <span id="musicStatusBadge" style="font-size:0.64rem; color:#34d399; background:rgba(16,185,129,0.15); padding:1px 6px; border-radius:8px; flex-shrink:0;">播放中</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button id="musicToggleBtn" class="view-btn" style="padding:3px 8px; font-size:0.7rem;" onclick="toggleMusicPlayPause()">⏸ 暂停</button>
+            <button class="view-btn" style="padding:3px 8px; font-size:0.7rem;" onclick="controlMusic('next')">⏭ 下一首</button>
+            <button class="view-btn" style="padding:3px 8px; font-size:0.7rem; color:#f87171;" onclick="controlMusic('stop')">⏹ 停止</button>
+          </div>
+        </div>
+
         <!-- 3D 视窗角标：画中画屏幕特写 (可展开/折叠) -->
         <div class="pip-screen-container" id="pipContainer">
           <div class="pip-header">
@@ -4802,8 +4816,16 @@
         return;
       }
 
+      if (ev.type === "music_state" && ev.music) {
+        updateMusicPlayerHUD(ev.music);
+        return;
+      }
+
       if (ev.type === "connected" || ev.type === "init") {
-        if (ev.status) updateHardwareStatusUI(ev.status);
+        if (ev.status) {
+          updateHardwareStatusUI(ev.status);
+          if (ev.status.music) updateMusicPlayerHUD(ev.status.music);
+        }
         return;
       }
 
@@ -5465,6 +5487,62 @@
           body: JSON.stringify({ scene })
         });
       } catch (e) { }
+    }
+
+    // 🎵 网易云音乐 HUD 与网页音频伴随播放
+    let currentMusicState = { playing: false, paused: false, song_id: null };
+    function updateMusicPlayerHUD(m) {
+      if (!m) return;
+      const hud = document.getElementById("musicPlayerHud");
+      const titleEl = document.getElementById("musicTitleText");
+      const badgeEl = document.getElementById("musicStatusBadge");
+      const toggleBtn = document.getElementById("musicToggleBtn");
+      const audio = document.getElementById("simMusicAudio");
+
+      if (!m.has_track || (!m.playing && !m.paused)) {
+        if (hud) hud.style.display = "none";
+        if (audio && !audio.paused) audio.pause();
+        currentMusicState = Object.assign({}, m);
+        return;
+      }
+
+      if (hud) hud.style.display = "block";
+      if (titleEl) titleEl.innerText = `🎵 ${m.title || "未知歌曲"} - ${m.artist || ""}`;
+      if (badgeEl) {
+        badgeEl.innerText = m.playing ? "播放中" : "已暂停";
+        badgeEl.style.color = m.playing ? "#34d399" : "#fbbf24";
+      }
+      if (toggleBtn) toggleBtn.innerText = m.playing ? "⏸ 暂停" : "▶ 继续";
+
+      // 若后端未走真机硬件扬声器(play_on_device=false)，则由浏览器直接流畅播放音频流
+      if (audio && !m.play_on_device && m.stream_path) {
+        audio.volume = Math.max(0.1, Math.min(1.0, (m.volume || 75) / 100));
+        if (m.song_id !== currentMusicState.song_id || !audio.src.includes(String(m.song_id))) {
+          audio.src = m.stream_path + "&ts=" + Date.now();
+        }
+        if (m.playing && audio.paused) {
+          audio.play().catch(() => {});
+        } else if (!m.playing && !audio.paused) {
+          audio.pause();
+        }
+      } else if (audio && m.play_on_device && !audio.paused) {
+        audio.pause();
+      }
+      currentMusicState = Object.assign({}, m);
+    }
+
+    function toggleMusicPlayPause() {
+      controlMusic(currentMusicState.playing ? "pause" : "resume");
+    }
+
+    function controlMusic(action) {
+      fetch("/api/netease/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action })
+      }).then(r => r.json()).then(d => {
+        if (d && d.music) updateMusicPlayerHUD(d.music);
+      }).catch(() => {});
     }
 
     // 启动数字孪生 SSE 实时同步

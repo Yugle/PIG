@@ -550,6 +550,23 @@
     </div>
   </section>
 
+  <!-- 7. 网易云音乐账号与黑胶 VIP 绑定 -->
+  <section class="card">
+    <div class="card-title">07 / NETEASE CLOUD MUSIC</div>
+    <p style="font-size:0.75rem; color:#888; margin-top:-6px; margin-bottom:12px; line-height:1.4;">
+      扫码绑定网易云账号，即可完整播放个人歌单、每日推荐与 VIP 歌曲。未登录时默认播放公网可试听/完整音源。
+    </p>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:0.8rem;">
+      <span>登录状态: <strong id="ncmStatusText" style="color:#888;">检测中...</strong></span>
+      <button class="btn btn-secondary" style="width:auto; padding:5px 12px; margin-top:0; font-size:0.75rem;" id="ncmLogoutBtn" onclick="logoutNetease()">退出账号</button>
+    </div>
+    <button class="btn" style="background:linear-gradient(135deg, #e11d48, #be123c);" onclick="startNeteaseQr()">📱 生成网易云扫码登录二维码</button>
+    <div id="ncmQrBox" style="display:none; text-align:center; margin-top:12px; padding:12px; background:#0d0e11; border:1px solid #262930; border-radius:8px;">
+      <img id="ncmQrImg" style="width:160px; height:160px; border-radius:6px; background:#fff;" />
+      <div id="ncmQrTip" style="font-size:0.76rem; color:#fbbf24; margin-top:8px;">请打开手机网易云音乐扫一扫</div>
+    </div>
+  </section>
+
   <div class="toast" id="toast">已保存</div>
 
   <script>
@@ -1015,9 +1032,69 @@
       }
     }
 
+    let ncmQrTimer = null;
+    async function refreshNeteaseStatus() {
+      try {
+        const res = await fetch("/api/netease/status");
+        if (!res.ok) return;
+        const d = await res.json();
+        const stEl = document.getElementById("ncmStatusText");
+        const outBtn = document.getElementById("ncmLogoutBtn");
+        if (d.auth && d.auth.logged_in) {
+          stEl.innerText = `✅ 已登录 (${d.auth.nickname || "会员"})`;
+          stEl.style.color = "#10b981";
+          if (outBtn) outBtn.style.display = "inline-block";
+        } else {
+          stEl.innerText = d.auth && d.auth.has_pyncm ? "未登录 (公网模式)" : "公网免登录模式 (未装 pyncm)";
+          stEl.style.color = "#fbbf24";
+          if (outBtn) outBtn.style.display = "none";
+        }
+      } catch (e) {}
+    }
+
+    async function startNeteaseQr() {
+      try {
+        const res = await fetch("/api/netease/qr_start", { method: "POST" });
+        const d = await res.json();
+        if (d.status !== "ok") {
+          alert(d.message || "生成二维码失败");
+          return;
+        }
+        const box = document.getElementById("ncmQrBox");
+        const img = document.getElementById("ncmQrImg");
+        const tip = document.getElementById("ncmQrTip");
+        box.style.display = "block";
+        if (d.qr_base64) img.src = d.qr_base64;
+        tip.innerText = "请打开手机网易云音乐 App 扫一扫确认登录";
+        if (ncmQrTimer) clearInterval(ncmQrTimer);
+        ncmQrTimer = setInterval(async () => {
+          const sr = await fetch("/api/netease/qr_status").then(r => r.json()).catch(() => null);
+          if (!sr) return;
+          if (sr.message) tip.innerText = sr.message;
+          if (sr.code === 803 || sr.logged_in) {
+            clearInterval(ncmQrTimer);
+            box.style.display = "none";
+            refreshNeteaseStatus();
+            showToast("网易云账号绑定成功！");
+          } else if (sr.code === 800) {
+            clearInterval(ncmQrTimer);
+          }
+        }, 2000);
+      } catch (e) {
+        alert("二维码请求异常: " + e);
+      }
+    }
+
+    async function logoutNetease() {
+      await fetch("/api/netease/logout", { method: "POST" });
+      refreshNeteaseStatus();
+      showToast("已退出网易云账号");
+    }
+
     loadSettings();
     refreshWifiStatus();
     refreshFeishuStatus();
+    refreshNeteaseStatus();
     setInterval(refreshFeishuStatus, 3000);
   </script>
 </body>

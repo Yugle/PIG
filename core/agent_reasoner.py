@@ -53,7 +53,7 @@ ACTION_SKILLS = {
     "reminder", "set_alarm", "set_timer", "set_reminder", "add_reminder", "delete_reminder",
     "evolve_action", "create_action", "learn_action",
     "play_action", "execute_action", "do_action", "run_action", "perform_action",
-    "pomodoro", "xiaomi_iot", "med_tracker", "dice_roll",
+    "pomodoro", "xiaomi_iot", "med_tracker", "dice_roll", "netease_music",
     "install_skill", "uninstall_skill", "create_skill",
     "register_master_face", "register_face", "record_face", "bind_master_face", "face_id"
 }

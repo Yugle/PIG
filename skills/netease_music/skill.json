@@ -1,0 +1,29 @@
+{
+  "id": "netease_music",
+  "name": "网易云音乐点歌台",
+  "version": "1.0.0",
+  "author": "PIG Music Lab",
+  "category": "娱乐互动",
+  "description": "接入网易云音乐搜索歌曲、热歌推荐与背景播放。支持点歌（如'放一首起风了'、'放周杰伦的歌'）、每日推荐、暂停、继续、切歌（下一首/上一首）、停止播放与音量调节。",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "控制指令: 'play'(搜歌播放), 'pause'(暂停), 'resume'(继续), 'next'(下一首), 'prev'(上一首), 'stop'(停止), 'daily'(热门/每日推荐), 'volume'(调音量), 'status'(查当前歌曲)",
+      "default": "play"
+    },
+    "query": {
+      "type": "string",
+      "description": "想听的歌名、歌手或风格关键词，如 '起风了'、'周杰伦 稻香'、'助眠纯音乐'",
+      "default": ""
+    },
+    "value": {
+      "type": "string",
+      "description": "音量数值(0~100)或 'up'/'down'",
+      "default": ""
+    }
+  },
+  "default_behavior": {
+    "emotion": "HAPPY",
+    "action": "NOD"
+  }
+}

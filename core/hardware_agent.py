@@ -269,6 +269,12 @@ class HardwareAgent:
 
     def get_status(self) -> Dict[str, Any]:
         """获取当前硬件与智能体实时状态"""
+        music_st = {}
+        try:
+            from skills.netease_music.player import music_player
+            music_st = music_player.get_state()
+        except Exception:
+            pass
         return {
             "mode": self.mode,
             "state": self.state,
@@ -282,13 +288,23 @@ class HardwareAgent:
             "cur_pan": getattr(self.hal, "cur_pan", 90.0),
             "cur_tilt": getattr(self.hal, "cur_tilt", 90.0),
             "radar_detected": getattr(self, "radar_detected", True),
+            "music": music_st,
             "last_waking_time": self.last_waking_time
         }
+
+    def _pause_music_for_voice(self):
+        """语音唤醒/摸头/打断说话前静默让路音乐，释放声卡给 TTS 与 ASR"""
+        try:
+            from skills.netease_music.player import music_player
+            music_player.pause_for_voice()
+        except Exception:
+            pass
 
     def trigger_wake_manually(self, custom_intent: str = "") -> bool:
         """通过 Web 或 API 手动触发硬件唤醒，跳过唤醒词识别"""
         if self.state != self.STATE_IDLE:
             return False
+        self._pause_music_for_voice()
         print("⚡ [手动唤醒] 用户通过 Web 控制台或 API 手动触发唤醒！", flush=True)
         self.last_waking_time = time.time()
         if self.wakeword_engine:
@@ -351,6 +367,7 @@ class HardwareAgent:
     def stop_speaking(self):
         """立即掐断当前正在进行的语音播放 (Barge-in 打断)"""
         self._interrupt_requested = True
+        self._pause_music_for_voice()
         if self.tts_engine:
             try:
                 self.tts_engine.stop()
@@ -361,6 +378,7 @@ class HardwareAgent:
     def _on_touch_event(self):
         """处理摸头传感器 (TTP223) 触摸事件"""
         logger.info("👆 [Touch] 捕获到头顶摸头传感器 (TTP223) 信号")
+        self._pause_music_for_voice()
 
         # 1. 若当前正在播报语音，摸头作为全双工硬件打断 (Barge-in)
         if self.state == self.STATE_SPEAKING:
@@ -967,6 +985,7 @@ class HardwareAgent:
 
                 if wake_hit:
                     hit_label = hit_kw or w_name
+                    self._pause_music_for_voice()
                     print(f"\n🔔 [唤醒成功] 物理麦克风监听到唤醒词: {hit_label} (置信度={max_score:.3f})！", flush=True)
                     self.last_waking_time = time.time()
                     if self.wakeword_engine:
