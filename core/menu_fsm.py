@@ -749,6 +749,7 @@ class MenuFSM:
                                 self.current_mode = self.qr_return_mode or "FACE"
                                 self.cursor = self.qr_return_cursor
                                 self.active_qr_skill_id = ""
+                                self.last_interaction_time = time.time()
                                 self._notify_listeners()
                         break
                     elif state in ("expired", "blocked", "error"):
@@ -768,6 +769,7 @@ class MenuFSM:
             self.active_qr_skill_id = ""
             self.current_mode = self.qr_return_mode or "FACE"
             self.cursor = self.qr_return_cursor
+            self.last_interaction_time = time.time()
             self._notify_listeners()
 
     def show_xiaomi_qr_on_screen(self):
