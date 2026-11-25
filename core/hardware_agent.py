@@ -62,7 +62,8 @@ class HardwareAgent:
         skill_manager,
         evolution_engine=None,
         proactive_care=None,
-        hal=None
+        hal=None,
+        chassis=None
     ):
         global _global_hardware_agent
         _global_hardware_agent = self
@@ -85,6 +86,11 @@ class HardwareAgent:
 
         # 硬件 HAL 初始化
         self.hal = hal or self._init_hal()
+
+        # 动力底盘初始化 (支持仿真数字孪生与后续物理 BLE 底盘热插拔)
+        self.chassis = chassis or self._init_chassis()
+        if self.chassis and hasattr(self.chassis, "add_state_listener"):
+            self.chassis.add_state_listener(self._on_chassis_event)
 
         # 语音识别与合成引擎
         self.asr_engine = self._init_asr()
@@ -146,6 +152,49 @@ class HardwareAgent:
         hal = SimulationRobotHAL(model_path=scene_file)
         logger.info("💻 [HAL] 已加载轻量级仿真驱动 (Simulation HAL)")
         return hal
+
+    def _init_chassis(self):
+        """初始化模块化动力底盘 (当前优先加载 50Hz 仿真数字孪生引擎)"""
+        try:
+            from drivers.chassis_sim import SimulationChassis
+            chassis = SimulationChassis()
+            logger.info("🚗 [Chassis] 已加载 93×90mm 四轮差速数字孪生底盘 (SimulationChassis)")
+            return chassis
+        except Exception as e:
+            logger.warning(f"⚠️ [Chassis] 仿真底盘初始化失败，回退至空底盘: {e}")
+            from drivers.chassis_base import NoopChassis
+            return NoopChassis()
+
+    def _on_chassis_event(self, payload: Dict[str, Any]):
+        """接收底层底盘状态与小脑急刹报警事件，实时同步给 Web 3D 孪生端"""
+        ev_type = payload.get("type", "chassis_state")
+        chassis_data = payload.get("chassis", {})
+        self.emit_event(ev_type, {"chassis": chassis_data})
+
+    def get_chassis_state(self) -> Dict[str, Any]:
+        if self.chassis:
+            return self.chassis.get_state()
+        return {}
+
+    def move_chassis(self, linear: float, angular: float, duration: float = 0.0) -> Dict[str, Any]:
+        if not self.chassis:
+            return {"status": "no_chassis"}
+        return self.chassis.move(linear=linear, angular=angular, duration=duration)
+
+    def stop_chassis(self) -> Dict[str, Any]:
+        if not self.chassis:
+            return {"status": "no_chassis"}
+        return self.chassis.stop()
+
+    def reset_chassis(self) -> Dict[str, Any]:
+        if not self.chassis:
+            return {"status": "no_chassis"}
+        return self.chassis.reset()
+
+    def set_chassis_guards(self, cliff_guard: Optional[bool] = None, tof_guard: Optional[bool] = None) -> Dict[str, Any]:
+        if not self.chassis:
+            return {"status": "no_chassis"}
+        return self.chassis.set_guards(cliff_guard=cliff_guard, tof_guard=tof_guard)
 
     def _init_asr(self):
         """初始化 ASR 语音识别引擎 (优先小米 MiMo 原生 ASR，兼容百度)"""
@@ -267,6 +316,7 @@ class HardwareAgent:
             "cur_pan": getattr(self.hal, "cur_pan", 90.0),
             "cur_tilt": getattr(self.hal, "cur_tilt", 90.0),
             "radar_detected": getattr(self, "radar_detected", True),
+            "chassis": self.get_chassis_state(),
             "last_waking_time": self.last_waking_time
         }
 
@@ -617,8 +667,13 @@ class HardwareAgent:
                 time.sleep(0.2)
 
     def stop(self):
-        """停止工作线程并安全释放音频设备"""
+        """停止工作线程并安全释放音频与底盘设备"""
         self._running = False
+        if getattr(self, "chassis", None):
+            try:
+                self.chassis.close()
+            except Exception:
+                pass
         if self.audio_stream:
             try:
                 self.audio_stream.stop_stream()
