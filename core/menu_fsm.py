@@ -429,6 +429,8 @@ class MenuFSM:
         
         # 通用插件屏幕弹窗与技能菜单状态 (零插件硬编码)
         self.active_qr_skill_id: str = ""
+        self.qr_return_mode: str = "FACE"
+        self.qr_return_cursor: int = 0
         self.qr_view: Dict[str, Any] = {
             "title": "扫码授权",
             "badge": "BINDING",
@@ -689,6 +691,9 @@ class MenuFSM:
         with self._lock:
             self._skill_qr_seq += 1
             cur_seq = self._skill_qr_seq
+            if not self.active_qr_skill_id and self.current_mode != resolved_mode:
+                self.qr_return_mode = self.current_mode
+                self.qr_return_cursor = self.cursor
             self.active_qr_skill_id = skill_id
             self.current_mode = resolved_mode
             self.qr_view = {
@@ -741,7 +746,8 @@ class MenuFSM:
                         time.sleep(2.2)
                         with self._lock:
                             if self.current_mode == resolved_mode and cur_seq == self._skill_qr_seq:
-                                self.current_mode = "FACE"
+                                self.current_mode = self.qr_return_mode or "FACE"
+                                self.cursor = self.qr_return_cursor
                                 self.active_qr_skill_id = ""
                                 self._notify_listeners()
                         break
@@ -756,11 +762,12 @@ class MenuFSM:
         threading.Thread(target=_worker, daemon=True, name=f"SkillQR_{skill_id}").start()
 
     def close_skill_qr(self):
-        """关闭屏幕插件二维码弹窗并返回表情界面"""
+        """关闭屏幕插件二维码弹窗并返回上一级界面"""
         with self._lock:
             self._skill_qr_seq += 1
             self.active_qr_skill_id = ""
-            self.current_mode = "FACE"
+            self.current_mode = self.qr_return_mode or "FACE"
+            self.cursor = self.qr_return_cursor
             self._notify_listeners()
 
     def show_xiaomi_qr_on_screen(self):
