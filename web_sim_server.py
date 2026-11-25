@@ -436,6 +436,36 @@ if hardware_agent and hardware_agent.hal:
 
     hardware_agent.add_radar_listener(_on_radar_event_link)
 
+    # 📺 真机 ST7789 物理屏幕实时渲染循环 (~15 FPS)
+    if getattr(hardware_agent.hal, "screen", None) is not None:
+        def _physical_screen_render_loop():
+            from PIL import Image
+            from drivers.eye_renderer import EyeRenderer
+            renderer = EyeRenderer()
+            last_black = False
+            print("📺 [PhysicalScreen] 物理屏幕渲染线程已启动 (240x320)")
+            while True:
+                try:
+                    if getattr(menu_fsm, "is_screen_off", False):
+                        if not last_black:
+                            hardware_agent.hal.display_face(Image.new("RGB", (240, 320), (0, 0, 0)))
+                            last_black = True
+                        time.sleep(0.15)
+                        continue
+                    last_black = False
+                    if getattr(menu_fsm, "current_mode", "FACE") == "FACE":
+                        emo = getattr(hardware_agent, "current_emotion", "NORMAL") or "NORMAL"
+                        frame = renderer.render_eyes(emotion=emo)
+                    else:
+                        frame = Image.new("RGB", (240, 320), (10, 12, 16))
+                    frame = menu_fsm.render_pil_overlay(frame)
+                    hardware_agent.hal.display_face(frame)
+                except Exception as e:
+                    print(f"⚠️ [PhysicalScreen] 渲染异常: {e}")
+                time.sleep(0.07)
+
+        threading.Thread(target=_physical_screen_render_loop, daemon=True).start()
+
 
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
