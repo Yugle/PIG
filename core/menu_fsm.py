@@ -249,9 +249,30 @@ def _draw_vector_icon(draw, icon_name: str, cx: int, cy: int, color):
         draw.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=color)
 
 
+def _fit_pil_text(draw, text: str, font, max_w: float) -> str:
+    """按像素宽度安全裁剪单行文本，防止胶囊徽章或提示文案遮挡溢出"""
+    s = str(text or "")
+    if not s or max_w <= 8:
+        return ""
+    if draw.textlength(s, font=font) <= max_w:
+        return s
+    ell = "…"
+    ell_w = draw.textlength(ell, font=font)
+    if max_w <= ell_w:
+        return ell
+    lo, hi = 0, len(s)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if draw.textlength(s[:mid], font=font) + ell_w <= max_w:
+            lo = mid
+        else:
+            hi = mid - 1
+    return s[:lo] + ell
+
+
 def _draw_modern_tile(draw, x: int, y: int, w: int, h: int, icon: str, title: str, right_type: str, right_val: Any, is_selected: bool, font_bold, font_small, theme: dict):
     """
-    绘制 Material Design 3 极简单行卡片 (左图标底座 + 纯净单行居中标题 + 右侧控件)
+    绘制 Material Design 3 极简单行卡片 (左图标底座 + 纯净单行居中标题 + 右侧控件，自动防重叠裁剪)
     """
     r = 16
     p_col = theme["primary"]
@@ -280,8 +301,33 @@ def _draw_modern_tile(draw, x: int, y: int, w: int, h: int, icon: str, title: st
     draw.ellipse([ic_cx - ic_r, ic_cy - ic_r, ic_cx + ic_r, ic_cy + ic_r], fill=icon_bg)
     _draw_vector_icon(draw, icon, ic_cx, ic_cy, icon_col)
 
-    # 中间纯净单行标题 (垂直完美居中，杜绝任何杂乱第二行)
-    draw.text((x + 48, y + (h - 17) // 2), title, fill=t_col, font=font_bold)
+    # 先计算右侧控件左边界，确保标题与右侧胶囊/开关/箭头绝不重叠
+    title_x = x + 48
+    avail_w = max(40.0, float(w - 58))
+    badge_info = None
+    if right_type == "switch":
+        right_left_x = x + w - 52
+    elif right_type == "badge":
+        raw_txt = str(right_val or "")
+        full_title_w = draw.textlength(str(title or ""), font=font_bold)
+        full_tw = draw.textlength(raw_txt, font=font_small)
+        raw_bw = max(38.0, full_tw + 14.0)
+        min_title_w = min(full_title_w, 72.0)
+        max_bw = max(44.0, avail_w - min_title_w - 6.0)
+        bw = int(min(raw_bw, max_bw))
+        bx = x + w - bw - 10
+        fitted_badge = _fit_pil_text(draw, raw_txt, font_small, max(16.0, bw - 12.0))
+        badge_tw = draw.textlength(fitted_badge, font=font_small)
+        badge_info = (bx, bw, fitted_badge, badge_tw)
+        right_left_x = bx
+    elif right_type == "chevron":
+        right_left_x = x + w - 22
+    else:
+        right_left_x = x + w - 10
+
+    max_title_w = max(32.0, float(right_left_x - title_x - 6))
+    fitted_title = _fit_pil_text(draw, title, font_bold, max_title_w)
+    draw.text((title_x, y + (h - 17) // 2), fitted_title, fill=t_col, font=font_bold)
 
     # 右侧控件
     if right_type == "switch":
@@ -304,19 +350,16 @@ def _draw_modern_tile(draw, x: int, y: int, w: int, h: int, icon: str, title: st
                 draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=12, fill=(45, 52, 52), outline=outline, width=1)
                 draw.ellipse([sw_x + 6, sw_y + 6, sw_x + 18, sw_y + 18], fill=(145, 155, 155))
 
-    elif right_type == "badge":
-        txt = str(right_val)
-        tw = max(24, len(txt) * 11)
-        bw = max(38, tw + 14)
+    elif right_type == "badge" and badge_info:
+        bx, bw, fitted_badge, badge_tw = badge_info
         bh = 22
-        bx = x + w - bw - 10
         by = y + (h - bh) // 2
         if is_selected:
             draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=11, fill=icon_sel_bg)
-            draw.text((bx + (bw - tw) // 2, by + 3), txt, fill=(255, 255, 255), font=font_small)
+            draw.text((bx + (bw - badge_tw) // 2, by + 3), fitted_badge, fill=(255, 255, 255), font=font_small)
         else:
             draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=11, fill=badge_bg, outline=outline, width=1)
-            draw.text((bx + (bw - tw) // 2, by + 3), txt, fill=p_col, font=font_small)
+            draw.text((bx + (bw - badge_tw) // 2, by + 3), fitted_badge, fill=p_col, font=font_small)
 
     elif right_type == "chevron":
         chv_x = x + w - 16
@@ -1592,7 +1635,8 @@ class MenuFSM:
                     is_selected = (idx == cur_idx)
                     item_type = item.get("type", "")
                     r_val = str(item.get("val", ""))
-                    r_type = "badge" if (item_type in ["cycle", "info"] or (r_val and item_type == "action")) else "chevron"
+                    show_badge = item_type in ["cycle", "info"] or (bool(r_val) and item_type == "action" and r_val != "点击检查更新")
+                    r_type = "badge" if show_badge else "chevron"
 
                     _draw_modern_tile(
                         draw, 12, card_y, card_w, card_h,
@@ -1668,9 +1712,9 @@ class MenuFSM:
             except Exception as e:
                 draw.text((50, 110), f"Error: {e}", fill=(0, 0, 0), font=self.font_small)
 
-            draw.text((24, 226), sub_headline, fill=on_surf, font=self.font_bold)
-            draw.text((24, 248), st_line, fill=p_col if "成功" in st_line else (255, 180, 0), font=self.font_small)
-            draw.text((24, 270), foot_tip, fill=on_surf_var, font=self.font_small)
+            draw.text((24, 226), _fit_pil_text(draw, sub_headline, self.font_bold, 200), fill=on_surf, font=self.font_bold)
+            draw.text((24, 248), _fit_pil_text(draw, st_line, self.font_small, 200), fill=p_col if "成功" in st_line else (255, 180, 0), font=self.font_small)
+            draw.text((24, 270), _fit_pil_text(draw, foot_tip, self.font_small, 200), fill=on_surf_var, font=self.font_small)
 
         # H. 彩蛋模式 (EASTER_EGG: 关于 PIG 的自述与介绍，全常规字体，无粗体，无底部翻页提示)
         elif self.current_mode == "EASTER_EGG":

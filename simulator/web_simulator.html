@@ -2262,11 +2262,27 @@
     }
 
     // Material Design 3 Tonal Badge 规范组件
-    function drawValueBadge(ctx, text, rightX, centerY, isSelected) {
+    function fitCanvasText(ctx, text, maxW) {
+      const s = String(text || "");
+      if (!s || maxW <= 8) return "";
+      if (ctx.measureText(s).width <= maxW) return s;
+      const ell = "…";
+      const ellW = ctx.measureText(ell).width;
+      if (maxW <= ellW) return ell;
+      let lo = 0, hi = s.length;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (ctx.measureText(s.slice(0, mid)).width + ellW <= maxW) lo = mid;
+        else hi = mid - 1;
+      }
+      return s.slice(0, lo) + ell;
+    }
+
+    function drawValueBadge(ctx, text, rightX, centerY, isSelected, maxBadgeW = 999) {
       ctx.save();
       ctx.font = "bold 11px sans-serif";
-      const tw = ctx.measureText(text).width;
-      const badgeW = Math.max(38, tw + 14);
+      const rawW = Math.max(38, ctx.measureText(text).width + 14);
+      const badgeW = Math.min(maxBadgeW, rawW);
       const badgeH = 22;
       const badgeX = rightX - badgeW;
       const badgeY = centerY - badgeH / 2;
@@ -2285,8 +2301,10 @@
       }
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(text, badgeX + badgeW / 2, centerY);
+      const fittedBadge = fitCanvasText(ctx, text, Math.max(16, badgeW - 12));
+      ctx.fillText(fittedBadge, badgeX + badgeW / 2, centerY);
       ctx.restore();
+      return badgeW;
     }
 
     // Material Design 3 矢量微图标绘制 (18x18px)
@@ -2416,7 +2434,7 @@
       ctx.restore();
     }
 
-    // Material Design 3 极简单行卡片绘制 (纯净单行，垂直居中，无冗余第二行)
+    // Material Design 3 极简单行卡片绘制 (纯净单行，垂直居中，自动裁剪防文字重叠)
     function drawCanvasModernTile(ctx, x, y, w, h, icon, title, rightType, rightVal, isSel) {
       const r = 16;
       ctx.save();
@@ -2427,13 +2445,6 @@
         ctx.fillStyle = MD3.iconBgSel;
         ctx.beginPath(); ctx.arc(x + 25, y + h / 2, 15, 0, Math.PI * 2); ctx.fill();
         drawCanvasVectorIcon(ctx, icon, x + 25, y + h / 2, (MD3.primary === "#f0f0f0") ? "#121212" : "#ffffff");
-
-        // 中间纯净单行标题 (垂直完美居中，无第二行)
-        ctx.fillStyle = MD3.onPrimary;
-        ctx.font = "bold 14px sans-serif";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        ctx.fillText(title, x + 48, y + h / 2);
       } else {
         ctx.fillStyle = MD3.surfaceContainer;
         ctx.strokeStyle = MD3.outline;
@@ -2444,20 +2455,44 @@
         ctx.fillStyle = MD3.surfaceHigh || "#26302f";
         ctx.beginPath(); ctx.arc(x + 25, y + h / 2, 15, 0, Math.PI * 2); ctx.fill();
         drawCanvasVectorIcon(ctx, icon, x + 25, y + h / 2, MD3.primary);
-
-        // 中间纯净单行标题 (垂直完美居中，无第二行)
-        ctx.fillStyle = MD3.onSurface;
-        ctx.font = "bold 14px sans-serif";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        ctx.fillText(title, x + 48, y + h / 2);
       }
+
+      // 计算右侧控件宽度并裁剪左侧标题，确保标题与胶囊徽章之间绝不重叠
+      const titleX = x + 48;
+      const availW = Math.max(40, w - 58);
+      ctx.font = "bold 14px sans-serif";
+      const fullTitleW = ctx.measureText(String(title || "")).width;
+
+      let rightLeftX = x + w - 10;
+      let badgeWidthLimit = 999;
+      if (rightType === "switch") {
+        rightLeftX = x + w - 52;
+      } else if (rightType === "chevron") {
+        rightLeftX = x + w - 22;
+      } else if (rightType === "badge") {
+        ctx.save();
+        ctx.font = "bold 11px sans-serif";
+        const rawBw = Math.max(38, ctx.measureText(String(rightVal || "")).width + 14);
+        ctx.restore();
+        const minTitleW = Math.min(fullTitleW, 72);
+        badgeWidthLimit = Math.max(44, availW - minTitleW - 6);
+        const finalBw = Math.min(rawBw, badgeWidthLimit);
+        rightLeftX = x + w - finalBw - 10;
+      }
+
+      const maxTitleW = Math.max(32, rightLeftX - titleX - 6);
+      const fittedTitle = fitCanvasText(ctx, title, maxTitleW);
+      ctx.fillStyle = isSel ? MD3.onPrimary : MD3.onSurface;
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(fittedTitle, titleX, y + h / 2);
 
       // 右侧控件
       if (rightType === "switch") {
         drawToggleSwitch(ctx, x + w - 52, y + (h - 24) / 2, 42, 24, Boolean(rightVal), isSel);
       } else if (rightType === "badge") {
-        drawValueBadge(ctx, String(rightVal), x + w - 10, y + h / 2, isSel);
+        drawValueBadge(ctx, String(rightVal), x + w - 10, y + h / 2, isSel, badgeWidthLimit);
       } else if (rightType === "chevron") {
         const chvX = x + w - 16;
         const chvY = y + h / 2;
@@ -2619,16 +2654,16 @@
 
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 13px sans-serif";
-        ctx.fillText(isNcm ? "打开网易云App 扫码登录" : "打开米家App 扫码授权", 24, 228);
+        ctx.fillText(fitCanvasText(ctx, isNcm ? "打开网易云App 扫码登录" : "打开米家App 扫码授权", 200), 24, 228);
         const qrSt = isNcm
           ? ((menuState.netease_qr && menuState.netease_qr.status) || "等待扫码中...")
           : ((menuState.xiaomi_qr && menuState.xiaomi_qr.status) || "等待扫码中...");
         ctx.fillStyle = qrSt.includes("成功") ? MD3.primary : "#f59e0b";
         ctx.font = "11px monospace";
-        ctx.fillText(qrSt, 24, 250);
+        ctx.fillText(fitCanvasText(ctx, qrSt, 200), 24, 250);
         ctx.fillStyle = MD3.onSurfaceVariant;
         ctx.font = "11px sans-serif";
-        ctx.fillText(isNcm ? "绑定后畅听 VIP 与个人每日推荐" : "绑定后可直接语音控制米家台灯/插座", 24, 272);
+        ctx.fillText(fitCanvasText(ctx, isNcm ? "绑定后畅听 VIP 与个人每日推荐" : "绑定后可直接语音控制米家台灯/插座", 200), 24, 272);
 
       } else if (menuState.mode === "DOCTOR") {
         ctx.strokeStyle = MD3.primary;
@@ -2800,7 +2835,8 @@
           if (cardY + cardH >= 40 && cardY <= 320) {
             const isSel = (idx === curIdx);
             const rVal = it.val !== undefined ? String(it.val) : "";
-            const rType = (it.type === "cycle" || it.type === "info" || (rVal && it.type === "action")) ? "badge" : "chevron";
+            const showBadge = (it.type === "cycle" || it.type === "info" || (rVal && it.type === "action" && rVal !== "点击检查更新"));
+            const rType = showBadge ? "badge" : "chevron";
             drawCanvasModernTile(ctx, 12, cardY, cardW, cardH, it.icon || "settings", it.name, rType, rVal, isSel);
           }
         });
