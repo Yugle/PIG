@@ -446,6 +446,8 @@ if hardware_agent and hardware_agent.hal:
             print("📺 [PhysicalScreen] 物理屏幕渲染线程已启动 (240x320)")
             while True:
                 try:
+                    if getattr(menu_fsm, "_shutting_down", False):
+                        return
                     if getattr(menu_fsm, "is_screen_off", False):
                         if not last_black:
                             hardware_agent.hal.display_face(Image.new("RGB", (240, 320), (0, 0, 0)))

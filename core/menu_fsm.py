@@ -1327,6 +1327,21 @@ class MenuFSM:
             self._notify_listeners()
         elif action == "shutdown":
             print("🛑 [MenuFSM] 执行树莓派系统关机: sudo shutdown -h now")
+            self._shutting_down = True
+            if self.hal and hasattr(self.hal, "display_face"):
+                try:
+                    img = Image.new("RGB", (240, 320), (10, 12, 16))
+                    draw = ImageDraw.Draw(img)
+                    draw.rounded_rectangle([24, 108, 216, 212], radius=14, fill=(24, 28, 36), outline=(239, 68, 68), width=2)
+                    draw.text((48, 134), "正在安全关机...", fill=(248, 113, 113), font=self.font_bold)
+                    draw.text((40, 170), "绿灯熄灭后即可拔电", fill=(180, 190, 205), font=self.font_small)
+                    self.hal.display_face(img)
+                    time.sleep(1.2)
+                    self.hal.display_face(Image.new("RGB", (240, 320), (0, 0, 0)))
+                    if getattr(self.hal, "screen", None) is not None:
+                        self.hal.screen.command(0x28)  # DISPOFF
+                except Exception:
+                    pass
             os.system("sudo shutdown -h now 2>/dev/null || echo 'Simulation: Shutdown simulated'")
 
     def refresh_doctor_data_async(self):
