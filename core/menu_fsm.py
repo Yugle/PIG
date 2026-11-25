@@ -697,6 +697,15 @@ class MenuFSM:
     def show_xiaomi_qr_on_screen(self):
         """在机器人 2.4 寸屏幕上直接弹窗显示米家登录/授权二维码 (无浏览器弹窗)"""
         print("📱 [MenuFSM] 触发屏幕弹窗显示米家绑定二维码")
+        try:
+            from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
+            qr_auth_manager.local_qr_path = None
+            qr_auth_manager.qr_url = ""
+            old_qr = qr_auth_manager.config_path.parent / "xiaomi_qr.png"
+            if old_qr.exists():
+                old_qr.unlink()
+        except Exception:
+            pass
         with self._lock:
             self.current_mode = "XIAOMI_QR"
             self.xiaomi_status_text = "获取米家二维码中..."
@@ -1445,6 +1454,7 @@ class MenuFSM:
             },
             "settings_url": f"http://{ip}:8090/settings",
             "skills_url": f"http://{ip}:8090/skills",
+            "qr_mode": self.current_mode if self.current_mode in ["QR_CODE", "XIAOMI_QR", "NETEASE_QR", "SKILLS_QR"] else "",
             "qr_base64": self.get_qr_base64(),
             "theme": getattr(self, "theme_key", "mint"),
             "is_mic_muted": self.is_mic_muted,

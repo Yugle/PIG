@@ -147,6 +147,16 @@ class XiaomiQRAuth:
 
     def start_qr_session(self):
         """发起米家扫码登录流程，返回二维码图片链接和轮询状态"""
+        self.qr_url = ""
+        self.login_url = ""
+        self.lp_url = ""
+        self.local_qr_path = None
+        old_qr_file = self.config_path.parent / "xiaomi_qr.png"
+        if old_qr_file.exists():
+            try:
+                old_qr_file.unlink()
+            except Exception:
+                pass
         url = "https://account.xiaomi.com/longPolling/loginUrl"
         data = {
             "_qrsize": "480",

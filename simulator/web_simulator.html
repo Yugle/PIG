@@ -1769,19 +1769,43 @@
 
     let qrCodeImg = null;
     let qrCodeLoaded = false;
+    let qrCodeMode = "";
 
-    function preloadQrCode() {
+    function resetScreenQrCache() {
+      menuState.qr_base64 = "";
+      menuState.qr_mode = "";
+      qrCodeLoaded = false;
+      qrCodeMode = "";
+      if (qrCodeImg) {
+        qrCodeImg.removeAttribute("src");
+      }
+    }
+
+    function syncScreenQrFromState() {
+      const m = menuState.mode || "";
+      const isQrScreen = (m === "QR_CODE" || m === "XIAOMI_QR" || m === "NETEASE_QR" || m === "SKILLS_QR");
+      if (!isQrScreen || !menuState.qr_base64 || menuState.qr_mode !== m) {
+        if (qrCodeMode !== m) {
+          qrCodeLoaded = false;
+          qrCodeMode = "";
+        }
+        return;
+      }
       if (!qrCodeImg) {
         qrCodeImg = new Image();
         qrCodeImg.onload = () => { qrCodeLoaded = true; };
         qrCodeImg.onerror = () => { qrCodeLoaded = false; };
       }
-      if (menuState.qr_base64) {
+      if (qrCodeMode !== m || qrCodeImg.src !== menuState.qr_base64) {
+        qrCodeLoaded = false;
+        qrCodeMode = m;
         qrCodeImg.src = menuState.qr_base64;
-        qrCodeLoaded = true;
-      } else {
-        qrCodeImg.src = "/api/menu/qr_image?t=" + Date.now();
+        if (qrCodeImg.complete && qrCodeImg.naturalWidth > 0) qrCodeLoaded = true;
       }
+    }
+
+    function preloadQrCode() {
+      syncScreenQrFromState();
     }
 
     // 页面启动时同步拉取一次菜单状态
@@ -1790,7 +1814,7 @@
       .then(d => {
         if (d) {
           menuState = Object.assign(menuState, d);
-          preloadQrCode();
+          syncScreenQrFromState();
         }
       })
       .catch(() => {});
@@ -1828,10 +1852,7 @@
                   menuState = Object.assign(menuState, data.menu_state);
                 }
               }
-              if (menuState.qr_base64 && qrCodeImg && !qrCodeLoaded) {
-                qrCodeImg.src = menuState.qr_base64;
-                qrCodeLoaded = true;
-              }
+              syncScreenQrFromState();
             }
           }
         } catch (e) {
@@ -1877,6 +1898,7 @@
           menuState.mode = "SKILLS";
           fetch(isNcm ? "/api/netease/qr_dismiss_screen" : "/api/xiaomi/qr_dismiss_screen", { method: "POST" }).catch(() => {});
         } else if (button === "K3") {
+          resetScreenQrCache();
           if (isNcm && menuState.netease_qr) menuState.netease_qr.status = "正在刷新网易云二维码...";
           if (!isNcm && menuState.xiaomi_qr) menuState.xiaomi_qr.status = "正在向服务器刷新二维码...";
           fetch(isNcm ? "/api/netease/qr_start_screen" : "/api/xiaomi/qr_start_screen", { method: "POST" }).catch(() => {});
@@ -1893,8 +1915,9 @@
         else if (button === "K3") {
           const target = mainItems[menuState.cursor] || {};
           if (target.id === "qr") {
+            resetScreenQrCache();
             menuState.mode = "QR_CODE";
-            preloadQrCode();
+            setTimeout(syncMenuState, 200);
           } else if (target.id === "doctor") {
             menuState.mode = "DOCTOR";
             fetch("/api/system/doctor").then(r => r.json()).then(d => { menuState.doctor = d; }).catch(() => {});
@@ -1965,12 +1988,17 @@
         else if (button === "K3") {
           const cur = skItems[menuState.cursor] || {};
           if (cur.id === "mijia") {
+            resetScreenQrCache();
             menuState.mode = "XIAOMI_QR";
             fetch("/api/xiaomi/qr_start_screen", { method: "POST" }).catch(() => {});
+            setTimeout(syncMenuState, 400);
           } else if (cur.id === "netease") {
+            resetScreenQrCache();
             menuState.mode = "NETEASE_QR";
             fetch("/api/netease/qr_start_screen", { method: "POST" }).catch(() => {});
+            setTimeout(syncMenuState, 400);
           } else if (cur.id === "skills_portal") {
+            resetScreenQrCache();
             menuState.mode = "SKILLS_QR";
             setTimeout(syncMenuState, 150);
           }
@@ -2585,23 +2613,25 @@
         ctx.fillStyle = "#ffffff";
         roundRect(ctx, 42, 48, 156, 156, 16, true);
 
-        if (!qrCodeImg) preloadQrCode();
-        if (menuState.qr_base64 && qrCodeImg && qrCodeImg.src !== menuState.qr_base64) {
-          qrCodeImg.src = menuState.qr_base64;
-          qrCodeLoaded = true;
-        }
-        if (menuState.qr_base64 && qrCodeLoaded && qrCodeImg && qrCodeImg.complete) {
+        syncScreenQrFromState();
+        const curQrReady = Boolean(
+          menuState.qr_base64 &&
+          menuState.qr_mode === menuState.mode &&
+          qrCodeMode === menuState.mode &&
+          qrCodeLoaded && qrCodeImg && qrCodeImg.complete && qrCodeImg.naturalWidth > 0
+        );
+        if (curQrReady) {
           try {
             ctx.drawImage(qrCodeImg, 48, 54, 144, 144);
           } catch (e) {
-            ctx.fillStyle = "#000000";
+            ctx.fillStyle = "#475569";
             ctx.font = "11px sans-serif";
-            ctx.fillText("二维码载入中...", 76, 130);
+            ctx.fillText("二维码生成中...", 76, 130);
           }
         } else {
-          ctx.fillStyle = "#000000";
+          ctx.fillStyle = "#475569";
           ctx.font = "11px sans-serif";
-          ctx.fillText("二维码载入中...", 76, 130);
+          ctx.fillText("二维码生成中...", 76, 130);
         }
 
         if (isAp) {
@@ -2642,23 +2672,25 @@
         ctx.fillStyle = "#ffffff";
         roundRect(ctx, 42, 48, 156, 156, 16, true);
 
-        if (!qrCodeImg) preloadQrCode();
-        if (menuState.qr_base64 && qrCodeImg && qrCodeImg.src !== menuState.qr_base64) {
-          qrCodeImg.src = menuState.qr_base64;
-          qrCodeLoaded = true;
-        }
-        if (menuState.qr_base64 && qrCodeLoaded && qrCodeImg && qrCodeImg.complete) {
+        syncScreenQrFromState();
+        const curQrReady = Boolean(
+          menuState.qr_base64 &&
+          menuState.qr_mode === menuState.mode &&
+          qrCodeMode === menuState.mode &&
+          qrCodeLoaded && qrCodeImg && qrCodeImg.complete && qrCodeImg.naturalWidth > 0
+        );
+        if (curQrReady) {
           try {
             ctx.drawImage(qrCodeImg, 48, 54, 144, 144);
           } catch (e) {
-            ctx.fillStyle = "#000000";
+            ctx.fillStyle = "#475569";
             ctx.font = "11px sans-serif";
-            ctx.fillText("二维码载入中...", 76, 130);
+            ctx.fillText("二维码生成中...", 76, 130);
           }
         } else {
-          ctx.fillStyle = "#000000";
+          ctx.fillStyle = "#475569";
           ctx.font = "11px sans-serif";
-          ctx.fillText("二维码载入中...", 76, 130);
+          ctx.fillText("二维码生成中...", 76, 130);
         }
 
         const subHeadline = isSkillsQr ? "微信/浏览器 扫码配技能" : (isNcm ? "打开网易云App 扫码登录" : "打开米家App 扫码授权");
@@ -6294,6 +6326,7 @@
     }
 
     async function wbTriggerScreenQr(skillId, startEp, pollEp) {
+      resetScreenQrCache();
       if (skillId === "xiaomi_iot") menuState.mode = "XIAOMI_QR";
       if (skillId === "netease_music") menuState.mode = "NETEASE_QR";
       const box = document.getElementById(`wb-qrbox-${skillId}`);
@@ -6450,6 +6483,7 @@
 
     async function triggerXiaomiScreenQR() {
       // 1. 本地立即切入 XIAOMI_QR 模式，清空旧二维码，让 3D 机器人面部屏幕立即进入扫码界面
+      resetScreenQrCache();
       menuState.mode = "XIAOMI_QR";
       menuState.qr_base64 = "";
       qrCodeLoaded = false;
@@ -6560,16 +6594,7 @@
             } else if (data.mode !== "EASTER_EGG" && menuState.mode === "EASTER_EGG") {
               menuState.mode = data.mode;
             }
-            if ((menuState.mode === "XIAOMI_QR" || menuState.mode === "NETEASE_QR" || menuState.mode === "SKILLS_QR" || menuState.mode === "QR_CODE") && menuState.qr_base64) {
-              if (!qrCodeImg) {
-                qrCodeImg = new Image();
-                qrCodeImg.onload = () => { qrCodeLoaded = true; };
-              }
-              if (qrCodeImg.src !== menuState.qr_base64) {
-                qrCodeImg.src = menuState.qr_base64;
-                qrCodeLoaded = true;
-              }
-            }
+            syncScreenQrFromState();
           }
         }
       } catch (e) {}
