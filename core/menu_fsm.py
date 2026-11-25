@@ -524,16 +524,16 @@ class MenuFSM:
             self.version_hint = None
 
         self.system_items = [
-            {"id": "theme", "icon": "theme", "name": "系统主题风格", "val": theme_name, "type": "cycle"},
-            {"id": "face_id", "icon": "face", "name": "录入主人面容", "val": "", "type": "action"},
-            {"id": "face_clear", "icon": "trash", "name": "重置主人面容", "val": "", "type": "action"},
-            {"id": "voice", "icon": "voice", "name": "发音音色切换", "val": voice, "type": "cycle"},
-            {"id": "volume", "icon": "volume", "name": "系统播报音量", "val": f"{vol}%", "type": "cycle"},
-            {"id": "timeout", "icon": "clock", "name": "屏幕息屏时间", "val": timeout_txt, "type": "cycle"},
-            {"id": "version", "icon": "chip", "name": "系统固件版本", "val": ver_val, "type": "info"},
-            {"id": "update", "icon": "cloud", "name": "检查系统更新", "val": self.update_status, "type": "action"},
-            {"id": "restart", "icon": "restart", "name": "重启机器人服务", "val": "", "type": "action"},
-            {"id": "shutdown", "icon": "power", "name": "树莓派安全关机", "val": "", "type": "action"},
+            {"id": "theme", "icon": "theme", "name": "主题风格", "val": theme_name, "type": "cycle"},
+            {"id": "face_id", "icon": "face", "name": "录入面容", "val": "", "type": "action"},
+            {"id": "face_clear", "icon": "trash", "name": "清除面容", "val": "", "type": "action"},
+            {"id": "voice", "icon": "voice", "name": "发音音色", "val": voice, "type": "cycle"},
+            {"id": "volume", "icon": "volume", "name": "播报音量", "val": f"{vol}%", "type": "cycle"},
+            {"id": "timeout", "icon": "clock", "name": "息屏时间", "val": timeout_txt, "type": "cycle"},
+            {"id": "version", "icon": "chip", "name": "固件版本", "val": ver_val, "type": "info"},
+            {"id": "update", "icon": "cloud", "name": "系统更新", "val": self.update_status, "type": "action"},
+            {"id": "restart", "icon": "restart", "name": "重启服务", "val": "", "type": "action"},
+            {"id": "shutdown", "icon": "power", "name": "安全关机", "val": "", "type": "action"},
         ]
 
     def _sync_skill_items(self):
@@ -564,12 +564,11 @@ class MenuFSM:
         except Exception:
             pass
 
-        ip = get_local_ip()
         self.skill_items = [
-            {"id": "mijia", "icon": "home", "name": "米家扫码绑定", "val": mijia_val, "type": "info"},
-            {"id": "netease", "icon": "sfx", "name": "网易云音乐绑定", "val": ncm_val, "type": "info"},
-            {"id": "feishu", "icon": "chat", "name": "飞书网关状态", "val": feishu_val, "type": "info"},
-            {"id": "skills_portal", "icon": "skills", "name": "手机配技能页", "val": f"{ip.split('.')[-1]}:8090/skills", "type": "info"},
+            {"id": "mijia", "icon": "home", "name": "米家绑定", "val": mijia_val, "type": "info"},
+            {"id": "netease", "icon": "sfx", "name": "网易云", "val": ncm_val, "type": "info"},
+            {"id": "feishu", "icon": "chat", "name": "飞书网关", "val": feishu_val, "type": "info"},
+            {"id": "skills_portal", "icon": "skills", "name": "扫码配技能", "val": "", "type": "action"},
         ]
 
     def cycle_theme(self):
@@ -935,8 +934,11 @@ class MenuFSM:
             except Exception:
                 return b""
 
-        # 2. 处于无线与配网页 (QR_CODE)
-        if wifi_manager.ap_mode:
+        # 2. 处于手机配置页二维码 (SKILLS_QR / QR_CODE)
+        if self.current_mode == "SKILLS_QR":
+            ip = get_local_ip()
+            url = f"http://{ip}:8090/skills"
+        elif wifi_manager.ap_mode:
             # AP 热点配网：直接编码手机连 Wi-Fi 二维码协议
             url = wifi_manager.get_status().get("wifi_qr", f"WIFI:T:WPA;S:{wifi_manager.ap_ssid};P:{wifi_manager.ap_password};;")
         else:
@@ -1113,6 +1115,13 @@ class MenuFSM:
                     self.show_netease_qr_on_screen()
                 return
 
+            if self.current_mode == "SKILLS_QR":
+                if button in ["K4", "ESC"]:
+                    self.current_mode = "SKILLS"
+                    self.cursor = 3
+                    self._notify_listeners()
+                return
+
             # 3. 处于无线与配网展示页 (QR_CODE)
             if self.current_mode == "QR_CODE":
                 if button in ["K3", "ENTER"]:
@@ -1200,6 +1209,9 @@ class MenuFSM:
                         self.show_xiaomi_qr_on_screen()
                     elif action_id == "netease":
                         self.show_netease_qr_on_screen()
+                    elif action_id == "skills_portal":
+                        self.current_mode = "SKILLS_QR"
+                        self._notify_listeners()
                     else:
                         self._sync_skill_items()
                         self._notify_listeners()
@@ -1687,13 +1699,24 @@ class MenuFSM:
             # 状态文案
             draw.text((28, 230), self.face_enroll_msg, fill=on_surf, font=self.font_bold)
 
-        # G. 技能服务二维码授权弹窗 (XIAOMI_QR / NETEASE_QR 共享居中白底卡渲染)
-        elif self.current_mode in ["XIAOMI_QR", "NETEASE_QR"]:
-            is_ncm = (self.current_mode == "NETEASE_QR")
-            header_title = "网易云登录" if is_ncm else "米家授权"
-            sub_headline = "打开网易云App 扫码登录" if is_ncm else "打开米家App 扫码授权"
-            st_line = self.netease_status_text if is_ncm else self.xiaomi_status_text
-            foot_tip = "绑定后畅听 VIP 与个人每日推荐" if is_ncm else "绑定后可直接语音控制台灯/水壶等"
+        # G. 技能服务二维码弹窗 (XIAOMI_QR / NETEASE_QR / SKILLS_QR 共享居中白底卡渲染)
+        elif self.current_mode in ["XIAOMI_QR", "NETEASE_QR", "SKILLS_QR"]:
+            if self.current_mode == "NETEASE_QR":
+                header_title = "网易云登录"
+                sub_headline = "打开网易云App 扫码登录"
+                st_line = self.netease_status_text
+                foot_tip = "绑定后畅听 VIP 与个人每日推荐"
+            elif self.current_mode == "SKILLS_QR":
+                ip = get_local_ip()
+                header_title = "技能后台"
+                sub_headline = "微信/浏览器 扫码配技能"
+                st_line = f"{ip}:8090/skills"
+                foot_tip = "配置飞书/天气/米家/音乐等插件"
+            else:
+                header_title = "米家授权"
+                sub_headline = "打开米家App 扫码授权"
+                st_line = self.xiaomi_status_text
+                foot_tip = "绑定后可直接语音控制台灯/水壶等"
 
             draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
             draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
