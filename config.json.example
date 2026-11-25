@@ -15,8 +15,14 @@
   "custom_tts_api_key": "",
   "pan_pin": 18,
   "tilt_pin": 13,
+  "wakeword_engine": "auto",
+  "wakeword_keywords": [
+    "你好小猪",
+    "小猪小猪",
+    "小猪同学"
+  ],
   "wakeword_model": "hey_jarvis",
-  "wakeword_threshold": 0.5,
+  "wakeword_threshold": 0.25,
   "max_reply_length": 200,
   "face_tracking": false,
   "non_verbal_audio": true,

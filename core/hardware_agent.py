@@ -90,11 +90,12 @@ class HardwareAgent:
         self.asr_engine = self._init_asr()
         self.tts_engine = self._init_tts()
 
-        # 音频输入流与 openWakeWord 模型
+        # 音频输入流与离线语音唤醒引擎 (sherpa-onnx 中文优先，兼容 openWakeWord)
         self.has_mic = False
         self.p_audio = None
         self.audio_stream = None
         self.oww_model = None
+        self.wakeword_engine = None
 
         self._running = False
         self._worker_thread = None
@@ -176,20 +177,23 @@ class HardwareAgent:
             return None
 
     def _init_microphone(self):
-        """初始化物理/蓝牙麦克风及 openWakeWord 监听"""
+        """初始化物理/蓝牙麦克风及离线中文/英文唤醒引擎 (sherpa-onnx / openWakeWord)"""
         if self.mode == "simulation":
             logger.info("ℹ️ [音频] 当前处于纯网页仿真模式，跳过物理麦克风初始化")
             return
 
         try:
             import pyaudio
-            import numpy as np
-            from openwakeword.model import Model
+            from drivers.wakeword_engine import WakeWordEngine
 
             FORMAT = pyaudio.paInt16
             CHANNELS = 1
             RATE = 16000
             CHUNK = 1280
+
+            engine = WakeWordEngine(self.cfg)
+            if not engine.is_ready:
+                raise RuntimeError("未找到可用的离线唤醒引擎 (请检查 sherpa-onnx 中文模型或 openWakeWord)")
 
             self.p_audio = pyaudio.PyAudio()
             self.audio_stream = self.p_audio.open(
@@ -200,14 +204,23 @@ class HardwareAgent:
                 frames_per_buffer=CHUNK
             )
 
-            model_name = self.cfg.get("wakeword_model", "hey_jarvis")
-            self.oww_model = Model(wakeword_models=[model_name], inference_framework="onnx")
+            self.wakeword_engine = engine
+            self.oww_model = engine.oww_model
             self.has_mic = True
-            logger.info(f"🎙️ [音频模块] 麦克风与 openWakeWord 引擎就绪，监听唤醒词: {model_name}")
+            logger.info(f"🎙️ [音频模块] 麦克风与唤醒引擎就绪 ({engine.backend}): {engine.model_label}")
 
         except Exception as e:
             self.has_mic = False
             logger.info(f"ℹ️ [音频模块] 物理麦克风未就绪或未安装依赖 ({e})，将以 Web 虚实大屏模式运行")
+
+    def reload_wakeword(self):
+        """热重载离线唤醒词配置 (支持动态修改中文唤醒词后免重启生效)"""
+        if self.wakeword_engine:
+            try:
+                self.wakeword_engine.reload(self.cfg)
+                self.oww_model = self.wakeword_engine.oww_model
+            except Exception as e:
+                logger.warning(f"⚠️ [WakeWord] 热重载异常: {e}")
 
     def register_event_listener(self, callback: Callable[[Dict[str, Any]], None]):
         """注册状态变迁与事件监听器 (供 Web SSE 广播)"""
@@ -261,7 +274,9 @@ class HardwareAgent:
             "state": self.state,
             "has_mic": self.has_mic,
             "is_raspberry_pi": IS_RASPBERRY_PI,
-            "wakeword_model": self.cfg.get("wakeword_model", "hey_jarvis"),
+            "wakeword_engine": self.wakeword_engine.backend if self.wakeword_engine else self.cfg.get("wakeword_engine", "auto"),
+            "wakeword_model": self.wakeword_engine.model_label if self.wakeword_engine else self.cfg.get("wakeword_model", "hey_jarvis"),
+            "wakeword_keywords": self.cfg.get("wakeword_keywords", ["你好小猪", "小猪小猪"]),
             "wakeword_threshold": float(self.cfg.get("wakeword_threshold", 0.20)),
             "mic_gain": float(self.cfg.get("mic_gain", 2.5)),
             "cur_pan": getattr(self.hal, "cur_pan", 90.0),
@@ -276,7 +291,9 @@ class HardwareAgent:
             return False
         print("⚡ [手动唤醒] 用户通过 Web 控制台或 API 手动触发唤醒！", flush=True)
         self.last_waking_time = time.time()
-        if self.oww_model:
+        if self.wakeword_engine:
+            self.wakeword_engine.reset()
+        elif self.oww_model:
             self.oww_model.reset()
 
         self.state = self.STATE_WAKING
@@ -881,26 +898,27 @@ class HardwareAgent:
                     audio_np = audio_raw
 
                 energy = float(np.abs(audio_np).mean())
-                w_name = self.cfg.get("wakeword_model", "hey_jarvis")
+                w_name = self.wakeword_engine.model_label if self.wakeword_engine else self.cfg.get("wakeword_model", "hey_jarvis")
                 threshold = float(self.cfg.get("wakeword_threshold", 0.20))
 
                 # 若当前处于非空闲状态 (思考中/语音播报中/余韵中)，继续平滑读取排空声卡缓冲区，刷新实时音量条
                 if self.state != self.STATE_IDLE:
                     # 全双工语音打断检测 (Voice Barge-in)
-                    # 当机器人正在播报 (SPEAKING) 时，若主人大声喊出唤醒词打断 (置信度 > 0.38)
-                    if self.state == self.STATE_SPEAKING and self.oww_model:
-                        preds = self.oww_model.predict(audio_np)
-                        max_score = float(max(preds.values())) if preds else 0.0
-                        if max_score > max(0.38, threshold * 1.5):
-                            logger.info(f"🛑 [Voice Barge-in] 播报中监听到唤醒词打断 ({max_score:.2f})！掐断播报并进入倾听。")
+                    # 当机器人正在播报 (SPEAKING) 时，若主人大声喊出唤醒词打断
+                    if self.state == self.STATE_SPEAKING and self.wakeword_engine:
+                        max_score, hit_kw = self.wakeword_engine.predict(audio_np)
+                        barge_thresh = 0.5 if self.wakeword_engine.backend == "sherpa_cn" else max(0.38, threshold * 1.5)
+                        if max_score > barge_thresh:
+                            hit_label = hit_kw or w_name
+                            logger.info(f"🛑 [Voice Barge-in] 播报中监听到唤醒词打断 [{hit_label}] ({max_score:.2f})！掐断播报并进入倾听。")
                             self.stop_speaking()
                             self.last_waking_time = time.time()
-                            self.oww_model.reset()
+                            self.wakeword_engine.reset()
                             self.state = self.STATE_WAKING
                             self.emit_event("status_change", {
                                 "status": self.STATE_WAKING,
-                                "wake_word": w_name,
-                                "message": f"✋ 主人语音打断：{w_name}！"
+                                "wake_word": hit_label,
+                                "message": f"✋ 主人语音打断：{hit_label}！"
                             })
                             self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "HAPPY"})
                             if self.hal:
@@ -922,8 +940,7 @@ class HardwareAgent:
                         })
                     continue
 
-                preds = self.oww_model.predict(audio_np)
-                max_score = float(max(preds.values())) if preds else 0.0
+                max_score, hit_kw = self.wakeword_engine.predict(audio_np) if self.wakeword_engine else (0.0, "")
 
                 # 每 ~160ms (2个 chunk) 广播一次实时音频电平与唤醒得分
                 meter_counter += 1
@@ -938,7 +955,8 @@ class HardwareAgent:
                     })
 
                 # 定期巡检主动关怀触发机制 (每 ~1.6s 轻量判定一次)
-                if self.proactive_care and self.state == self.STATE_IDLE and max_score <= threshold:
+                wake_hit = bool(self.wakeword_engine and ((self.wakeword_engine.backend == "sherpa_cn" and max_score >= 0.5) or (self.wakeword_engine.backend != "sherpa_cn" and max_score > threshold)))
+                if self.proactive_care and self.state == self.STATE_IDLE and not wake_hit:
                     care_counter = getattr(self, "_care_tick_counter", 0) + 1
                     self._care_tick_counter = care_counter
                     if care_counter >= 20:
@@ -947,16 +965,18 @@ class HardwareAgent:
                         if care_payload:
                             self.trigger_proactive_care_payload(care_payload)
 
-                if max_score > threshold:
-                    print(f"\n🔔 [唤醒成功] 物理麦克风监听到唤醒词: {w_name} (置信度={max_score:.3f} > {threshold})！", flush=True)
+                if wake_hit:
+                    hit_label = hit_kw or w_name
+                    print(f"\n🔔 [唤醒成功] 物理麦克风监听到唤醒词: {hit_label} (置信度={max_score:.3f})！", flush=True)
                     self.last_waking_time = time.time()
-                    self.oww_model.reset()
+                    if self.wakeword_engine:
+                        self.wakeword_engine.reset()
 
                     # 0. 立即向前端广播唤醒成功电平事件，消除视觉卡顿
                     self.emit_event("audio_meter", {
                         "energy": round(energy, 1),
                         "score": round(max_score, 3),
-                        "model": w_name,
+                        "model": hit_label,
                         "threshold": threshold,
                         "is_listening": True,
                         "woke": True
@@ -966,8 +986,8 @@ class HardwareAgent:
                     self.state = self.STATE_WAKING
                     self.emit_event("status_change", {
                         "status": self.STATE_WAKING,
-                        "wake_word": w_name,
-                        "message": f"🔔 听到唤醒词：{w_name}！"
+                        "wake_word": hit_label,
+                        "message": f"🔔 听到唤醒词：{hit_label}！"
                     })
                     # 姿态同步：抬头 10 度笑眯眯
                     self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "HAPPY"})

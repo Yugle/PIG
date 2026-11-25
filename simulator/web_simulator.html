@@ -976,6 +976,11 @@
 
         <!-- 标签 3: 拾音灵敏度 -->
         <div id="tab-audio" class="cfg-pane" style="display:none;">
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">中文离线语音唤醒词 (支持多个，用逗号分隔):</label>
+            <input type="text" id="cfg-wake-keywords" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;" placeholder="你好小猪, 小猪小猪, 小猪同学" />
+            <div style="font-size:0.72rem; color:var(--text-sub); margin-top:4px;">基于 sherpa-onnx 中文流式引擎，修改后保存即可免训练直接生效</div>
+          </div>
           <div style="margin-bottom:16px;">
             <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
               <span style="font-size:0.82rem;">离线唤醒词阈值 (越低越灵敏):</span>
@@ -5050,6 +5055,11 @@
 
           document.getElementById("cfg-face-tracking").checked = !!cfg.face_tracking;
 
+          const kwInput = document.getElementById("cfg-wake-keywords");
+          if (kwInput) {
+            const kws = Array.isArray(cfg.wakeword_keywords) ? cfg.wakeword_keywords.join(", ") : (cfg.wakeword_keywords || "你好小猪, 小猪小猪, 小猪同学");
+            kwInput.value = kws;
+          }
           document.getElementById("cfg-thresh-slider").value = cfg.wakeword_threshold || 0.20;
           document.getElementById("cfg-thresh-val").innerText = Number(cfg.wakeword_threshold || 0.20).toFixed(2);
 
@@ -5113,6 +5123,7 @@
         user_name: document.getElementById("cfg-user-name").value.trim() || "胖虎",
         max_reply_length: parseInt(document.getElementById("cfg-reply-len").value) || 200,
         face_tracking: document.getElementById("cfg-face-tracking").checked,
+        wakeword_keywords: (document.getElementById("cfg-wake-keywords")?.value || "你好小猪, 小猪小猪").trim(),
         wakeword_threshold: parseFloat(document.getElementById("cfg-thresh-slider").value),
         mic_gain: parseFloat(document.getElementById("cfg-gain-slider").value),
         mimo_voice: document.getElementById("cfg-tts-voice").value,

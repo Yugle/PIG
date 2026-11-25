@@ -8,6 +8,7 @@ from .hal_simulation import SimulationRobotHAL
 from .eye_renderer import EyeRenderer
 from .asr_engine import BaiduASR
 from .tts_engine import TTSEngine
+from .wakeword_engine import WakeWordEngine
 
 __all__ = [
     "BaseRobotHAL",
@@ -16,4 +17,5 @@ __all__ = [
     "EyeRenderer",
     "BaiduASR",
     "TTSEngine",
+    "WakeWordEngine",
 ]

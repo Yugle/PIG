@@ -86,6 +86,8 @@ $SUDO apt-get install -y --no-install-recommends \
     ffmpeg \
     alsa-utils \
     fswebcam \
+    bzip2 \
+    wget \
     libatlas-base-dev \
     libjpeg-dev \
     zlib1g-dev
@@ -112,6 +114,34 @@ echo -e "${GREEN}✓ 用户组权限配置完成！${NC}"
 echo -e "\n${CYAN}[5/8] 安装 Python 核心依赖清单 (requirements.txt)...${NC}"
 pip3 install -r requirements.txt --quiet --break-system-packages 2>/dev/null || pip3 install -r requirements.txt --quiet
 echo -e "${GREEN}✓ Python 依赖库安装成功！${NC}"
+
+# 6.5 自动下载超轻量中文离线语音唤醒模型 (sherpa-onnx 3.3M int8)
+KWS_DIR="${PROJECT_DIR}/models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
+if [ -d "$KWS_DIR" ] && [ -f "${KWS_DIR}/tokens.txt" ]; then
+    echo -e "${GREEN}✓ 中文语音唤醒模型已存在 (${KWS_DIR})${NC}"
+else
+    echo -e "\n${CYAN}[5.5/8] 下载离线中文语音唤醒模型 (~5MB, 支持自定义'你好小猪')...${NC}"
+    mkdir -p "${PROJECT_DIR}/models"
+    KWS_TAR="/tmp/sherpa-kws-3.3M.tar.bz2"
+    KWS_URL_GH="https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01.tar.bz2"
+    KWS_URL_MIRROR="https://hf-mirror.com/csukuangfj/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01/resolve/main"
+
+    if wget -q --timeout=15 --tries=2 -O "$KWS_TAR" "$KWS_URL_GH" || curl -fsSL --connect-timeout 15 -o "$KWS_TAR" "$KWS_URL_GH"; then
+        tar -xjf "$KWS_TAR" -C "${PROJECT_DIR}/models" && rm -f "$KWS_TAR"
+        chown -R "${TARGET_USER}:${TARGET_USER}" "$KWS_DIR" 2>/dev/null || true
+        echo -e "${GREEN}✓ 中文语音唤醒模型下载并解压就绪！${NC}"
+    else
+        rm -f "$KWS_TAR"
+        echo -e "${YELLOW}⚠️ GitHub 下载中文唤醒模型超时，尝试通过 ModelScope 镜像拉取...${NC}"
+        if command -v git >/dev/null 2>&1 && git clone --depth 1 https://www.modelscope.cn/pkufool/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01.git "$KWS_DIR" 2>/dev/null; then
+            chown -R "${TARGET_USER}:${TARGET_USER}" "$KWS_DIR" 2>/dev/null || true
+            echo -e "${GREEN}✓ 已从 ModelScope 国内镜像拉取中文唤醒模型！${NC}"
+        else
+            rm -rf "$KWS_DIR"
+            echo -e "${YELLOW}⚠️ 中文唤醒模型自动拉取失败 (可手动解压到 models/ 目录)，已回退保留英文/按键唤醒。${NC}"
+        fi
+    fi
+fi
 
 # 7. 初始化 config.json (若不存在则从模板生成)
 echo -e "\n${CYAN}[6/8] 检查并初始化 config.json 配置文件...${NC}"

@@ -111,6 +111,10 @@ def apply_runtime_config(cur_cfg: dict, updates: dict):
     elif "bot_name" in updates:
         cur_cfg["robot_name"] = cur_cfg["bot_name"]
 
+    if "wakeword_keywords" in updates:
+        from drivers.wakeword_engine import parse_keywords_list
+        cur_cfg["wakeword_keywords"] = parse_keywords_list(updates["wakeword_keywords"])
+
     # 持久化至 config.json
     cfg_file = os.path.join(DIRECTORY, "config.json")
     with open(cfg_file, "w", encoding="utf-8") as f:
@@ -127,6 +131,8 @@ def apply_runtime_config(cur_cfg: dict, updates: dict):
     server_cfg.update(cur_cfg)
     if hardware_agent:
         hardware_agent.cfg.update(cur_cfg)
+        if any(k in updates for k in ["wakeword_keywords", "wakeword_engine", "wakeword_model", "wakeword_threshold"]) and hasattr(hardware_agent, "reload_wakeword"):
+            hardware_agent.reload_wakeword()
 
     # 视觉注视开关热同步
     if "face_tracking" in updates:
