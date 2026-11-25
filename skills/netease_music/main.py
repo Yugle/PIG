@@ -40,6 +40,9 @@ _STATUS_KW_PHRASES = ("什么歌", "正在放什么", "现在放的什么", "播
 
 _VOLUME_ACT_TOKENS = ("volume", "vol", "声音", "音量")
 _DAILY_ACT_TOKENS = ("daily", "recommend", "hot", "推荐", "热歌", "每日")
+_SHUFFLE_ACT_TOKENS = ("shuffle", "random", "order", "随机", "顺序")
+_LIKED_TOKENS = ("liked", "like", "我喜欢", "红心", "收藏的歌")
+_LIST_PLAYLISTS_TOKENS = ("playlists", "my_playlists", "list_playlists", "有哪些歌单", "我的歌单", "查歌单", "看歌单")
 
 
 def _match_intent(act: str, kw: str) -> str:
@@ -59,8 +62,18 @@ def _match_intent(act: str, kw: str) -> str:
         return "prev"
     if any(t in act for t in _STATUS_ACT_TOKENS) or any(p in kw_lower for p in _STATUS_KW_PHRASES):
         return "status"
+    if any(t in act for t in _SHUFFLE_ACT_TOKENS) or any(p in kw_lower for p in ("随机播放", "开启随机", "顺序播放", "列表循环")):
+        return "shuffle"
+    if act in ("play_index", "index"):
+        return "play_index"
     if any(t in act for t in _VOLUME_ACT_TOKENS) or (("音量" in kw_lower or "声音" in kw_lower) and any(k in kw_lower for k in ("调", "大", "小", "高", "低", "设", "%"))):
         return "volume"
+    if any(t in act for t in _LIST_PLAYLISTS_TOKENS) or any(p in kw_lower for p in ("有哪些歌单", "我的歌单", "查看歌单", "看看歌单")):
+        return "playlists"
+    if any(t in act for t in _LIKED_TOKENS) or any(p in kw_lower for p in ("我喜欢的音乐", "我喜欢的歌", "红心歌单")):
+        return "liked"
+    if act in ("playlist", "play_playlist", "歌单", "播放歌单") or "歌单" in kw_lower:
+        return "playlist"
     if any(t in act for t in _DAILY_ACT_TOKENS):
         return "daily"
     if not kw and act in ("", "play", "start", "music", "播放", "放歌", "点歌", "听歌"):
@@ -79,9 +92,11 @@ def run(action: str = "play", query: str = "", value: str = "") -> str:
     if intent == "status":
         st = music_player.get_state()
         if not st["has_track"]:
-            return "当前没有正在播放的音乐，主人想听哪一首可以直接告诉我哦～"
+            return "当前没有正在播放的音乐，主人想听哪一首或哪个歌单可以直接告诉我哦～"
         state_txt = "正在播放" if st["playing"] else ("已暂停" if st["paused"] else "已停止")
-        return f"现在{state_txt}的是《{st['title']}》- {st['artist']}（队列 {st['queue_index']}/{st['queue_size']}，音量 {st['volume']}%）。"
+        pl_txt = f"来自【{st['playlist_name']}】· " if st.get("playlist_name") else ""
+        mode_txt = "随机" if st.get("shuffle") else "顺序"
+        return f"现在{state_txt}的是《{st['title']}》- {st['artist']}（{pl_txt}{mode_txt} {st['queue_index']}/{st['queue_size']}，音量 {st['volume']}%）。"
 
     if intent == "pause":
         st = music_player.pause()
@@ -93,7 +108,7 @@ def run(action: str = "play", query: str = "", value: str = "") -> str:
         tr = music_player.resume()
         if not tr:
             tracks = netease_client.get_recommended_tracks()
-            tr = music_player.play_tracks(tracks)
+            tr = music_player.play_tracks(tracks, playlist_name="每日推荐" if netease_client.logged_in else "热歌推荐")
         if not tr:
             return "歌单里暂时没有歌，请告诉我你想听什么歌名或歌手吧～"
         return f"继续为你播放《{tr['title']}》- {tr['artist']}♪"
@@ -106,7 +121,7 @@ def run(action: str = "play", query: str = "", value: str = "") -> str:
         tr = music_player.next_track()
         if not tr:
             tracks = netease_client.get_recommended_tracks()
-            tr = music_player.play_tracks(tracks)
+            tr = music_player.play_tracks(tracks, playlist_name="每日推荐" if netease_client.logged_in else "热歌推荐")
         if not tr:
             return "暂时没有切到可播放的下一首歌，主人换个歌名试试？"
         return f"已切到下一首：《{tr['title']}》- {tr['artist']}♪"
@@ -116,6 +131,25 @@ def run(action: str = "play", query: str = "", value: str = "") -> str:
         if not tr:
             return "目前队列里没有上一首歌啦～"
         return f"切回上一首：《{tr['title']}》- {tr['artist']}♪"
+
+    if intent == "play_index":
+        try:
+            idx = int(val or kw or 0)
+        except Exception:
+            idx = 0
+        tr = music_player.play_at_index(idx)
+        if not tr:
+            return "队列里没有对应的曲目序号哦～"
+        return f"已切换播放《{tr['title']}》- {tr['artist']}♪"
+
+    if intent == "shuffle":
+        if val in ("on", "true", "1", "开启") or "随机" in kw:
+            enabled = music_player.set_shuffle(True)
+        elif val in ("off", "false", "0", "关闭") or any(k in kw for k in ("顺序", "循环")):
+            enabled = music_player.set_shuffle(False)
+        else:
+            enabled = music_player.set_shuffle(None)
+        return f"已切换为{'🔀 随机播放' if enabled else '🔁 顺序连播'}模式！"
 
     if intent == "volume":
         cur_v = music_player.volume
@@ -128,20 +162,58 @@ def run(action: str = "play", query: str = "", value: str = "") -> str:
             new_v = music_player.set_volume(int(digits) if digits else cur_v)
         return f"已把音乐音量调整到 {new_v}% 啦！"
 
+    if intent == "playlists":
+        if not netease_client.logged_in:
+            return "你还没登录网易云账号哦～可以先在 `/skills` 或屏幕「技能服务」扫码登录，登录后就能直接查看并播放你的全部歌单！不过现在我也可以直接帮你搜全网歌单，比如“放个深夜学习歌单”。"
+        pls = netease_client.get_user_playlists(limit=15)
+        if not pls:
+            return "暂时没拉到你的网易云歌单，请稍后再试～"
+        summary = "、".join(f"《{p['name']}》({p['track_count']}首)" for p in pls[:8])
+        return f"你账号里一共有 {len(pls)} 个歌单，前面的有：{summary}。你想听哪一个可以直接告诉我！"
+
+    if intent == "liked":
+        if not netease_client.logged_in:
+            return "「我喜欢的音乐」需要先登录网易云账号哦～去 `/skills` 扫码后就能一键播放你收藏的红心歌曲啦！"
+        res = netease_client.get_liked_tracks(limit=20)
+        tracks = res.get("tracks") or []
+        pl_name = res.get("name") or "我喜欢的音乐"
+        if not tracks:
+            return "暂时没从你的「我喜欢的音乐」里拉到可播放音源，换个歌单试试？"
+        tr = music_player.play_tracks(tracks, playlist_name=pl_name)
+        return f"正在播放你的【{pl_name}】：首曲《{tr['title']}》- {tr['artist']}（队列共 {len(tracks)} 首）♪"
+
+    if intent == "playlist":
+        clean_q = re.sub(r"(播放|打开|来一个|放一个|来个|放个|我的|歌单)", "", kw).strip()
+        if netease_client.logged_in and clean_q:
+            user_pls = netease_client.get_user_playlists(limit=25)
+            matched = next((p for p in user_pls if clean_q.lower() in p["name"].lower()), None)
+            if matched:
+                res = netease_client.get_playlist_tracks(matched["id"], limit=20)
+                tracks = res.get("tracks") or []
+                if tracks:
+                    tr = music_player.play_tracks(tracks, playlist_name=matched["name"])
+                    return f"找到你的歌单【{matched['name']}】，正在播放《{tr['title']}》- {tr['artist']}（队列 {len(tracks)} 首）♪"
+        search_kw = clean_q or kw or "轻音乐 治愈"
+        pub_pls = netease_client.search_playlists(search_kw, limit=5)
+        for p in pub_pls:
+            res = netease_client.get_playlist_tracks(p["id"], limit=20)
+            tracks = res.get("tracks") or []
+            if tracks:
+                pl_title = res.get("name") or p["name"]
+                tr = music_player.play_tracks(tracks, playlist_name=pl_title)
+                return f"为你选了网易云歌单【{pl_title}】：正在播放《{tr['title']}》- {tr['artist']}（队列 {len(tracks)} 首）♪"
+        return f"没有找到可播放的「{search_kw}」相关歌单，换个风格或歌名试试？"
+
     if intent == "daily":
         tracks = netease_client.get_recommended_tracks()
         if not tracks:
             return "网易云暂时没拉到可播推荐歌曲，麻烦检查一下树莓派联网状态～"
-        tr = music_player.play_tracks(tracks)
-        return f"为你挑了网易云热门歌曲：《{tr['title']}》- {tr['artist']}（已加入 {len(tracks)} 首歌连播队列）♪"
+        pl_title = "每日推荐" if netease_client.logged_in else "热歌推荐"
+        tr = music_player.play_tracks(tracks, playlist_name=pl_title)
+        return f"为你挑了{pl_title}：《{tr['title']}》- {tr['artist']}（已加入 {len(tracks)} 首歌连播队列）♪"
 
     if intent == "unknown":
-        return f"没听懂音乐控制指令（action={action}），你可以说：放首歌、暂停、继续、下一首、或停止播放～"
-        tracks = netease_client.get_recommended_tracks()
-        if not tracks:
-            return "网易云暂时没拉到可播推荐歌曲，麻烦检查一下树莓派联网状态～"
-        tr = music_player.play_tracks(tracks)
-        return f"为你挑了网易云热门歌曲：《{tr['title']}》- {tr['artist']}（已加入 {len(tracks)} 首歌连播队列）♪"
+        return f"没听懂音乐控制指令（action={action}），你可以说：放首歌、放我喜欢的音乐、查看我的歌单、暂停、下一首、随机播放、或停止播放～"
 
     # 默认搜索并播放目标曲目
     tracks = netease_client.search_playable_tracks(kw)
@@ -149,5 +221,5 @@ def run(action: str = "play", query: str = "", value: str = "") -> str:
         vip_tip = "" if netease_client.logged_in else "（当前未扫码登录网易云账号，部分 VIP 版权歌曲无法试听完整版，可在后台扫码绑定）"
         return f"在网易云搜了一圈「{kw}」，暂时没有找到可直接播放的版权音源{vip_tip}，换个翻唱或歌名试试？"
 
-    tr = music_player.play_tracks(tracks)
-    return f"找到啦！正在为你播放《{tr['title']}》- {tr['artist']}♪"
+    tr = music_player.play_tracks(tracks, playlist_name=f"搜索:{kw}")
+    return f"找到啦！正在为你播放《{tr['title']}》- {tr['artist']}（队列 {len(tracks)} 首）♪"

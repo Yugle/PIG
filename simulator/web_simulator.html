@@ -1316,17 +1316,40 @@
           <button class="btn" style="background:#ffb020; color:#0d1117; font-weight:bold; padding:5px 20px; border:none; border-radius:6px; cursor:pointer;" onclick="dismissAlarmModal()">👌 我知道了 / 关闭提醒</button>
         </div>
 
-        <!-- 🎵 网易云音乐迷你播放浮窗 (放歌时自动亮起，停播自动隐藏) -->
+        <!-- 🎵 网易云音乐迷你播放浮窗 + 可展开队列/歌单面板 -->
         <audio id="simMusicAudio" preload="none" onended="controlMusic('next')"></audio>
-        <div id="musicPlayerHud" style="display:none; position:absolute; bottom:16px; left:16px; max-width:255px; background:rgba(13, 17, 23, 0.88); border:1px solid rgba(239, 68, 68, 0.45); border-radius:12px; padding:8px 12px; box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:20; backdrop-filter:blur(8px);">
+        <div id="musicDrawer" style="display:none; position:absolute; bottom:84px; left:16px; width:308px; max-height:360px; background:rgba(13, 17, 23, 0.95); border:1px solid rgba(248, 113, 113, 0.4); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,0.75); z-index:25; backdrop-filter:blur(10px); flex-direction:column; overflow:hidden;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.08); background:rgba(22,27,34,0.9);">
+            <div style="display:flex; gap:6px;">
+              <button id="musicTabQueue" class="view-btn" style="padding:3px 9px; font-size:0.72rem; border-color:#f87171; color:#f87171;" onclick="switchMusicDrawerTab('queue')">📜 当前队列</button>
+              <button id="musicTabPlaylists" class="view-btn" style="padding:3px 9px; font-size:0.72rem;" onclick="switchMusicDrawerTab('playlists')">💿 我的歌单</button>
+            </div>
+            <button onclick="closeMusicDrawer()" style="background:none; border:none; color:#9ca3af; font-size:0.9rem; cursor:pointer; padding:2px 6px;">✕</button>
+          </div>
+          <div id="musicQueueBody" style="padding:8px; overflow-y:auto; flex:1; max-height:300px; display:flex; flex-direction:column; gap:4px;"></div>
+          <div id="musicPlaylistsBody" style="display:none; padding:8px; overflow-y:auto; flex:1; max-height:300px; flex-direction:column; gap:6px;">
+            <div style="display:flex; gap:6px;">
+              <button class="view-btn" style="flex:1; padding:5px 6px; font-size:0.72rem; color:#34d399; border-color:rgba(52,211,153,0.4);" onclick="playPresetPlaylist({daily: true})">✨ 每日推荐</button>
+              <button class="view-btn" style="flex:1; padding:5px 6px; font-size:0.72rem; color:#f87171; border-color:rgba(248,113,113,0.4);" onclick="playPresetPlaylist({liked: true})">❤️ 我喜欢的</button>
+            </div>
+            <div style="display:flex; gap:4px;">
+              <input id="musicPlaylistSearchInp" type="text" placeholder="搜全网歌单，如 深夜学习..." onkeydown="if(event.key==='Enter') searchPublicPlaylists()" style="flex:1; background:#0d1117; border:1px solid var(--border-color); border-radius:6px; padding:5px 8px; color:#fff; font-size:0.74rem;" />
+              <button class="view-btn" style="padding:4px 8px; font-size:0.72rem;" onclick="searchPublicPlaylists()">搜</button>
+            </div>
+            <div id="musicPlaylistsList" style="display:flex; flex-direction:column; gap:4px;"></div>
+          </div>
+        </div>
+        <div id="musicPlayerHud" style="display:none; position:absolute; bottom:16px; left:16px; max-width:308px; background:rgba(13, 17, 23, 0.9); border:1px solid rgba(239, 68, 68, 0.45); border-radius:12px; padding:8px 12px; box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:20; backdrop-filter:blur(8px);">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
             <span style="font-size:0.75rem; font-weight:700; color:#f87171; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="musicTitleText">🎵 网易云音乐</span>
             <span id="musicStatusBadge" style="font-size:0.64rem; color:#34d399; background:rgba(16,185,129,0.15); padding:1px 6px; border-radius:8px; flex-shrink:0;">播放中</span>
           </div>
-          <div style="display:flex; align-items:center; gap:6px;">
-            <button id="musicToggleBtn" class="view-btn" style="padding:3px 8px; font-size:0.7rem;" onclick="toggleMusicPlayPause()">⏸ 暂停</button>
-            <button class="view-btn" style="padding:3px 8px; font-size:0.7rem;" onclick="controlMusic('next')">⏭ 下一首</button>
-            <button class="view-btn" style="padding:3px 8px; font-size:0.7rem; color:#f87171;" onclick="controlMusic('stop')">⏹ 停止</button>
+          <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
+            <button id="musicToggleBtn" class="view-btn" style="padding:3px 7px; font-size:0.7rem;" onclick="toggleMusicPlayPause()">⏸ 暂停</button>
+            <button class="view-btn" style="padding:3px 7px; font-size:0.7rem;" onclick="controlMusic('next')">⏭ 下一首</button>
+            <button id="musicShuffleBtn" class="view-btn" style="padding:3px 7px; font-size:0.7rem;" onclick="toggleMusicShuffle()" title="切换随机/顺序播放">🔁 顺序</button>
+            <button class="view-btn" style="padding:3px 7px; font-size:0.7rem; color:var(--cyan);" onclick="toggleMusicDrawer()">📋 歌单</button>
+            <button class="view-btn" style="padding:3px 7px; font-size:0.7rem; color:#f87171;" onclick="controlMusic('stop')">⏹ 停</button>
           </div>
         </div>
 
@@ -1375,6 +1398,7 @@
           <div class="quick-chip" onclick="sendQuickChip('10秒后提醒我关火')">⏰ 倒计时</div>
           <div class="quick-chip" onclick="sendQuickChip('跳个害羞舞看看')">💃 害羞舞</div>
           <div class="quick-chip" onclick="sendQuickChip('讲个冷笑话逗我开心')">😄 讲笑话</div>
+          <div class="quick-chip" onclick="openMusicDrawer('playlists')" style="border-color: rgba(248, 113, 113, 0.45); color: #f87171;">💿 我的歌单</div>
           <div class="quick-chip" onclick="sendQuickChip('帮我查一下有哪些米家设备')">🏠 米家设备</div>
           <div class="quick-chip" onclick="triggerTestProactiveCare('morning')" style="border-color: rgba(255, 64, 129, 0.4); color: #ff4081;">❤️ 主动关怀</div>
           <div class="quick-chip" onclick="triggerXiaomiScreenQR()" style="border-color: rgba(255, 103, 0, 0.4); color: #ff6700;">📱 扫码绑定</div>
@@ -5649,12 +5673,18 @@
       }
 
       if (hud) hud.style.display = "block";
-      if (titleEl) titleEl.innerText = `🎵 ${m.title || "未知歌曲"} - ${m.artist || ""}`;
+      const plPrefix = m.playlist_name ? `[${m.playlist_name}] ` : "";
+      if (titleEl) titleEl.innerText = `🎵 ${plPrefix}${m.title || "未知歌曲"} - ${m.artist || ""}`;
       if (badgeEl) {
         badgeEl.innerText = m.playing ? "播放中" : "已暂停";
         badgeEl.style.color = m.playing ? "#34d399" : "#fbbf24";
       }
       if (toggleBtn) toggleBtn.innerText = m.playing ? "⏸ 暂停" : "▶ 继续";
+      const shuffleBtn = document.getElementById("musicShuffleBtn");
+      if (shuffleBtn) {
+        shuffleBtn.innerText = m.shuffle ? "🔀 随机" : "🔁 顺序";
+        shuffleBtn.style.color = m.shuffle ? "#fbbf24" : "";
+      }
 
       // 若后端未走真机硬件扬声器(play_on_device=false)，则由浏览器直接流畅播放音频流
       if (audio && !m.play_on_device && m.stream_path) {
@@ -5671,20 +5701,144 @@
         audio.pause();
       }
       currentMusicState = Object.assign({}, m);
+      const dr = document.getElementById("musicDrawer");
+      if (dr && dr.style.display === "flex" && currentMusicDrawerTab === "queue") {
+        loadMusicQueueAndPlaylists(false);
+      }
     }
+
+    let currentMusicDrawerTab = "queue";
 
     function toggleMusicPlayPause() {
       controlMusic(currentMusicState.playing ? "pause" : "resume");
     }
 
-    function controlMusic(action) {
+    function toggleMusicShuffle() {
+      controlMusic("shuffle", currentMusicState.shuffle ? "off" : "on");
+    }
+
+    function controlMusic(action, value = "") {
       fetch("/api/netease/control", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action, value: String(value) })
       }).then(r => r.json()).then(d => {
         if (d && d.music) updateMusicPlayerHUD(d.music);
+        if (d && d.queue) renderMusicQueueList(d.queue);
       }).catch(() => {});
+    }
+
+    function toggleMusicDrawer() {
+      const dr = document.getElementById("musicDrawer");
+      if (!dr) return;
+      if (dr.style.display === "flex") closeMusicDrawer();
+      else openMusicDrawer(currentMusicDrawerTab);
+    }
+
+    function openMusicDrawer(tab = "playlists") {
+      const dr = document.getElementById("musicDrawer");
+      if (!dr) return;
+      dr.style.display = "flex";
+      switchMusicDrawerTab(tab);
+    }
+
+    function closeMusicDrawer() {
+      const dr = document.getElementById("musicDrawer");
+      if (dr) dr.style.display = "none";
+    }
+
+    function switchMusicDrawerTab(tab) {
+      currentMusicDrawerTab = tab;
+      const qBody = document.getElementById("musicQueueBody");
+      const pBody = document.getElementById("musicPlaylistsBody");
+      const qBtn = document.getElementById("musicTabQueue");
+      const pBtn = document.getElementById("musicTabPlaylists");
+      if (tab === "queue") {
+        if (qBody) qBody.style.display = "flex";
+        if (pBody) pBody.style.display = "none";
+        if (qBtn) { qBtn.style.borderColor = "#f87171"; qBtn.style.color = "#f87171"; }
+        if (pBtn) { pBtn.style.borderColor = ""; pBtn.style.color = ""; }
+      } else {
+        if (qBody) qBody.style.display = "none";
+        if (pBody) pBody.style.display = "flex";
+        if (pBtn) { pBtn.style.borderColor = "#f87171"; pBtn.style.color = "#f87171"; }
+        if (qBtn) { qBtn.style.borderColor = ""; qBtn.style.color = ""; }
+      }
+      loadMusicQueueAndPlaylists(true);
+    }
+
+    function renderMusicQueueList(queue) {
+      const box = document.getElementById("musicQueueBody");
+      if (!box) return;
+      if (!queue || queue.length === 0) {
+        box.innerHTML = `<div style="text-align:center; color:#888; font-size:0.75rem; padding:20px 0;">当前队列为空，点击右上方「💿 我的歌单」点播吧～</div>`;
+        return;
+      }
+      box.innerHTML = "";
+      queue.forEach(tr => {
+        const row = document.createElement("div");
+        row.style.cssText = `padding:6px 8px; border-radius:6px; cursor:pointer; font-size:0.74rem; display:flex; justify-content:space-between; align-items:center; gap:6px; ${tr.is_current ? "background:rgba(248,113,113,0.16); color:#f87171; border:1px solid rgba(248,113,113,0.35);" : "background:rgba(255,255,255,0.03); color:#e6edf3;"}`;
+        row.onclick = () => controlMusic("play_index", tr.index);
+        row.innerHTML = `<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${tr.is_current ? "▶ " : `${tr.index + 1}. `}${tr.title}</span><span style="font-size:0.68rem; color:#9ca3af; flex-shrink:0; max-width:85px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${tr.artist}</span>`;
+        box.appendChild(row);
+      });
+    }
+
+    function renderMusicPlaylistsList(pls, labelPrefix = "") {
+      const box = document.getElementById("musicPlaylistsList");
+      if (!box) return;
+      if (!pls || pls.length === 0) {
+        box.innerHTML = `<div style="text-align:center; color:#888; font-size:0.74rem; padding:16px 0;">暂无歌单数据（未登录可点击上方每日推荐或搜索全网歌单）</div>`;
+        return;
+      }
+      box.innerHTML = "";
+      pls.forEach(p => {
+        const row = document.createElement("div");
+        row.style.cssText = "padding:7px 9px; border-radius:7px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); cursor:pointer; font-size:0.75rem; display:flex; justify-content:space-between; align-items:center; gap:8px;";
+        row.onclick = () => playPresetPlaylist({ playlist_id: p.id, name: p.name });
+        row.innerHTML = `<span style="color:#f3f4f6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${labelPrefix}${p.is_liked ? "❤️ " : "💿 "}${p.name}</span><span style="font-size:0.68rem; color:#9ca3af; flex-shrink:0;">${p.track_count || 0}首</span>`;
+        box.appendChild(row);
+      });
+    }
+
+    async function loadMusicQueueAndPlaylists(includePlaylists = true) {
+      const q = includePlaylists && currentMusicDrawerTab === "playlists"
+        ? (document.getElementById("musicPlaylistSearchInp")?.value.trim() || "")
+        : "";
+      const url = q ? `/api/netease/playlists?q=${encodeURIComponent(q)}` : "/api/netease/playlists";
+      try {
+        const d = await fetch(url).then(r => r.json());
+        if (d.queue) renderMusicQueueList(d.queue);
+        if (includePlaylists) {
+          if (q && d.search_playlists) renderMusicPlaylistsList(d.search_playlists, "🔍 ");
+          else renderMusicPlaylistsList(d.user_playlists || []);
+        }
+      } catch (e) {}
+    }
+
+    function searchPublicPlaylists() {
+      loadMusicQueueAndPlaylists(true);
+    }
+
+    async function playPresetPlaylist(payload) {
+      showToast("正在加载歌单...");
+      try {
+        const d = await fetch("/api/netease/play_playlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload || {})
+        }).then(r => r.json());
+        if (d.status === "ok" && d.music) {
+          updateMusicPlayerHUD(d.music);
+          if (d.queue) renderMusicQueueList(d.queue);
+          showToast(`已切换歌单：${d.music.playlist_name || "网易云歌单"}`);
+          switchMusicDrawerTab("queue");
+        } else {
+          showToast(d.message || "歌单暂无可播曲目");
+        }
+      } catch (e) {
+        showToast("加载歌单失败");
+      }
     }
 
     // 启动数字孪生 SSE 实时同步

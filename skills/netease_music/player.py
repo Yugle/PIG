@@ -10,6 +10,7 @@ PIG 网易云音乐后台非阻塞播放器 (skills/netease_music/player.py)
 import os
 import json
 import time
+import random
 import shutil
 import socket
 import threading
@@ -33,6 +34,8 @@ class MusicPlayer:
     def __init__(self):
         self._lock = threading.RLock()
         self.playlist: List[Dict[str, Any]] = []
+        self.playlist_name: str = ""
+        self.shuffle_mode: bool = False
         self.index: int = -1
         self.is_playing: bool = False
         self.is_paused: bool = False
@@ -151,7 +154,7 @@ class MusicPlayer:
                         return
                     # 正常播完自动切下一首
                     if rc == 0 and self.playlist and len(self.playlist) > 1:
-                        self.index = (self.index + 1) % len(self.playlist)
+                        self.index = self._next_index_locked(step=1)
                         self._start_track_locked(self.playlist[self.index], seek_sec=0.0)
                     else:
                         self.is_playing = False
@@ -162,16 +165,59 @@ class MusicPlayer:
         except Exception:
             self._proc = None
 
-    def play_tracks(self, tracks: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _next_index_locked(self, step: int = 1) -> int:
+        n = len(self.playlist)
+        if n <= 1:
+            return 0
+        if self.shuffle_mode and step > 0:
+            choices = [i for i in range(n) if i != self.index]
+            return random.choice(choices) if choices else 0
+        return (self.index + step) % n
+
+    def play_tracks(self, tracks: List[Dict[str, Any]], playlist_name: str = "", shuffle: Optional[bool] = None) -> Optional[Dict[str, Any]]:
         if not tracks:
             return None
         with self._lock:
             self.playlist = list(tracks)
-            self.index = 0
-            cur = self.playlist[0]
+            self.playlist_name = playlist_name or ""
+            if shuffle is not None:
+                self.shuffle_mode = bool(shuffle)
+            self.index = random.randrange(len(self.playlist)) if (self.shuffle_mode and len(self.playlist) > 1) else 0
+            cur = self.playlist[self.index]
             self._start_track_locked(cur, seek_sec=0.0)
         self._emit_music_state()
         return cur
+
+    def play_at_index(self, idx: int) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            if not self.playlist or idx < 0 or idx >= len(self.playlist):
+                return None
+            self.index = int(idx)
+            cur = self.playlist[self.index]
+            self._start_track_locked(cur, seek_sec=0.0)
+        self._emit_music_state()
+        return cur
+
+    def set_shuffle(self, enabled: Optional[bool] = None) -> bool:
+        with self._lock:
+            self.shuffle_mode = (not self.shuffle_mode) if enabled is None else bool(enabled)
+            res = self.shuffle_mode
+        self._emit_music_state()
+        return res
+
+    def get_queue(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            return [
+                {
+                    "index": i,
+                    "id": tr.get("id"),
+                    "title": tr.get("title", ""),
+                    "artist": tr.get("artist", ""),
+                    "duration_sec": tr.get("duration_sec", 0),
+                    "is_current": (i == self.index),
+                }
+                for i, tr in enumerate(self.playlist)
+            ]
 
     def pause(self) -> Dict[str, Any]:
         with self._lock:
@@ -207,7 +253,7 @@ class MusicPlayer:
         with self._lock:
             if not self.playlist:
                 return None
-            self.index = (self.index + 1) % len(self.playlist)
+            self.index = self._next_index_locked(step=1)
             cur = self.playlist[self.index]
             self._start_track_locked(cur, seek_sec=0.0)
         self._emit_music_state()
@@ -217,7 +263,7 @@ class MusicPlayer:
         with self._lock:
             if not self.playlist:
                 return None
-            self.index = (self.index - 1) % len(self.playlist)
+            self.index = self._next_index_locked(step=-1)
             cur = self.playlist[self.index]
             self._start_track_locked(cur, seek_sec=0.0)
         self._emit_music_state()
@@ -264,6 +310,8 @@ class MusicPlayer:
                 "duration_sec": cur.get("duration_sec", 0) if cur else 0,
                 "queue_size": len(self.playlist),
                 "queue_index": self.index + 1 if cur else 0,
+                "playlist_name": self.playlist_name,
+                "shuffle": self.shuffle_mode,
                 "stream_path": f"/api/netease/audio?id={cur['id']}" if cur else "",
                 "play_on_device": self._is_twin_physical(),
             }

@@ -805,6 +805,25 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             })
             return
 
+        if self.path.startswith("/api/netease/playlists"):
+            from urllib.parse import urlparse, parse_qs
+            from skills.netease_music.netease_client import netease_client
+            from skills.netease_music.player import music_player
+            q_params = parse_qs(urlparse(self.path).query)
+            q_kw = (q_params.get("q") or [""])[0].strip()
+            user_pls = netease_client.get_user_playlists(limit=30) if netease_client.logged_in else []
+            search_pls = netease_client.search_playlists(q_kw, limit=8) if q_kw else []
+            self._send_json({
+                "status": "ok",
+                "logged_in": netease_client.logged_in,
+                "nickname": netease_client.nickname,
+                "user_playlists": user_pls,
+                "search_playlists": search_pls,
+                "queue": music_player.get_queue(),
+                "music": music_player.get_state(),
+            })
+            return
+
         if self.path == "/api/netease/qr_status":
             from skills.netease_music.netease_client import netease_client
             st = netease_client.check_qr_status()
@@ -1580,7 +1599,40 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             q = body.get("query", "")
             val = str(body.get("value", ""))
             msg = netease_run(action=act, query=q, value=val)
-            self._send_json({"status": "ok", "message": msg, "music": music_player.get_state()})
+            self._send_json({
+                "status": "ok",
+                "message": msg,
+                "music": music_player.get_state(),
+                "queue": music_player.get_queue(),
+            })
+            return
+
+        if self.path == "/api/netease/play_playlist":
+            from skills.netease_music.netease_client import netease_client
+            from skills.netease_music.player import music_player
+            body = self._read_json_body()
+            if body.get("daily"):
+                tracks = netease_client.get_recommended_tracks(limit=20)
+                pl_name = "每日推荐" if netease_client.logged_in else "热歌推荐"
+            elif body.get("liked"):
+                res = netease_client.get_liked_tracks(limit=20)
+                tracks = res.get("tracks") or []
+                pl_name = res.get("name") or "我喜欢的音乐"
+            else:
+                pid = int(body.get("playlist_id") or 0)
+                res = netease_client.get_playlist_tracks(pid, limit=20) if pid else {"name": "", "tracks": []}
+                tracks = res.get("tracks") or []
+                pl_name = body.get("name") or res.get("name") or "网易云歌单"
+            if not tracks:
+                self._send_json({"status": "error", "message": "该歌单暂时没有可播放的曲目"})
+                return
+            tr = music_player.play_tracks(tracks, playlist_name=pl_name)
+            self._send_json({
+                "status": "ok",
+                "track": tr,
+                "music": music_player.get_state(),
+                "queue": music_player.get_queue(),
+            })
             return
 
         # 人脸视觉注视追踪开关切换

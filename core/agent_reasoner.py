@@ -71,6 +71,14 @@ def is_action_skill(tool_name: str, tool_args: Dict[str, Any]) -> bool:
             return False
         return True
 
+    if any(w in t_name for w in ["netease", "music"]):
+        act = str(tool_args.get("action", "")).lower()
+        q = str(tool_args.get("query", "")).lower()
+        combined = f"{act} {q}"
+        if any(w in combined for w in ["playlists", "list", "status", "info", "有哪些", "什么歌", "查歌单", "我的歌单", "当前"]):
+            return False
+        return True
+
     return tool_name in ACTION_SKILLS
 
 def is_skill_failure(obs: Any) -> bool:

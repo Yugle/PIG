@@ -4,16 +4,16 @@
   "version": "1.0.0",
   "author": "PIG Music Lab",
   "category": "娱乐互动",
-  "description": "网易云音乐点歌台与播放控制。凡是涉及放歌、搜歌（如'放一首起风了'、'放周杰伦的歌'）、停止播放/别放了/关掉音乐/停下（务必传 action='stop'）、暂停（action='pause'）、继续（action='resume'）、切歌（action='next'/'prev'）、调音量（action='volume'），都必须调用本工具执行实际控制。",
+  "description": "网易云音乐点歌台与歌单控制。支持搜歌播放、查看我的歌单、播放我喜欢的音乐、搜索全网歌单（如'放个深夜学习歌单'）、每日推荐、暂停、继续、切歌、切换随机/顺序播放、调音量与停止播放（'停止播放'/'别放了'/'停下'务必传 action='stop'）。",
   "parameters": {
     "action": {
       "type": "string",
-      "description": "控制动作英文枚举: 'play'(搜歌播放), 'stop'(停止播放/别放了/关掉音乐/停下), 'pause'(暂停), 'resume'(继续播放), 'next'(下一首), 'prev'(上一首), 'daily'(随便放首热歌/每日推荐), 'volume'(调音量), 'status'(查当前歌曲)。请优先使用英文枚举值。",
+      "description": "控制动作英文枚举: 'play'(搜歌播放), 'playlists'(查看我的歌单列表), 'liked'(播放我喜欢的音乐), 'playlist'(按关键词播我的或全网歌单), 'daily'(每日推荐/随便放歌), 'shuffle'(切换随机/顺序播放), 'stop'(停止播放/别放了/停下), 'pause'(暂停), 'resume'(继续), 'next'(下一首), 'prev'(上一首), 'volume'(调音量), 'status'(查当前歌曲)",
       "default": "play"
     },
     "query": {
       "type": "string",
-      "description": "想听的歌名、歌手或风格关键词，如 '起风了'、'周杰伦 稻香'、'助眠纯音乐'",
+      "description": "歌名、歌手、歌单名或风格关键词，如 '起风了'、'周杰伦'、'深夜学习歌单'、'跑步歌单'",
       "default": ""
     },
     "value": {

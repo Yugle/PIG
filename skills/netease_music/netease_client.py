@@ -358,6 +358,146 @@ class NeteaseClient:
             pass
         return None
 
+    def _batch_resolve_urls(self, song_ids: List[int]) -> Dict[int, str]:
+        """批量获取音频流 URL（单次 WEAPI 请求搞定整个歌单，避免逐首请求耗时）"""
+        urls: Dict[int, str] = {}
+        clean_ids = [int(x) for x in song_ids if x]
+        if not clean_ids:
+            return urls
+        try:
+            r = self._http.post(
+                "https://music.163.com/weapi/song/enhance/player/url/v1",
+                data=_weapi_encrypt({"ids": clean_ids, "level": "exhigh", "encodeType": "mp3"}),
+                timeout=8,
+            )
+            if r.status_code == 200:
+                for it in (r.json() or {}).get("data") or []:
+                    sid = it.get("id")
+                    u = it.get("url")
+                    if sid and u:
+                        urls[int(sid)] = u
+        except Exception:
+            pass
+        return urls
+
+    def _songs_to_playable(self, raw_songs: List[Dict[str, Any]], max_tracks: int = 20) -> List[Dict[str, Any]]:
+        """将网易云原始歌曲对象列表批量转化为可播队列"""
+        candidates = [s for s in (raw_songs or []) if s.get("id")][:max_tracks * 2]
+        if not candidates:
+            return []
+        url_map = self._batch_resolve_urls([int(s["id"]) for s in candidates])
+        playable: List[Dict[str, Any]] = []
+        for s in candidates:
+            sid = int(s["id"])
+            url = url_map.get(sid) or self._resolve_track_url(sid)
+            if not url:
+                continue
+            artists = s.get("ar") or s.get("artists") or []
+            artist_name = " / ".join(a.get("name", "") for a in artists if a.get("name")) or "未知歌手"
+            playable.append({
+                "id": sid,
+                "title": s.get("name", "未知歌曲"),
+                "artist": artist_name,
+                "duration_sec": max(0, int(s.get("dt") or s.get("duration") or 0) // 1000),
+                "url": url,
+            })
+            if len(playable) >= max_tracks:
+                break
+        return playable
+
+    def get_user_playlists(self, limit: int = 25) -> List[Dict[str, Any]]:
+        """获取已登录账号创建和收藏的歌单（第 1 个固定为『我喜欢的音乐』）"""
+        if not self.logged_in:
+            return []
+        prof = self._fetch_http_profile()
+        uid = prof.get("userId")
+        if not uid:
+            return []
+        try:
+            r = self._http.post(
+                "https://music.163.com/weapi/user/playlist",
+                data=_weapi_encrypt({"uid": uid, "limit": limit, "offset": 0, "includeVideo": True}),
+                timeout=8,
+            )
+            raw_pls = (r.json() or {}).get("playlist") or []
+            result: List[Dict[str, Any]] = []
+            for idx, p in enumerate(raw_pls):
+                creator = (p.get("creator") or {}).get("nickname", "")
+                result.append({
+                    "id": int(p["id"]),
+                    "name": p.get("name", "未命名歌单"),
+                    "track_count": int(p.get("trackCount", 0)),
+                    "creator": creator,
+                    "is_liked": (idx == 0),
+                    "cover_url": p.get("coverImgUrl", ""),
+                })
+            return result
+        except Exception as e:
+            logger.warning(f"获取用户歌单失败: {e}")
+            return []
+
+    def search_playlists(self, query: str, limit: int = 8) -> List[Dict[str, Any]]:
+        """搜索公开网易云歌单"""
+        kw = (query or "").strip()
+        if not kw:
+            return []
+        try:
+            r = self._http.get(
+                "https://music.163.com/api/search/get/web",
+                params={"s": kw, "type": 1000, "offset": 0, "limit": limit},
+                timeout=6,
+            )
+            if r.status_code == 200:
+                pls = (r.json() or {}).get("result", {}).get("playlists") or []
+                return [
+                    {
+                        "id": int(p["id"]),
+                        "name": p.get("name", "精选歌单"),
+                        "track_count": int(p.get("trackCount", 0)),
+                        "creator": (p.get("creator") or {}).get("nickname", ""),
+                        "cover_url": p.get("coverImgUrl", ""),
+                    }
+                    for p in pls if p.get("id")
+                ]
+        except Exception as e:
+            logger.warning(f"搜索歌单失败: {e}")
+        return []
+
+    def get_playlist_tracks(self, playlist_id: int, limit: int = 20) -> Dict[str, Any]:
+        """拉取指定歌单内的可播曲目"""
+        try:
+            r = self._http.post(
+                "https://music.163.com/weapi/v6/playlist/detail",
+                data=_weapi_encrypt({"id": int(playlist_id), "n": max(20, limit * 2), "s": 0}),
+                timeout=8,
+            )
+            pl = (r.json() or {}).get("playlist") or {}
+            pl_name = pl.get("name", "")
+            raw_songs = pl.get("tracks") or []
+            if not raw_songs:
+                track_ids = [t.get("id") for t in (pl.get("trackIds") or []) if t.get("id")][:limit * 2]
+                if track_ids:
+                    dr = self._http.post(
+                        "https://music.163.com/weapi/v3/song/detail",
+                        data=_weapi_encrypt({"c": json.dumps([{"id": int(tid)} for tid in track_ids])}),
+                        timeout=8,
+                    )
+                    raw_songs = (dr.json() or {}).get("songs") or []
+            return {"name": pl_name, "tracks": self._songs_to_playable(raw_songs, max_tracks=limit)}
+        except Exception as e:
+            logger.warning(f"拉取歌单曲目失败: {e}")
+            return {"name": "", "tracks": []}
+
+    def get_liked_tracks(self, limit: int = 20) -> Dict[str, Any]:
+        """拉取已登录用户的『我喜欢的音乐』"""
+        pls = self.get_user_playlists(limit=5)
+        if not pls:
+            return {"name": "我喜欢的音乐", "tracks": []}
+        res = self.get_playlist_tracks(pls[0]["id"], limit=limit)
+        if not res.get("name"):
+            res["name"] = pls[0]["name"]
+        return res
+
     def search_playable_tracks(self, query: str, limit: int = 8) -> List[Dict[str, Any]]:
         """搜索歌曲并过滤出真正可播放的候选列表"""
         kw = (query or "").strip()
