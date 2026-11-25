@@ -269,13 +269,15 @@ class HardwareAgent:
 
     def get_status(self) -> Dict[str, Any]:
         """获取当前硬件与智能体实时状态"""
-        music_st = {}
+        skill_payloads: Dict[str, Any] = {}
         try:
-            from skills.netease_music.player import music_player
-            music_st = music_player.get_state()
+            from core.skill_manager import get_skill_manager
+            sm = get_skill_manager()
+            if sm:
+                skill_payloads = sm.collect_status_payload()
         except Exception:
             pass
-        return {
+        status = {
             "mode": self.mode,
             "state": self.state,
             "has_mic": self.has_mic,
@@ -288,15 +290,18 @@ class HardwareAgent:
             "cur_pan": getattr(self.hal, "cur_pan", 90.0),
             "cur_tilt": getattr(self.hal, "cur_tilt", 90.0),
             "radar_detected": getattr(self, "radar_detected", True),
-            "music": music_st,
             "last_waking_time": self.last_waking_time
         }
+        status.update(skill_payloads)
+        return status
 
     def _pause_music_for_voice(self):
-        """语音唤醒/摸头/打断说话前静默让路音乐，释放声卡给 TTS 与 ASR"""
+        """语音唤醒/摸头/打断说话前广播中断钩子，由音乐等音频插件自行静默让路"""
         try:
-            from skills.netease_music.player import music_player
-            music_player.pause_for_voice()
+            from core.skill_manager import get_skill_manager
+            sm = get_skill_manager()
+            if sm:
+                sm.emit_hook("on_voice_interrupt")
         except Exception:
             pass
 

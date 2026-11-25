@@ -20,5 +20,7 @@
   "default_behavior": {
     "emotion": "THINKING",
     "action": "NOD"
-  }
+  },
+  "protected": true,
+  "fast_path": true
 }

@@ -15,5 +15,6 @@
   "default_behavior": {
     "emotion": "WINK",
     "action": "LOOK_UP"
-  }
+  },
+  "protected": true
 }

@@ -49,5 +49,28 @@
         "placeholder": "粘贴浏览器 music.163.com 的 MUSIC_U Cookie 值"
       }
     ]
-  }
+  },
+  "protected": true,
+  "fast_path": true,
+  "query_keywords": [
+    "playlists",
+    "list",
+    "status",
+    "info",
+    "有哪些",
+    "什么歌",
+    "查歌单",
+    "我的歌单",
+    "当前"
+  ],
+  "aliases": [
+    "music",
+    "netease",
+    "song",
+    "yinyue",
+    "音乐",
+    "点歌"
+  ],
+  "screen_qr_mode": "NETEASE_QR",
+  "screen_qr_title": "网易云登录"
 }

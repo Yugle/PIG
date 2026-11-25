@@ -9,5 +9,11 @@
   "default_behavior": {
     "emotion": "NORMAL",
     "action": "NOD"
-  }
+  },
+  "protected": true,
+  "aliases": [
+    "net",
+    "wifi",
+    "ping"
+  ]
 }

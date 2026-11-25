@@ -15,5 +15,11 @@
   "default_behavior": {
     "emotion": "LOVE",
     "action": "NOD"
-  }
+  },
+  "protected": true,
+  "aliases": [
+    "pet",
+    "tamagotchi",
+    "feed"
+  ]
 }

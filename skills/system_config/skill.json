@@ -20,5 +20,20 @@
   "default_behavior": {
     "emotion": "HAPPY",
     "action": "NOD"
-  }
+  },
+  "protected": true,
+  "fast_path": true,
+  "query_keywords": [
+    "query",
+    "查"
+  ],
+  "aliases": [
+    "config",
+    "setting",
+    "shezhi",
+    "peizhi",
+    "system_config",
+    "face_tracking",
+    "track"
+  ]
 }

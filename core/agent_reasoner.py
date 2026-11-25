@@ -46,40 +46,34 @@ def parse_llm_json(raw_text: str, reasoning_text: str = "") -> Optional[Dict[str
 
 
 # 常见的执行类动作技能集合 (高确定性、状态变更类，支持单轮极速闭环直出)
-ACTION_SKILLS = {
-    "system_config", "config", "sys_config", "shezhi",
+# 核心系统内置动作指令 (非 skills/ 插件) —— 不需要第2轮大模型总结直接闭环
+CORE_ACTION_TOOLS = {
+    "set_timer", "set_alarm", "cancel_reminder",
+    "evolve_action", "execute_action", "play_action", "do_action", "run_action", "perform_action",
     "set_bot_name", "rename_bot", "change_bot_name",
     "set_user_name", "change_name", "update_name",
-    "reminder", "set_alarm", "set_timer", "set_reminder", "add_reminder", "delete_reminder",
-    "evolve_action", "create_action", "learn_action",
-    "play_action", "execute_action", "do_action", "run_action", "perform_action",
-    "pomodoro", "xiaomi_iot", "med_tracker", "dice_roll", "netease_music",
     "install_skill", "uninstall_skill", "create_skill",
-    "register_master_face", "register_face", "record_face", "bind_master_face", "face_id"
+    "register_master_face", "register_face", "record_face", "bind_master_face", "face_id",
 }
 
+
 def is_action_skill(tool_name: str, tool_args: Dict[str, Any]) -> bool:
-    """判断是否为可单轮直接闭环的执行类动作技能（排除查询类意图）"""
-    t_name = str(tool_name).lower()
-    # 小米生态：如果是查设备列表，则是查询类技能，必须走第2轮获取真实数据并汇总
-    if any(w in t_name for w in ["xiaomi", "mijia", "miot", "xiaoai"]):
-        act = str(tool_args.get("action", "")).lower()
-        dev = str(tool_args.get("device", "")).lower()
-        val = str(tool_args.get("value", "")).lower()
-        combined = f"{act} {dev} {val}"
-        if any(w in combined for w in ["查", "看", "列表", "有哪些", "什么设备", "清单", "query", "list", "all", "所有"]):
-            return False
+    """判断是否为可单轮直接闭环的执行类动作技能（插件行为由各 skill.json 的 fast_path / query_keywords 驱动）"""
+    if tool_name in CORE_ACTION_TOOLS:
         return True
 
-    if any(w in t_name for w in ["netease", "music"]):
-        act = str(tool_args.get("action", "")).lower()
-        q = str(tool_args.get("query", "")).lower()
-        combined = f"{act} {q}"
-        if any(w in combined for w in ["playlists", "list", "status", "info", "有哪些", "什么歌", "查歌单", "我的歌单", "当前"]):
-            return False
-        return True
+    from core.skill_manager import get_skill_manager
+    sm = get_skill_manager()
+    meta = sm.resolve_plugin_meta(tool_name) if sm else {}
+    if not meta or not meta.get("fast_path"):
+        return False
 
-    return tool_name in ACTION_SKILLS
+    q_kws = [str(w).lower() for w in (meta.get("query_keywords") or [])]
+    if q_kws and isinstance(tool_args, dict):
+        combined = " ".join(str(v).lower() for v in tool_args.values())
+        if any(w in combined for w in q_kws):
+            return False
+    return True
 
 def is_skill_failure(obs: Any) -> bool:
     """判断技能执行结果是否包含明确失败语义"""

@@ -40,5 +40,6 @@
   "default_behavior": {
     "emotion": "HAPPY",
     "action": "NOD"
-  }
+  },
+  "protected": true
 }

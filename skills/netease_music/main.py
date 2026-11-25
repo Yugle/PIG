@@ -223,3 +223,79 @@ def run(action: str = "play", query: str = "", value: str = "") -> str:
 
     tr = music_player.play_tracks(tracks, playlist_name=f"搜索:{kw}")
     return f"找到啦！正在为你播放《{tr['title']}》- {tr['artist']}（队列 {len(tracks)} 首）♪"
+
+
+def on_voice_interrupt():
+    """语音唤醒/摸头打断时立即暂停音乐，释放声卡"""
+    music_player.pause_for_voice()
+
+
+def get_status_payload() -> dict:
+    return {"music": music_player.get_state()}
+
+
+def get_screen_item() -> dict:
+    val = (netease_client.nickname or "已登录")[:6] if netease_client.logged_in else "免登录"
+    return {
+        "id": "netease",
+        "skill_id": "netease_music",
+        "icon": "sfx",
+        "name": "网易云",
+        "val": val,
+        "type": "info",
+        "screen_qr": True,
+        "qr_mode": "NETEASE_QR",
+        "screen_order": 20,
+    }
+
+
+def start_screen_qr() -> dict:
+    import base64
+    res = netease_client.start_qr_login()
+    if res.get("status") != "ok":
+        return {
+            "title": "网易云登录",
+            "headline": "打开网易云App 扫码登录",
+            "foot_tip": "绑定后畅听 VIP 与个人每日推荐",
+            "status": res.get("message", "获取二维码失败"),
+            "error": True,
+        }
+    raw_png = b""
+    b64 = res.get("qr_base64", "")
+    if "," in b64:
+        try:
+            raw_png = base64.b64decode(b64.split(",", 1)[1])
+        except Exception:
+            raw_png = b""
+    return {
+        "title": "网易云登录",
+        "headline": "打开网易云App 扫码登录",
+        "foot_tip": "绑定后畅听 VIP 与个人每日推荐",
+        "status": "打开网易云App 扫一扫",
+        "qr_bytes": raw_png,
+    }
+
+
+def poll_screen_qr() -> dict:
+    st = netease_client.check_qr_status()
+    code = int(st.get("code", 0))
+    if code == 803 or st.get("logged_in"):
+        return {"state": "success", "status_text": f"绑定成功！{st.get('nickname', '')}"}
+    if code == 800:
+        return {"state": "expired", "status_text": "二维码已过期，按 [OK] 刷新"}
+    if code == 802:
+        return {"state": "scanned", "status_text": "已扫码，请在手机确认登录"}
+    if code == 8821 or st.get("status") in ("blocked", "error"):
+        return {"state": "blocked", "status_text": "风控拦截8821 请在/skills填Cookie"}
+    return {"state": "waiting"}
+
+
+def get_screen_state(active_mode: str = "", active_qr_skill: str = "", qr_status: str = "") -> dict:
+    return {
+        "netease_qr": {
+            "active": (active_mode == "NETEASE_QR" or active_qr_skill == "netease_music"),
+            "status": qr_status if active_qr_skill == "netease_music" else "等待网易云App扫码...",
+            "logged_in": bool(netease_client.logged_in),
+            "nickname": netease_client.nickname or "",
+        }
+    }

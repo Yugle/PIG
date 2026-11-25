@@ -67,3 +67,32 @@ def run(action="send_status", title="PIG 状态汇报", content="系统运行正
         return f"已向飞书发送纯文本：{content}"
 
     return f"未知动作类型：{act}"
+
+
+def on_evolution_diary(diary_text: str = "", radar_dict=None, intimacy_level: int = 1, persona_tag: str = ""):
+    """响应夜间自进化反思事件，向已配置的飞书端推送日记卡片"""
+    if feishu_client.is_configured:
+        feishu_client.send_evolution_card(
+            diary_text=diary_text or "今日陪伴打卡",
+            radar_dict=radar_dict or {},
+            intimacy_level=intimacy_level,
+            persona_tag=persona_tag,
+        )
+
+
+def get_screen_item() -> dict:
+    if feishu_client.ws_connected:
+        val = "长连在线"
+    elif feishu_client.is_configured:
+        val = "已配置"
+    else:
+        val = "未配置"
+    return {
+        "id": "feishu",
+        "skill_id": "feishu_bot",
+        "icon": "chat",
+        "name": "飞书网关",
+        "val": val,
+        "type": "info",
+        "screen_order": 30,
+    }

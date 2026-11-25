@@ -427,11 +427,17 @@ class MenuFSM:
             "check_time": 0
         }
         
-        # 米家 / 网易云屏幕弹窗状态
-        self.xiaomi_status_text = "等待米家App扫码授权..."
-        self.xiaomi_device_count = 0
-        self.netease_status_text = "等待网易云App扫码..."
-        self.netease_qr_bytes: bytes = b""
+        # 通用插件屏幕弹窗与技能菜单状态 (零插件硬编码)
+        self.active_qr_skill_id: str = ""
+        self.qr_view: Dict[str, Any] = {
+            "title": "扫码授权",
+            "badge": "BINDING",
+            "headline": "打开手机 App 扫码",
+            "status": "获取二维码中...",
+            "foot_tip": "",
+            "qr_bytes": b"",
+        }
+        self._skill_qr_seq: int = 0
         self.skill_items = []
         self._sync_skill_items()
 
@@ -537,39 +543,17 @@ class MenuFSM:
         ]
 
     def _sync_skill_items(self):
-        """同步屏幕「技能服务」子菜单项，与系统本体设置彻底隔离"""
-        mijia_val = "待扫码"
+        """通过 SkillManager 钩子动态聚合「技能服务」屏幕菜单项，核心层零插件导入"""
+        items: List[Dict[str, Any]] = []
         try:
-            from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
-            if qr_auth_manager.synced_devices:
-                mijia_val = f"已绑{len(qr_auth_manager.synced_devices)}台"
+            from core.skill_manager import get_skill_manager
+            sm = get_skill_manager()
+            if sm:
+                items = sm.collect_screen_items()
         except Exception:
             pass
-
-        ncm_val = "免登录"
-        try:
-            from skills.netease_music.netease_client import netease_client
-            if netease_client.logged_in:
-                ncm_val = (netease_client.nickname or "已登录")[:6]
-        except Exception:
-            pass
-
-        feishu_val = "未配置"
-        try:
-            from skills.feishu_bot.feishu_client import feishu_client
-            if feishu_client.ws_connected:
-                feishu_val = "长连在线"
-            elif feishu_client.is_configured:
-                feishu_val = "已配置"
-        except Exception:
-            pass
-
-        self.skill_items = [
-            {"id": "mijia", "icon": "home", "name": "米家绑定", "val": mijia_val, "type": "info"},
-            {"id": "netease", "icon": "sfx", "name": "网易云", "val": ncm_val, "type": "info"},
-            {"id": "feishu", "icon": "chat", "name": "飞书网关", "val": feishu_val, "type": "info"},
-            {"id": "skills_portal", "icon": "skills", "name": "扫码配技能", "val": "", "type": "action"},
-        ]
+        items.append({"id": "skills_portal", "icon": "skills", "name": "扫码配技能", "val": "", "type": "action"})
+        self.skill_items = items
 
     def cycle_theme(self):
         """循环切换 M3 主题调色板 (薄荷绿 -> 暖阳橙 -> 海天蓝 -> 薰衣紫 -> 极简白)"""
@@ -694,168 +678,102 @@ class MenuFSM:
         self._sync_hardware_items()
         self._notify_listeners()
 
-    def show_xiaomi_qr_on_screen(self):
-        """在机器人 2.4 寸屏幕上直接弹窗显示米家登录/授权二维码 (无浏览器弹窗)"""
-        print("📱 [MenuFSM] 触发屏幕弹窗显示米家绑定二维码")
-        try:
-            from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
-            qr_auth_manager.local_qr_path = None
-            qr_auth_manager.qr_url = ""
-            old_qr = qr_auth_manager.config_path.parent / "xiaomi_qr.png"
-            if old_qr.exists():
-                old_qr.unlink()
-        except Exception:
-            pass
+    def show_skill_qr_on_screen(self, skill_id: str, mode_name: str = ""):
+        """通用插件屏幕二维码弹窗：通过 start_screen_qr / poll_screen_qr 钩子驱动任意技能绑定"""
+        from core.skill_manager import get_skill_manager
+        sm = get_skill_manager()
+        meta = sm.resolve_plugin_meta(skill_id) if sm else {}
+        resolved_mode = mode_name or str(meta.get("screen_qr_mode") or f"{skill_id.upper()}_QR")
+        default_title = str(meta.get("screen_qr_title") or meta.get("name") or "扫码绑定")[:6]
+
         with self._lock:
-            self.current_mode = "XIAOMI_QR"
-            self.xiaomi_status_text = "获取米家二维码中..."
-            self.xiaomi_device_count = 0
+            self._skill_qr_seq += 1
+            cur_seq = self._skill_qr_seq
+            self.active_qr_skill_id = skill_id
+            self.current_mode = resolved_mode
+            self.qr_view = {
+                "title": default_title,
+                "badge": "BINDING",
+                "headline": f"请使用手机扫码绑定",
+                "status": "获取二维码中...",
+                "foot_tip": "",
+                "qr_bytes": b"",
+            }
             self.last_interaction_time = time.time()
             self._notify_listeners()
 
-        def _auth_worker():
+        def _worker():
             try:
-                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
-                res = qr_auth_manager.start_qr_session()
-                if res.get("status") == "waiting":
-                    with self._lock:
-                        self.xiaomi_status_text = "请打开米家App扫码授权"
-                        self._notify_listeners()
-
-                    while self.current_mode == "XIAOMI_QR":
-                        time.sleep(0.8)
-                        st = qr_auth_manager.status
-                        if st == "success":
-                            dev_cnt = len(qr_auth_manager.synced_devices)
-                            with self._lock:
-                                self.xiaomi_status_text = f"绑定成功！已同步 {dev_cnt} 台设备"
-                                self.xiaomi_device_count = dev_cnt
-                                self._notify_listeners()
-                            time.sleep(2.5)
-                            with self._lock:
-                                if self.current_mode == "XIAOMI_QR":
-                                    self.current_mode = "FACE"
-                                    self._notify_listeners()
-                            break
-                        elif st in ["expired", "error"]:
-                            with self._lock:
-                                self.xiaomi_status_text = "二维码已超时，按 [OK] 刷新"
-                                self._notify_listeners()
-                            break
-                else:
-                    with self._lock:
-                        self.xiaomi_status_text = res.get("error", "获取二维码失败")
-                        self._notify_listeners()
-            except Exception as e:
+                if not sm:
+                    return
+                start_res = sm.invoke_plugin_hook(skill_id, "start_screen_qr") or {}
+                if cur_seq != self._skill_qr_seq:
+                    return
                 with self._lock:
-                    self.xiaomi_status_text = f"米家认证异常: {e}"
+                    self.qr_view["title"] = start_res.get("title", self.qr_view["title"])
+                    self.qr_view["headline"] = start_res.get("headline", self.qr_view["headline"])
+                    self.qr_view["foot_tip"] = start_res.get("foot_tip", "")
+                    self.qr_view["qr_bytes"] = start_res.get("qr_bytes") or b""
+                    self.qr_view["status"] = start_res.get("status") or "请打开手机扫码确认"
                     self._notify_listeners()
 
-        threading.Thread(target=_auth_worker, daemon=True, name="XiaomiScreenQR").start()
-
-    def close_xiaomi_qr(self):
-        """关闭屏幕米家二维码弹窗返回"""
-        with self._lock:
-            self.current_mode = "FACE"
-            self._notify_listeners()
-
-    def show_netease_qr_on_screen(self):
-        """在机器人 2.4 寸屏幕上直接弹窗显示网易云音乐登录二维码"""
-        print("🎵 [MenuFSM] 触发屏幕弹窗显示网易云音乐绑定二维码")
-        with self._lock:
-            self._ncm_qr_seq = getattr(self, "_ncm_qr_seq", 0) + 1
-            cur_seq = self._ncm_qr_seq
-            self.current_mode = "NETEASE_QR"
-            self.netease_status_text = "获取网易云二维码中..."
-            self.netease_qr_bytes = b""
-            self.last_interaction_time = time.time()
-            self._notify_listeners()
-
-        def _ncm_worker():
-            try:
-                import base64
-                from skills.netease_music.netease_client import netease_client
-                res = netease_client.start_qr_login()
-                if cur_seq != getattr(self, "_ncm_qr_seq", 0):
+                if start_res.get("error") or start_res.get("done"):
                     return
-                if res.get("status") != "ok":
-                    with self._lock:
-                        self.netease_status_text = res.get("message", "获取二维码失败")
-                        self._notify_listeners()
-                    return
-                raw_png = b""
-                b64 = res.get("qr_base64", "")
-                if "," in b64:
-                    try:
-                        raw_png = base64.b64decode(b64.split(",", 1)[1])
-                    except Exception:
-                        raw_png = b""
-                with self._lock:
-                    if cur_seq != getattr(self, "_ncm_qr_seq", 0):
-                        return
-                    self.netease_qr_bytes = raw_png
-                    self.netease_status_text = "打开网易云App 扫一扫"
-                    self._notify_listeners()
 
-                while self.current_mode == "NETEASE_QR" and cur_seq == getattr(self, "_ncm_qr_seq", 0):
-                    time.sleep(1.2)
-                    if cur_seq != getattr(self, "_ncm_qr_seq", 0):
+                while self.current_mode == resolved_mode and cur_seq == self._skill_qr_seq:
+                    time.sleep(1.0)
+                    if cur_seq != self._skill_qr_seq or self.current_mode != resolved_mode:
                         break
-                    st = netease_client.check_qr_status()
-                    code = int(st.get("code", 0))
-                    if code == 803 or st.get("logged_in"):
-                        with self._lock:
-                            self.netease_status_text = f"绑定成功！{st.get('nickname', '')}"
+                    poll_res = sm.invoke_plugin_hook(skill_id, "poll_screen_qr") or {}
+                    st_text = poll_res.get("status_text")
+                    qr_bytes = poll_res.get("qr_bytes")
+                    state = poll_res.get("state", "waiting")
+                    with self._lock:
+                        if st_text:
+                            self.qr_view["status"] = st_text
+                        if qr_bytes:
+                            self.qr_view["qr_bytes"] = qr_bytes
+                        if state == "success":
                             self._sync_skill_items()
-                            self._notify_listeners()
+                        self._notify_listeners()
+
+                    if state == "success":
                         time.sleep(2.2)
                         with self._lock:
-                            if self.current_mode == "NETEASE_QR" and cur_seq == getattr(self, "_ncm_qr_seq", 0):
+                            if self.current_mode == resolved_mode and cur_seq == self._skill_qr_seq:
                                 self.current_mode = "FACE"
+                                self.active_qr_skill_id = ""
                                 self._notify_listeners()
                         break
-                    elif code == 800:
-                        with self._lock:
-                            self.netease_status_text = "二维码已过期，按 [OK] 刷新"
-                            self._notify_listeners()
-                        break
-                    elif code == 802:
-                        with self._lock:
-                            self.netease_status_text = "已扫码，请在手机确认登录"
-                            self._notify_listeners()
-                    elif code == 8821 or st.get("status") in ("blocked", "error"):
-                        with self._lock:
-                            self.netease_status_text = "风控拦截8821 请在/skills填Cookie"
-                            self._notify_listeners()
+                    elif state in ("expired", "blocked", "error"):
                         break
             except Exception as e:
                 with self._lock:
-                    self.netease_status_text = f"网易云认证异常: {e}"
-                    self._notify_listeners()
+                    if cur_seq == self._skill_qr_seq:
+                        self.qr_view["status"] = f"认证异常: {e}"
+                        self._notify_listeners()
 
-        threading.Thread(target=_ncm_worker, daemon=True, name="NeteaseScreenQR").start()
+        threading.Thread(target=_worker, daemon=True, name=f"SkillQR_{skill_id}").start()
 
-    def close_netease_qr(self):
-        """关闭屏幕网易云二维码弹窗返回"""
+    def close_skill_qr(self):
+        """关闭屏幕插件二维码弹窗并返回表情界面"""
         with self._lock:
+            self._skill_qr_seq += 1
+            self.active_qr_skill_id = ""
             self.current_mode = "FACE"
             self._notify_listeners()
 
-    def _build_netease_qr_dict(self) -> Dict[str, Any]:
-        logged_in = False
-        nickname = ""
-        try:
-            from skills.netease_music.netease_client import netease_client
-            logged_in = bool(netease_client.logged_in)
-            nickname = netease_client.nickname or ""
-        except Exception:
-            pass
-        return {
-            "active": (self.current_mode == "NETEASE_QR"),
-            "status": self.netease_status_text,
-            "logged_in": logged_in,
-            "nickname": nickname,
-        }
+    def show_xiaomi_qr_on_screen(self):
+        self.show_skill_qr_on_screen("xiaomi_iot", mode_name="XIAOMI_QR")
+
+    def close_xiaomi_qr(self):
+        self.close_skill_qr()
+
+    def show_netease_qr_on_screen(self):
+        self.show_skill_qr_on_screen("netease_music", mode_name="NETEASE_QR")
+
+    def close_netease_qr(self):
+        self.close_skill_qr()
 
     def enter_easter_egg(self):
         """进入关于本项目(PIG)自白彩蛋模式"""
@@ -959,15 +877,14 @@ class MenuFSM:
 
     def get_qr_png_bytes(self) -> bytes:
         """生成并返回当前模式匹配的 QR 码 PNG 字节流"""
-        # 0. 处于网易云音乐扫码弹窗 (绝不回退到配网二维码)
-        if self.current_mode == "NETEASE_QR":
-            return self.netease_qr_bytes or b""
-
-        # 1. 处于米家扫码绑定弹窗 (绝不回退到配网二维码)
-        if self.current_mode == "XIAOMI_QR":
+        # 1. 处于任意插件屏幕扫码弹窗 (绝不回退到配网二维码)
+        if self.active_qr_skill_id and self.current_mode not in ("QR_CODE", "SKILLS_QR"):
+            if self.qr_view.get("qr_bytes"):
+                return self.qr_view["qr_bytes"]
             try:
-                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
-                raw = qr_auth_manager.get_qr_png_bytes()
+                from core.skill_manager import get_skill_manager
+                sm = get_skill_manager()
+                raw = sm.invoke_plugin_hook(self.active_qr_skill_id, "get_screen_qr_bytes") if sm else b""
                 return raw or b""
             except Exception:
                 return b""
@@ -1060,7 +977,7 @@ class MenuFSM:
             time.sleep(1.0)
             with self._lock:
                 if self.current_mode != "FACE":
-                    limit_sec = 180.0 if self.current_mode in ("XIAOMI_QR", "NETEASE_QR", "QR_CODE", "SKILLS_QR", "FACE_ENROLL") else self.auto_timeout
+                    limit_sec = 180.0 if (self.current_mode in ("QR_CODE", "SKILLS_QR", "FACE_ENROLL") or self.active_qr_skill_id) else self.auto_timeout
                     if time.time() - self.last_interaction_time > limit_sec:
                         self.current_mode = "FACE"
                         self.cursor = 0
@@ -1139,19 +1056,14 @@ class MenuFSM:
                     self._notify_listeners()
                 return
 
-            # 2.5 处于米家 / 网易云屏幕弹窗 (XIAOMI_QR / NETEASE_QR)
-            if self.current_mode == "XIAOMI_QR":
+            # 2.5 处于插件屏幕扫码弹窗 (由插件生命周期钩子统一驱动)
+            if self.active_qr_skill_id and self.current_mode not in (
+                "FACE", "MENU_MAIN", "QR_CODE", "DOCTOR", "TOGGLES", "SKILLS", "SYSTEM", "SKILLS_QR", "FACE_ENROLL", "EASTER_EGG"
+            ):
                 if button in ["K4", "ESC"]:
-                    self.close_xiaomi_qr()
+                    self.close_skill_qr()
                 elif button in ["K3", "ENTER"]:
-                    self.show_xiaomi_qr_on_screen()
-                return
-
-            if self.current_mode == "NETEASE_QR":
-                if button in ["K4", "ESC"]:
-                    self.close_netease_qr()
-                elif button in ["K3", "ENTER"]:
-                    self.show_netease_qr_on_screen()
+                    self.show_skill_qr_on_screen(self.active_qr_skill_id, mode_name=self.current_mode)
                 return
 
             if self.current_mode == "SKILLS_QR":
@@ -1243,11 +1155,10 @@ class MenuFSM:
                     self.cursor = (self.cursor + 1) % sk_len
                     self._notify_listeners()
                 elif button == "K3":
-                    action_id = self.skill_items[self.cursor]["id"]
-                    if action_id == "mijia":
-                        self.show_xiaomi_qr_on_screen()
-                    elif action_id == "netease":
-                        self.show_netease_qr_on_screen()
+                    cur_item = self.skill_items[self.cursor]
+                    action_id = cur_item["id"]
+                    if cur_item.get("screen_qr") or cur_item.get("skill_id") and cur_item.get("type") == "qr":
+                        self.show_skill_qr_on_screen(cur_item.get("skill_id") or action_id, mode_name=cur_item.get("qr_mode", ""))
                     elif action_id == "skills_portal":
                         self.current_mode = "SKILLS_QR"
                         self._notify_listeners()
@@ -1455,7 +1366,22 @@ class MenuFSM:
     def get_state(self) -> Dict[str, Any]:
         """输出给 Web 端和 API 的实时状态"""
         ip = get_local_ip()
-        return {
+        extra_screen: Dict[str, Any] = {}
+        try:
+            from core.skill_manager import get_skill_manager
+            sm = get_skill_manager()
+            if sm:
+                for res in sm.emit_hook(
+                    "get_screen_state",
+                    active_mode=self.current_mode,
+                    active_qr_skill=self.active_qr_skill_id,
+                    qr_status=self.qr_view.get("status", ""),
+                ):
+                    if isinstance(res, dict):
+                        extra_screen.update(res)
+        except Exception:
+            pass
+        state_dict = {
             "mode": self.current_mode,
             "cursor": self.cursor,
             "main_menu_items": self.main_menu_items,
@@ -1473,15 +1399,10 @@ class MenuFSM:
             "update_status": self.update_status,
             "doctor": self.doctor_cache,
             "wifi": wifi_manager.get_status(),
-            "xiaomi_qr": {
-                "active": (self.current_mode == "XIAOMI_QR"),
-                "status": self.xiaomi_status_text,
-                "device_count": self.xiaomi_device_count
-            },
-            "netease_qr": self._build_netease_qr_dict(),
             "settings_url": f"http://{ip}:8090/settings",
             "skills_url": f"http://{ip}:8090/skills",
-            "qr_mode": self.current_mode if self.current_mode in ["QR_CODE", "XIAOMI_QR", "NETEASE_QR", "SKILLS_QR"] else "",
+            "qr_mode": self.current_mode if (self.current_mode in ["QR_CODE", "SKILLS_QR"] or self.active_qr_skill_id) else "",
+            "qr_view": {k: v for k, v in self.qr_view.items() if k != "qr_bytes"},
             "qr_base64": self.get_qr_base64(),
             "theme": getattr(self, "theme_key", "mint"),
             "is_mic_muted": self.is_mic_muted,
@@ -1493,6 +1414,8 @@ class MenuFSM:
             "easter_egg_scroll_y": self.easter_egg_scroll_y,
             "time_left": max(0, int(self.auto_timeout - (time.time() - self.last_interaction_time)))
         }
+        state_dict.update(extra_screen)
+        return state_dict
 
     # ========================================================
     # 树莓派真机端 PIL 绘图渲染器 (Material Design 3 现代穿戴/手环旗舰风格)
@@ -1736,24 +1659,19 @@ class MenuFSM:
             # 状态文案
             draw.text((28, 230), self.face_enroll_msg, fill=on_surf, font=self.font_bold)
 
-        # G. 技能服务二维码弹窗 (XIAOMI_QR / NETEASE_QR / SKILLS_QR 共享居中白底卡渲染)
-        elif self.current_mode in ["XIAOMI_QR", "NETEASE_QR", "SKILLS_QR"]:
-            if self.current_mode == "NETEASE_QR":
-                header_title = "网易云登录"
-                sub_headline = "打开网易云App 扫码登录"
-                st_line = self.netease_status_text
-                foot_tip = "绑定后畅听 VIP 与个人每日推荐"
-            elif self.current_mode == "SKILLS_QR":
+        # G. 通用技能服务二维码弹窗 (SKILLS_QR 与所有注册 screen_qr 的插件统一渲染)
+        elif self.current_mode == "SKILLS_QR" or (self.active_qr_skill_id and self.current_mode not in ("FACE", "MENU_MAIN", "QR_CODE", "DOCTOR", "TOGGLES", "SKILLS", "SYSTEM", "FACE_ENROLL", "EASTER_EGG")):
+            if self.current_mode == "SKILLS_QR":
                 ip = get_local_ip()
                 header_title = "技能后台"
                 sub_headline = "微信/浏览器 扫码配技能"
                 st_line = f"{ip}:8090/skills"
                 foot_tip = "配置飞书/天气/米家/音乐等插件"
             else:
-                header_title = "米家授权"
-                sub_headline = "打开米家App 扫码授权"
-                st_line = self.xiaomi_status_text
-                foot_tip = "绑定后可直接语音控制台灯/水壶等"
+                header_title = self.qr_view.get("title") or "扫码授权"
+                sub_headline = self.qr_view.get("headline") or "请打开手机扫码"
+                st_line = self.qr_view.get("status") or "等待扫码中..."
+                foot_tip = self.qr_view.get("foot_tip") or ""
 
             draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
             draw.line([(13, 27), (18, 32)], fill=p_col, width=2)

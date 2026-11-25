@@ -236,3 +236,86 @@ def run(device="台灯", action="打开", value=""):
             return f"控制【{k_name}】失败：局域网连接超时或通信异常 ({e})。"
 
     return f"控制【{k_name}】失败：未配置云端授权凭证或有效局域网 Token。请先扫码绑定米家。"
+
+
+def _get_qr_auth_manager():
+    try:
+        from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
+        return qr_auth_manager
+    except Exception:
+        import sys
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        if cur_dir not in sys.path:
+            sys.path.insert(0, cur_dir)
+        from xiaomi_qr_auth import qr_auth_manager
+        return qr_auth_manager
+
+
+def get_screen_item() -> dict:
+    mgr = _get_qr_auth_manager()
+    val = f"已绑{len(mgr.synced_devices)}台" if getattr(mgr, "synced_devices", None) else "待扫码"
+    return {
+        "id": "mijia",
+        "skill_id": "xiaomi_iot",
+        "icon": "home",
+        "name": "米家绑定",
+        "val": val,
+        "type": "info",
+        "screen_qr": True,
+        "qr_mode": "XIAOMI_QR",
+        "screen_order": 10,
+    }
+
+
+def get_screen_qr_bytes() -> bytes:
+    return _get_qr_auth_manager().get_qr_png_bytes() or b""
+
+
+def start_screen_qr() -> dict:
+    mgr = _get_qr_auth_manager()
+    mgr.local_qr_path = None
+    mgr.qr_url = ""
+    old_qr = mgr.config_path.parent / "xiaomi_qr.png"
+    if old_qr.exists():
+        try:
+            old_qr.unlink()
+        except Exception:
+            pass
+    res = mgr.start_qr_session()
+    if res.get("status") == "waiting":
+        return {
+            "title": "米家授权",
+            "headline": "打开米家App 扫码授权",
+            "foot_tip": "绑定后可直接语音控制台灯/水壶等",
+            "status": "请打开米家App扫码授权",
+            "qr_bytes": mgr.get_qr_png_bytes() or b"",
+        }
+    return {
+        "title": "米家授权",
+        "headline": "打开米家App 扫码授权",
+        "foot_tip": "绑定后可直接语音控制台灯/水壶等",
+        "status": res.get("error", "获取二维码失败"),
+        "error": True,
+    }
+
+
+def poll_screen_qr() -> dict:
+    mgr = _get_qr_auth_manager()
+    st = mgr.status
+    if st == "success":
+        cnt = len(mgr.synced_devices)
+        return {"state": "success", "status_text": f"绑定成功！已同步 {cnt} 台设备", "device_count": cnt}
+    if st in ("expired", "error"):
+        return {"state": "expired", "status_text": "二维码已超时，按 [OK] 刷新"}
+    return {"state": "waiting"}
+
+
+def get_screen_state(active_mode: str = "", active_qr_skill: str = "", qr_status: str = "") -> dict:
+    mgr = _get_qr_auth_manager()
+    return {
+        "xiaomi_qr": {
+            "active": (active_mode == "XIAOMI_QR" or active_qr_skill == "xiaomi_iot"),
+            "status": qr_status if active_qr_skill == "xiaomi_iot" else "等待米家App扫码授权...",
+            "device_count": len(getattr(mgr, "synced_devices", []) or []),
+        }
+    }

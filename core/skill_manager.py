@@ -236,18 +236,103 @@ class SkillManager:
                 catalog_list.append(copy_item)
             return catalog_list
 
+    def _is_protected_plugin(self, meta: Dict[str, Any]) -> bool:
+        return bool(meta.get("protected", False) or meta.get("builtin", False))
+
+    def resolve_plugin_id(self, name: str) -> Optional[str]:
+        """根据精确 ID 或各插件 skill.json 中声明的 aliases 解析插件 ID"""
+        raw = (name or "").strip()
+        if not raw:
+            return None
+        if raw in self.installed_plugins:
+            return raw
+        low = raw.lower()
+        with self.lock:
+            plugins_snapshot = list(self.installed_plugins.items())
+        for sid, obj in plugins_snapshot:
+            if low == sid.lower():
+                return sid
+        for sid, obj in plugins_snapshot:
+            meta = obj.get("meta") or {}
+            for alias in (meta.get("aliases") or []):
+                if str(alias).lower() in low:
+                    return sid
+        return None
+
+    def resolve_plugin_meta(self, name: str) -> Dict[str, Any]:
+        sid = self.resolve_plugin_id(name)
+        if not sid:
+            return {}
+        with self.lock:
+            obj = self.installed_plugins.get(sid)
+            return dict(obj.get("meta", {})) if obj else {}
+
+    def emit_hook(self, hook_name: str, **kwargs) -> List[Any]:
+        """向所有声明了 hook_name 回调函数的已安装插件广播生命周期事件"""
+        results: List[Any] = []
+        with self.lock:
+            plugins_snapshot = list(self.installed_plugins.items())
+        for sid, obj in plugins_snapshot:
+            fn = getattr(obj.get("module"), hook_name, None)
+            if callable(fn):
+                try:
+                    res = fn(**kwargs)
+                    if res is not None:
+                        results.append(res)
+                except Exception as e:
+                    print(f"⚠️ [SkillHook] 插件 [{sid}] 执行 {hook_name} 异常: {e}")
+        return results
+
+    def invoke_plugin_hook(self, skill_id: str, hook_name: str, **kwargs) -> Any:
+        """调用指定插件模块上的生命周期钩子函数"""
+        with self.lock:
+            obj = self.installed_plugins.get(skill_id)
+        if not obj:
+            return None
+        fn = getattr(obj.get("module"), hook_name, None)
+        if callable(fn):
+            try:
+                return fn(**kwargs)
+            except Exception as e:
+                print(f"⚠️ [SkillHook] 插件 [{skill_id}].{hook_name} 异常: {e}")
+        return None
+
+    def collect_status_payload(self) -> Dict[str, Any]:
+        """聚合所有插件通过 get_status_payload() 上报的运行状态字段"""
+        merged: Dict[str, Any] = {}
+        for item in self.emit_hook("get_status_payload"):
+            if isinstance(item, dict):
+                merged.update(item)
+        return merged
+
+    def collect_screen_items(self) -> List[Dict[str, Any]]:
+        """聚合所有声明了 get_screen_item() 的插件卡片，供 2.4 寸屏幕菜单统一展示"""
+        items: List[Dict[str, Any]] = []
+        with self.lock:
+            plugins_snapshot = list(self.installed_plugins.items())
+        for sid, obj in plugins_snapshot:
+            fn = getattr(obj.get("module"), "get_screen_item", None)
+            if callable(fn):
+                try:
+                    entry = fn()
+                    if isinstance(entry, dict) and entry.get("name"):
+                        entry = dict(entry)
+                        entry.setdefault("skill_id", sid)
+                        entry.setdefault("screen_order", 50)
+                        items.append(entry)
+                except Exception as e:
+                    print(f"⚠️ [SkillScreen] 插件 [{sid}].get_screen_item 异常: {e}")
+        items.sort(key=lambda x: int(x.get("screen_order", 50)))
+        return items
+
     def list_installed_skills(self) -> List[Dict[str, Any]]:
-        """获取当前已安装激活的技能列表 (丰富类型标记、参数摘要与卸载保护)"""
+        """获取当前已安装激活的技能列表 (由各技能 skill.json 声明保护与配置能力)"""
         with self.lock:
             res = []
             for sid, obj in self.installed_plugins.items():
                 m = dict(obj.get("meta", {}))
                 m["id"] = sid
-                is_builtin = sid in {
-                    "xiaomi_iot", "weather", "reminder", "system_config",
-                    "proactive_care", "feishu_bot", "visual_qa",
-                    "network_diagnostics", "pomodoro", "pet_tamagotchi", "news_briefing"
-                }
+                is_builtin = self._is_protected_plugin(m)
                 is_self_evolved = m.get("source") == "self_evolved" or "自进化" in str(m.get("author", ""))
                 m["is_builtin"] = is_builtin
                 m["is_self_evolved"] = is_self_evolved
@@ -352,11 +437,8 @@ class SkillManager:
     def uninstall_skill(self, skill_id: str) -> bool:
         """从本地卸载并删除一个插件技能"""
         skill_id = skill_id.strip().lower()
-        if skill_id in {
-            "xiaomi_iot", "weather", "reminder", "system_config",
-            "proactive_care", "feishu_bot", "visual_qa",
-            "network_diagnostics", "pomodoro", "pet_tamagotchi", "news_briefing"
-        }:
+        meta = self.resolve_plugin_meta(skill_id)
+        if self._is_protected_plugin(meta):
             print(f"🔒 [SkillStore] 核心系统技能 [{skill_id}] 受系统级保护，禁止卸载")
             return False
         target_dir = os.path.join(self.skills_dir, skill_id)
@@ -773,29 +855,19 @@ class SkillManager:
             params = args.get("parameters") or {}
             res = self.create_custom_skill(sid, s_name, desc, code, params)
             return res.get("message", "技能创建完成")
-        elif name in self.installed_plugins:
-            return self.execute_skill(name, **args)
-        # 智能别名与模糊容错映射 (针对大模型自由发挥的工具名自动纠偏)
-        elif any(w in name.lower() for w in ["xiaomi", "mijia", "miot", "xiaoai", "mi_home"]) and "xiaomi_iot" in self.installed_plugins:
-            is_query = any(w in name.lower() or w in str(args).lower() for w in ["query", "list", "all", "查", "看", "设备", "清单"])
-            if is_query or not args:
-                if not args.get("device"):
-                    args["device"] = "all"
-                if not args.get("action"):
-                    args["action"] = "查询设备列表"
-            return self.execute_skill("xiaomi_iot", **args)
-        elif any(w in name.lower() for w in ["weather", "tianqi"]) and "weather" in self.installed_plugins:
-            return self.execute_skill("weather", **args)
-        elif any(w in name.lower() for w in ["news", "xinwen"]) and "news_briefing" in self.installed_plugins:
-            return self.execute_skill("news_briefing", **args)
-        elif any(w in name.lower() for w in ["net", "wifi", "ping"]) and "network_diagnostics" in self.installed_plugins:
-            return self.execute_skill("network_diagnostics", **args)
-        elif any(w in name.lower() for w in ["pet", "tamagotchi", "feed"]) and "pet_tamagotchi" in self.installed_plugins:
-            return self.execute_skill("pet_tamagotchi", **args)
-        elif any(w in name.lower() for w in ["music", "netease", "song", "yinyue", "音乐", "点歌"]) and "netease_music" in self.installed_plugins:
-            return self.execute_skill("netease_music", **args)
-        elif any(w in name.lower() for w in ["config", "setting", "shezhi", "peizhi", "system_config", "face_tracking", "track"]) and "system_config" in self.installed_plugins:
-            return self.execute_skill("system_config", **args)
+        else:
+            sid = self.resolve_plugin_id(name)
+            if sid:
+                meta = self.installed_plugins[sid].get("meta") or {}
+                dq = meta.get("default_query_args")
+                if isinstance(dq, dict):
+                    trigs = [str(t).lower() for t in (dq.get("triggers") or [])]
+                    low_name = name.lower()
+                    low_args = str(args).lower()
+                    if not args or any(t in low_name or t in low_args for t in trigs):
+                        for k, v in (dq.get("defaults") or {}).items():
+                            args.setdefault(k, v)
+                return self.execute_skill(sid, **args)
         return f"未识别的技能指令: {name}"
 
     def close(self):

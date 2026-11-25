@@ -39,5 +39,43 @@
       "poll_endpoint": "/api/xiaomi/qr_status"
     },
     "fields": []
-  }
+  },
+  "protected": true,
+  "fast_path": true,
+  "query_keywords": [
+    "查",
+    "看",
+    "列表",
+    "有哪些",
+    "什么设备",
+    "清单",
+    "query",
+    "list",
+    "all",
+    "所有"
+  ],
+  "aliases": [
+    "xiaomi",
+    "mijia",
+    "miot",
+    "xiaoai",
+    "mi_home"
+  ],
+  "default_query_args": {
+    "triggers": [
+      "query",
+      "list",
+      "all",
+      "查",
+      "看",
+      "设备",
+      "清单"
+    ],
+    "defaults": {
+      "device": "all",
+      "action": "查询设备列表"
+    }
+  },
+  "screen_qr_mode": "XIAOMI_QR",
+  "screen_qr_title": "米家授权"
 }

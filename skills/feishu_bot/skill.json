@@ -68,5 +68,6 @@
         "endpoint": "/api/feishu/test_snapshot"
       }
     ]
-  }
+  },
+  "protected": true
 }
