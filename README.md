@@ -587,17 +587,16 @@ class SimulationRobotHAL(BaseRobotHAL):
 
 ### 1. 一键全自动初始化脚本 (`scripts/setup_raspberry_pi.sh`)
 
-此脚本自动完成以下配置：
-- 使能树莓派硬件 SPI 接口（供 2.4寸 ST7789 屏幕使用）
+本脚本已实现**“一个脚本全包圆”**，不再需要手动编辑系统配置或手写 systemd service：
+- 自动使能树莓派硬件 SPI 接口（供 2.4 寸 ST7789 屏幕使用）与硬件电源按钮（`dtoverlay=gpio-shutdown`，支持 Pin 5 + Pin 6 一键安全关机/开机）
 - 更新软件源并安装底层系统依赖（`pigpio`, `libportaudio2`, `portaudio19-dev`, `alsa-utils`, `fswebcam`, `ffmpeg` 等）
-- 自动注册并开机自启 `pigpiod` 守护服务（树莓派 3B 必须使用硬件 DMA 定时器输出精确 PWM，彻底消除舵机高频抖动）
-- 配置 Python 虚拟环境与核心库（若无 venv 则自动创建），安装 `requirements.txt`
-- 检查并引导创建 `config.json` 模板
+- 自动注册并开机自启 `pigpiod` 守护服务（使用硬件 DMA 定时器输出精确 PWM，彻底消除舵机高频抖动）
+- 安装 Python `requirements.txt` 依赖，从 `config.json.example` 自动初始化 `config.json` 与程序化音效
+- **自动识别当前用户名与目录并注册 `/etc/systemd/system/robot.service` 开机自启守护服务**（加 `--start` 参数可安装后立即拉起服务）
 
-在树莓派终端中直接运行：
+在树莓派终端中仅需执行一条命令：
 ```bash
-chmod +x scripts/setup_raspberry_pi.sh
-./scripts/setup_raspberry_pi.sh
+bash scripts/setup_raspberry_pi.sh
 ```
 
 ### 2. 硬件链路端到端自检诊断工具 (`scripts/test_hardware.py`)
@@ -1358,34 +1357,18 @@ class FeishuClient:
 
 ## 九、系统守护与保活部署 (systemd)
 
-在树莓派中注册守护服务，实现通电自启与进程崩溃重启：
+> 💡 **已自动集成**：执行 `bash scripts/setup_raspberry_pi.sh` 时会自动生成并开启 `robot.service` 开机自启（自动匹配当前用户名与工程路径），一般无需手动新建配置。
 
-1. 编辑配置文件：
-   ```bash
-   sudo nano /etc/systemd/system/robot.service
-   ```
-2. 粘贴以下内容：
-   ```ini
-   [Unit]
-   Description=Desktop Embodied AI Robot Agent
-   After=network.target pigpiod.service
-   Wants=pigpiod.service
+常用维护与排障命令：
+```bash
+# 查看 PIG 运行状态与实时日志
+sudo systemctl status robot.service
+journalctl -u robot.service -f
 
-   [Service]
-   Type=simple
-   User=pi
-   WorkingDirectory=/home/pi/desktop_robot
-   ExecStart=/usr/bin/python3 /home/pi/desktop_robot/main_agent.py
-   Restart=always
-   RestartSec=5
-   Environment=PYTHONUNBUFFERED=1
+# 手动启动 / 停止 / 重启服务（运行 test_hardware.py 前建议先 stop 释放麦克风与屏幕）
+sudo systemctl start robot.service
+sudo systemctl stop robot.service
+sudo systemctl restart robot.service
+```
 
-   [Install]
-   WantedBy=multi-user.target
-   ```
-3. 激活服务：
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable robot.service
-   sudo systemctl start robot.service
-   ```
+如需手动参考模板，仓库根目录 [systemd/robot.service](systemd/robot.service) 保留了标准服务定义文件。
