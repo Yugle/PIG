@@ -544,7 +544,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "local_ip": state["local_ip"],
                 "cpu_temp": state["doctor"].get("cpu_temp", "45°C"),
                 "mimo_status": state["doctor"].get("mimo_status", "正常 (OK)"),
-                "feishu": cur_cfg.get("feishu", {})
+                "feishu": cur_cfg.get("feishu", {}),
+                "ota_url": cur_cfg.get("ota_url", ""),
+                "firmware_version": getattr(menu_fsm, "version_str", "v0.1.0"),
+                "update_status": getattr(menu_fsm, "update_status", "已是最新")
             }
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -1117,7 +1120,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         cur_cfg = json.load(f)
                 else:
                     cur_cfg = {}
-                for k in ["api_key", "llm_model", "robot_name", "bot_name", "user_name", "mimo_voice", "pan_trim", "tilt_trim", "wakeword_keywords"]:
+                for k in ["api_key", "llm_model", "robot_name", "bot_name", "user_name", "mimo_voice", "pan_trim", "tilt_trim", "wakeword_keywords", "ota_url"]:
                     if k in body:
                         cur_cfg[k] = body[k]
                 if "face_tracking" in body:

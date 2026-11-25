@@ -1057,6 +1057,10 @@
             <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">模型名称 (Model):</label>
             <input type="text" id="cfg-llm-model" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;" placeholder="mimo-v2.6-flash" />
           </div>
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:0.82rem; color:var(--text-sub); margin-bottom:4px;">OTA 更新源地址 (Vercel 域名，留空走 Git):</label>
+            <input type="text" id="cfg-ota-url" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--border-color); border-radius:8px; padding:7px 10px; color:#fff;" placeholder="https://ota.你的域名.com/version.json" />
+          </div>
         </div>
       </div>
 
@@ -5270,6 +5274,9 @@
           document.getElementById("cfg-base-url").value = cfg.base_url || "https://api.xiaomimimo.com/v1";
           document.getElementById("cfg-api-key").value = cfg.api_key || "";
           document.getElementById("cfg-llm-model").value = cfg.llm_model || "mimo-v2.6-flash";
+          if (document.getElementById("cfg-ota-url")) {
+            document.getElementById("cfg-ota-url").value = cfg.ota_url || "";
+          }
 
           if (cfg.system_env) {
             const env = cfg.system_env;
@@ -5323,7 +5330,8 @@
         proactive_care_cooldown_hours: parseInt(document.getElementById("cfg-care-cooldown").value),
         base_url: document.getElementById("cfg-base-url").value.trim(),
         api_key: document.getElementById("cfg-api-key").value.trim(),
-        llm_model: document.getElementById("cfg-llm-model").value.trim()
+        llm_model: document.getElementById("cfg-llm-model").value.trim(),
+        ota_url: (document.getElementById("cfg-ota-url")?.value || "").trim()
       };
 
       try {
