@@ -887,10 +887,8 @@ class MenuFSM:
                         self._apply_servo_sleep(self.is_servo_sleeping)
                         self._notify_listeners()
                     else:
-                        # 短按返回 -> 紧急打断 / 静音切换
-                        self.is_mic_muted = not self.is_mic_muted
-                        self._trigger_barge_in()
-                        self._notify_listeners()
+                        # 短按返回 -> 表情页直接唤醒 (等于语音唤醒)
+                        self._trigger_manual_wake()
                 elif button == "K1":
                     # 音量 +
                     self._adjust_volume(+10)
@@ -1103,6 +1101,25 @@ class MenuFSM:
             SoundEffects.play_barge_in()
         except Exception:
             pass
+
+    def _trigger_manual_wake(self):
+        """表情页面短按 K4 返回键：直接触发手动唤醒 (等同语音唤醒)"""
+        print("⚡ [MenuFSM] 表情页面短按 K4 ➔ 直接触发唤醒 (等同语音唤醒)")
+        agent = self.agent
+        if agent is None:
+            try:
+                from core.hardware_agent import get_hardware_agent
+                agent = get_hardware_agent()
+            except Exception:
+                agent = None
+        if agent:
+            if agent.state != agent.STATE_IDLE:
+                try:
+                    agent.stop_speaking()
+                except Exception:
+                    pass
+                agent.state = agent.STATE_IDLE
+            threading.Thread(target=agent.trigger_wake_manually, daemon=True, name="K4ManualWake").start()
 
     def handle_radar(self, detected: bool):
         """处理 HLK-LD2402 毫米波人体雷达状态变化"""

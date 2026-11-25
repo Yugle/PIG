@@ -1323,7 +1323,7 @@
               <button class="pip-hw-btn" id="btnK1" onclick="sendHwButton('K1')" title="K1 (上键 / 音量+) [快捷键: W 或 ↑]">▲ 上</button>
               <button class="pip-hw-btn" id="btnK2" onclick="sendHwButton('K2')" title="K2 (下键 / 音量-) [快捷键: S 或 ↓]">▼ 下</button>
               <button class="pip-hw-btn pip-btn-primary" id="btnK3" onclick="sendHwButton('K3')" title="K3 (确认 / 打开系统菜单) [快捷键: Enter / M]">● 确认</button>
-              <button class="pip-hw-btn pip-btn-danger" id="btnK4" onclick="sendHwButton('K4')" title="K4 (返回 / 闭麦打断) [快捷键: Esc]">✕ 返回</button>
+              <button class="pip-hw-btn pip-btn-danger" id="btnK4" onclick="sendHwButton('K4')" title="K4 (表情页短按直接唤醒 / 菜单中返回) [快捷键: Esc]">✕ 返回/唤醒</button>
             </div>
             <div style="font-size: 0.65rem; color: var(--text-sub); text-align: center; margin-top: 4px; line-height: 1.2;">
               按 <b>Enter / M</b> 打开菜单 | <b>W/S/Enter/Esc</b>
@@ -1838,10 +1838,8 @@
         } else if (button === "K4") {
           if (eventType === "long_press") {
             menuState.servo_sleeping = !menuState.servo_sleeping;
-          } else {
-            menuState.is_mic_muted = !menuState.is_mic_muted;
-            fetch("/api/barge_in", { method: "POST" }).catch(() => {});
           }
+          // 表情页面短按 K4 (返回): 直接触发手动唤醒 (后端 MenuFSM 自动执行 trigger_wake_manually)
         }
       } else if (menuState.mode === "XIAOMI_QR") {
         if (button === "K4") {

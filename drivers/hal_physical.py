@@ -81,7 +81,7 @@ class PhysicalRobotHAL(BaseRobotHAL):
 
         # 初始化 4 独立按键 (K1~K4): 低电平触发标准逻辑 (内部弱上拉)
         # K1: GPIO 23 (音量+ / 菜单上), K2: GPIO 24 (音量- / 菜单下)
-        # K3: GPIO 27 (确认 / 手动唤醒), K4: GPIO 4 (静音闭麦 / 长按关机)
+        # K3: GPIO 27 (确认 / 进入菜单), K4: GPIO 4 (表情页直接唤醒 / 菜单返回 / 长按舵机休眠)
         self.button_pins = {
             "K1": 23,
             "K2": 24,
