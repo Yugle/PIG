@@ -382,6 +382,9 @@ agent_event_subscribers = []
 subscribers_lock = threading.Lock()
 
 def on_agent_event_broadcast(event_dict):
+    if isinstance(event_dict, dict) and event_dict.get("type") == "pose_sync" and event_dict.get("emotion"):
+        if hardware_agent is not None:
+            hardware_agent.current_emotion = str(event_dict["emotion"]).upper()
     with subscribers_lock:
         dead_subs = []
         for q in agent_event_subscribers:
@@ -394,6 +397,43 @@ def on_agent_event_broadcast(event_dict):
                 agent_event_subscribers.remove(d)
 
 hardware_agent.register_event_listener(on_agent_event_broadcast)
+hardware_agent.current_emotion = "NORMAL"
+
+def _sync_hardware_behaviors(behaviors, default_emotion="HAPPY"):
+    """将网页/飞书对话生成的表情与舵机动作序列同步到真机屏幕和舵机"""
+    if not hardware_agent:
+        return
+    seq = list(behaviors or [])
+    if not seq and default_emotion:
+        seq = [{"emotion": default_emotion, "pan": 90, "tilt": 85, "delay": 1800}]
+
+    def _runner():
+        try:
+            if hasattr(hardware_agent, "mark_action_playing"):
+                hardware_agent.mark_action_playing(max(2.0, len(seq) * 1.2))
+            for step in seq:
+                emo = str(step.get("emotion") or default_emotion or "NORMAL").upper()
+                hardware_agent.current_emotion = emo
+                pan = step.get("pan")
+                tilt = step.get("tilt")
+                if pan is not None and tilt is not None and hardware_agent.hal:
+                    try:
+                        hardware_agent.hal.set_angles(float(pan), float(tilt), smooth=True)
+                    except Exception:
+                        pass
+                delay_ms = int(step.get("delay") or 1000)
+                time.sleep(max(0.2, min(delay_ms / 1000.0, 5.0)))
+            time.sleep(0.8)
+            hardware_agent.current_emotion = "NORMAL"
+            if hardware_agent.hal:
+                try:
+                    hardware_agent.hal.set_angles(90, 90, smooth=True)
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"⚠️ [PhysicalSync] 同步动作表情异常: {e}")
+
+    threading.Thread(target=_runner, daemon=True).start()
 
 # 统一 4 键菜单状态机 (MenuFSM)
 from core.menu_fsm import menu_fsm
@@ -2221,6 +2261,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         _drain_ready_audio(force_all=False)
 
                     elif ev_type == "done":
+                        # 同步真机屏幕表情与舵机动作
+                        _sync_hardware_behaviors(event.get("behaviors"), default_emotion="HAPPY")
                         # 在发送 done 前排空并送达所有已合成的音频切片
                         _drain_ready_audio(force_all=True)
                         msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
@@ -2333,6 +2375,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         reply_data["visual_snapshot"] = f"/api/vision/snapshot?t={int(time.time()*1000)}"
                     if reply_data["behaviors"] and hardware_agent and hasattr(hardware_agent, "mark_action_playing"):
                         hardware_agent.mark_action_playing(3.0)
+                    _sync_hardware_behaviors(reply_data.get("behaviors"), default_emotion="HAPPY")
                 except Exception as e:
                     print(f"⚠️ [Web-LLM ReAct Loop Error]: {e}")
                     reply_data["reply"] = f"抱歉主人，执行过程遇到异常错误：{e}，未能完成操作。"
