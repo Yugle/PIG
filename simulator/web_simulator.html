@@ -4300,6 +4300,11 @@
               updateMemoryBadge();
               fetchReminders();
               fetchEvolvedActions();
+              if (ev.steps && ev.steps.some(s => (s.action || "").toLowerCase().includes("music") || (s.action || "").toLowerCase().includes("netease"))) {
+                fetch("/api/netease/status").then(r => r.json()).then(d => {
+                  if (d && d.music) updateMusicPlayerHUD(d.music);
+                }).catch(() => {});
+              }
             } else if (ev.type === "error") {
               stopThinkingCadence();
               botDiv.innerHTML = `<div style="color:#f85149;">⚠️ PIG 交互异常: ${ev.message || "未知错误"}</div>`;
@@ -5501,7 +5506,13 @@
 
       if (!m.has_track || (!m.playing && !m.paused)) {
         if (hud) hud.style.display = "none";
-        if (audio && !audio.paused) audio.pause();
+        if (audio) {
+          if (!audio.paused) audio.pause();
+          if (audio.getAttribute("src")) {
+            audio.removeAttribute("src");
+            audio.load();
+          }
+        }
         currentMusicState = Object.assign({}, m);
         return;
       }
