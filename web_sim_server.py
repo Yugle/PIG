@@ -168,6 +168,7 @@ def apply_runtime_config(cur_cfg: dict, updates: dict):
                 })
         menu_fsm._sync_hardware_items()
         menu_fsm._sync_system_items()
+        menu_fsm._sync_skill_items()
         menu_fsm._notify_listeners()
 
     if hardware_agent:
@@ -460,7 +461,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
     def do_HEAD(self):
-        if self.path in ["/settings", "/settings.html"]:
+        if self.path in ["/settings", "/settings.html", "/skills", "/skills.html"]:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
@@ -499,18 +500,20 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(404, "HTML simulator page not found")
                 return
 
-        # 手机端无线配置后台 (/settings)
-        if self.path in ["/settings", "/settings.html"]:
-            settings_path = os.path.join(DIRECTORY, "simulator", "settings.html")
-            if os.path.exists(settings_path):
+        # 手机端无线配置后台 (/settings) 与 独立技能配置后台 (/skills)
+        if self.path in ["/settings", "/settings.html", "/skills", "/skills.html"]:
+            is_skills = self.path in ["/skills", "/skills.html"]
+            page_name = "skills.html" if is_skills else "settings.html"
+            page_path = os.path.join(DIRECTORY, "simulator", page_name)
+            if os.path.exists(page_path):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
-                with open(settings_path, "rb") as f:
+                with open(page_path, "rb") as f:
                     self.wfile.write(f.read())
                 return
             else:
-                self.send_error(404, "settings.html not found")
+                self.send_error(404, f"{page_name} not found")
                 return
 
         # 获取配置及状态 API
@@ -966,6 +969,15 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "installed": skill_mgr.list_installed_skills()
             }
             self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 元数据驱动：统一获取全部带 config_schema 的技能配置与实时状态
+        if self.path == "/api/skills/configs":
+            cfg = load_config()
+            self._send_json({
+                "status": "ok",
+                "skills": skill_mgr.list_configurable_skills(cfg),
+            })
             return
 
         # 获取生物钟作息与反思元认知数据
@@ -1514,10 +1526,27 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "ok", "action": "barge_in_triggered"}, ensure_ascii=False).encode("utf-8"))
             return
 
-        # 网易云音乐扫码登录与播放控制 API
+        # 网易云音乐扫码登录、投屏扫码与播放控制 API
         if self.path == "/api/netease/qr_start":
             from skills.netease_music.netease_client import netease_client
             self._send_json(netease_client.start_qr_login())
+            return
+
+        if self.path == "/api/netease/qr_start_screen":
+            try:
+                menu_fsm.show_netease_qr_on_screen()
+                self._send_json({
+                    "status": "waiting",
+                    "action": "displayed_on_robot_screen",
+                    "message": "已在小猪屏幕上显示网易云登录二维码",
+                })
+            except Exception as e:
+                self.send_error(500, str(e))
+            return
+
+        if self.path == "/api/netease/qr_dismiss_screen":
+            menu_fsm.close_netease_qr()
+            self._send_json({"status": "ok"})
             return
 
         if self.path == "/api/netease/logout":
@@ -1889,6 +1918,44 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 元数据驱动：保存任意技能插件的独立配置并热同步
+        if self.path == "/api/skills/configs":
+            length = int(self.headers.get("Content-Length", 0))
+            req = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
+            sid = (req.get("skill_id") or "").strip()
+            values = req.get("values") if isinstance(req.get("values"), dict) else {}
+            if not sid:
+                self._send_json({"status": "error", "message": "缺少 skill_id"}, status_code=400)
+                return
+
+            cur_cfg = load_config()
+            plugin = skill_mgr.installed_plugins.get(sid, {})
+            schema = (plugin.get("meta") or {}).get("config_schema") or {}
+            section = schema.get("config_section") or f"skills_config.{sid}"
+
+            if section == "root":
+                cur_cfg.update(values)
+                updates = dict(values)
+            elif section.startswith("skills_config."):
+                sub_key = section.split(".", 1)[1]
+                cur_cfg.setdefault("skills_config", {}).setdefault(sub_key, {}).update(values)
+                updates = {"skills_config": cur_cfg["skills_config"]}
+            elif section == "none":
+                updates = {}
+            else:
+                cur_cfg.setdefault(section, {}).update(values)
+                updates = {section: cur_cfg[section]}
+
+            if section == "feishu":
+                from skills.feishu_bot.feishu_client import feishu_client
+                feishu_client.update_config(cur_cfg["feishu"])
+                if feishu_client.app_id and feishu_client.app_secret:
+                    feishu_client.start_ws_service(handle_feishu_incoming_message)
+
+            apply_runtime_config(cur_cfg, updates)
+            self._send_json({"status": "ok", "skill_id": sid, "state": menu_fsm.get_state()})
             return
 
         # ⚡ 流式即时推理与断句语音合成输出接口 (Server-Sent Events)

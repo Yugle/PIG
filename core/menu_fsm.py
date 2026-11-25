@@ -239,6 +239,12 @@ def _draw_vector_icon(draw, icon_name: str, cx: int, cy: int, color):
         draw.rectangle([cx - 3, cy - 7, cx + 3, cy - 4], fill=color)
         draw.ellipse([cx - 3, cy - 1, cx + 3, cy + 5], fill=color)
 
+    elif icon_name == "skills":
+        draw.rounded_rectangle([cx - 7, cy - 7, cx - 1, cy - 1], radius=2, fill=color)
+        draw.rounded_rectangle([cx + 1, cy - 7, cx + 7, cy - 1], radius=2, fill=color)
+        draw.rounded_rectangle([cx - 7, cy + 1, cx - 1, cy + 7], radius=2, fill=color)
+        draw.rounded_rectangle([cx + 1, cy + 1, cx + 7, cy + 7], radius=2, outline=color, width=2)
+
     else:
         draw.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=color)
 
@@ -341,11 +347,12 @@ class MenuFSM:
         if self.theme_key not in THEMES:
             self.theme_key = "mint"
         
-        # 主菜单定义 (Material Design 3 极简现代微图标与单行纯净标题)
+        # 主菜单定义 (系统控制 vs 技能服务彻底解耦)
         self.main_menu_items = [
             {"id": "qr", "icon": "wifi", "title": "无线与配网"},
             {"id": "doctor", "icon": "doctor", "title": "系统体检"},
             {"id": "toggles", "icon": "hardware", "title": "硬件控制"},
+            {"id": "skills", "icon": "skills", "title": "技能服务"},
             {"id": "system", "icon": "settings", "title": "系统设置"},
         ]
         
@@ -377,9 +384,13 @@ class MenuFSM:
             "check_time": 0
         }
         
-        # 米家屏幕弹窗状态
+        # 米家 / 网易云屏幕弹窗状态
         self.xiaomi_status_text = "等待米家App扫码授权..."
         self.xiaomi_device_count = 0
+        self.netease_status_text = "等待网易云App扫码..."
+        self.netease_qr_bytes: bytes = b""
+        self.skill_items = []
+        self._sync_skill_items()
 
         # 彩蛋状态 (连续点击系统版本号触发与滚动状态)
         self.version_click_count = 0
@@ -473,7 +484,6 @@ class MenuFSM:
             {"id": "theme", "icon": "theme", "name": "系统主题风格", "val": theme_name, "type": "cycle"},
             {"id": "face_id", "icon": "face", "name": "录入主人面容", "val": "", "type": "action"},
             {"id": "face_clear", "icon": "trash", "name": "重置主人面容", "val": "", "type": "action"},
-            {"id": "mijia", "icon": "home", "name": "米家扫码绑定", "val": "", "type": "action"},
             {"id": "voice", "icon": "voice", "name": "发音音色切换", "val": voice, "type": "cycle"},
             {"id": "volume", "icon": "volume", "name": "系统播报音量", "val": f"{vol}%", "type": "cycle"},
             {"id": "timeout", "icon": "clock", "name": "屏幕息屏时间", "val": timeout_txt, "type": "cycle"},
@@ -481,6 +491,42 @@ class MenuFSM:
             {"id": "update", "icon": "cloud", "name": "检查系统更新", "val": self.update_status, "type": "action"},
             {"id": "restart", "icon": "restart", "name": "重启机器人服务", "val": "", "type": "action"},
             {"id": "shutdown", "icon": "power", "name": "树莓派安全关机", "val": "", "type": "action"},
+        ]
+
+    def _sync_skill_items(self):
+        """同步屏幕「技能服务」子菜单项，与系统本体设置彻底隔离"""
+        mijia_val = "待扫码"
+        try:
+            from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
+            if qr_auth_manager.synced_devices:
+                mijia_val = f"已绑{len(qr_auth_manager.synced_devices)}台"
+        except Exception:
+            pass
+
+        ncm_val = "免登录"
+        try:
+            from skills.netease_music.netease_client import netease_client
+            if netease_client.logged_in:
+                ncm_val = (netease_client.nickname or "已登录")[:6]
+        except Exception:
+            pass
+
+        feishu_val = "未配置"
+        try:
+            from skills.feishu_bot.feishu_client import feishu_client
+            if feishu_client.ws_connected:
+                feishu_val = "长连在线"
+            elif feishu_client.is_configured:
+                feishu_val = "已配置"
+        except Exception:
+            pass
+
+        ip = get_local_ip()
+        self.skill_items = [
+            {"id": "mijia", "icon": "home", "name": "米家扫码绑定", "val": mijia_val, "type": "info"},
+            {"id": "netease", "icon": "sfx", "name": "网易云音乐绑定", "val": ncm_val, "type": "info"},
+            {"id": "feishu", "icon": "chat", "name": "飞书网关状态", "val": feishu_val, "type": "info"},
+            {"id": "skills_portal", "icon": "skills", "name": "手机配技能页", "val": f"{ip.split('.')[-1]}:8090/skills", "type": "info"},
         ]
 
     def cycle_theme(self):
@@ -662,6 +708,75 @@ class MenuFSM:
             self.current_mode = "FACE"
             self._notify_listeners()
 
+    def show_netease_qr_on_screen(self):
+        """在机器人 2.4 寸屏幕上直接弹窗显示网易云音乐登录二维码"""
+        print("🎵 [MenuFSM] 触发屏幕弹窗显示网易云音乐绑定二维码")
+        with self._lock:
+            self.current_mode = "NETEASE_QR"
+            self.netease_status_text = "获取网易云二维码中..."
+            self.netease_qr_bytes = b""
+            self.last_interaction_time = time.time()
+            self._notify_listeners()
+
+        def _ncm_worker():
+            try:
+                import base64
+                from skills.netease_music.netease_client import netease_client
+                res = netease_client.start_qr_login()
+                if res.get("status") != "ok":
+                    with self._lock:
+                        self.netease_status_text = res.get("message", "获取二维码失败")
+                        self._notify_listeners()
+                    return
+                raw_png = b""
+                b64 = res.get("qr_base64", "")
+                if "," in b64:
+                    try:
+                        raw_png = base64.b64decode(b64.split(",", 1)[1])
+                    except Exception:
+                        raw_png = b""
+                with self._lock:
+                    self.netease_qr_bytes = raw_png
+                    self.netease_status_text = "打开网易云App 扫一扫"
+                    self._notify_listeners()
+
+                while self.current_mode == "NETEASE_QR":
+                    time.sleep(1.2)
+                    st = netease_client.check_qr_status()
+                    code = int(st.get("code", 0))
+                    if code == 803 or st.get("logged_in"):
+                        with self._lock:
+                            self.netease_status_text = f"绑定成功！{st.get('nickname', '')}"
+                            self._sync_skill_items()
+                            self._notify_listeners()
+                        time.sleep(2.2)
+                        with self._lock:
+                            if self.current_mode == "NETEASE_QR":
+                                self.current_mode = "FACE"
+                                self._notify_listeners()
+                        break
+                    elif code == 800:
+                        with self._lock:
+                            self.netease_status_text = "二维码已过期，按 [OK] 刷新"
+                            self._notify_listeners()
+                        break
+                    elif code == 802:
+                        with self._lock:
+                            self.netease_status_text = "已扫码，请在手机确认登录"
+                            self._notify_listeners()
+            except Exception as e:
+                with self._lock:
+                    self.netease_status_text = f"网易云认证异常: {e}"
+                    self._notify_listeners()
+
+        threading.Thread(target=_ncm_worker, daemon=True, name="NeteaseScreenQR").start()
+
+    def close_netease_qr(self):
+        """关闭屏幕网易云二维码弹窗返回"""
+        with self._lock:
+            self.current_mode = "FACE"
+            self._notify_listeners()
+
     def enter_easter_egg(self):
         """进入关于本项目(PIG)自白彩蛋模式"""
         with self._lock:
@@ -764,6 +879,10 @@ class MenuFSM:
 
     def get_qr_png_bytes(self) -> bytes:
         """生成并返回当前模式匹配的 QR 码 PNG 字节流"""
+        # 0. 处于网易云音乐扫码弹窗
+        if self.current_mode == "NETEASE_QR" and self.netease_qr_bytes:
+            return self.netease_qr_bytes
+
         # 1. 处于米家扫码绑定弹窗
         if self.current_mode == "XIAOMI_QR":
             try:
@@ -923,6 +1042,10 @@ class MenuFSM:
                         elif target == "toggles":
                             self.current_mode = "TOGGLES"
                             self.cursor = 0
+                        elif target == "skills":
+                            self._sync_skill_items()
+                            self.current_mode = "SKILLS"
+                            self.cursor = 0
                         elif target == "system":
                             self.current_mode = "SYSTEM"
                             self.cursor = 0
@@ -933,12 +1056,19 @@ class MenuFSM:
                     self._notify_listeners()
                 return
 
-            # 2.5 处于米家屏幕弹窗 (XIAOMI_QR)
+            # 2.5 处于米家 / 网易云屏幕弹窗 (XIAOMI_QR / NETEASE_QR)
             if self.current_mode == "XIAOMI_QR":
                 if button in ["K4", "ESC"]:
                     self.close_xiaomi_qr()
                 elif button in ["K3", "ENTER"]:
                     self.show_xiaomi_qr_on_screen()
+                return
+
+            if self.current_mode == "NETEASE_QR":
+                if button in ["K4", "ESC"]:
+                    self.close_netease_qr()
+                elif button in ["K3", "ENTER"]:
+                    self.show_netease_qr_on_screen()
                 return
 
             # 3. 处于无线与配网展示页 (QR_CODE)
@@ -1012,7 +1142,32 @@ class MenuFSM:
                     self._notify_listeners()
                 return
 
-            # 6. 处于系统设置页 (SYSTEM: 面容录入/清除/米家/音色/音量/息屏/更新/关机/重启)
+            # 5.5 处于技能服务页 (SKILLS: 米家扫码 / 网易云扫码 / 飞书状态 / 手机技能页)
+            if self.current_mode == "SKILLS":
+                self._sync_skill_items()
+                sk_len = len(self.skill_items)
+                if button == "K1":
+                    self.cursor = (self.cursor - 1 + sk_len) % sk_len
+                    self._notify_listeners()
+                elif button == "K2":
+                    self.cursor = (self.cursor + 1) % sk_len
+                    self._notify_listeners()
+                elif button == "K3":
+                    action_id = self.skill_items[self.cursor]["id"]
+                    if action_id == "mijia":
+                        self.show_xiaomi_qr_on_screen()
+                    elif action_id == "netease":
+                        self.show_netease_qr_on_screen()
+                    else:
+                        self._sync_skill_items()
+                        self._notify_listeners()
+                elif button == "K4":
+                    self.current_mode = "MENU_MAIN"
+                    self.cursor = 3
+                    self._notify_listeners()
+                return
+
+            # 6. 处于系统设置页 (SYSTEM: 主题/面容/音色/音量/息屏/更新/关机/重启)
             if self.current_mode == "SYSTEM":
                 self._sync_system_items()
                 sys_len = len(self.system_items)
@@ -1030,8 +1185,6 @@ class MenuFSM:
                         self.trigger_face_id_enrollment()
                     elif action_id == "face_clear":
                         self.clear_master_face()
-                    elif action_id == "mijia":
-                        self.show_xiaomi_qr_on_screen()
                     elif action_id == "voice":
                         self.cycle_voice()
                     elif action_id == "volume":
@@ -1064,7 +1217,7 @@ class MenuFSM:
                         self._execute_power_action("shutdown")
                 elif button == "K4":
                     self.current_mode = "MENU_MAIN"
-                    self.cursor = 3
+                    self.cursor = 4
                     self._notify_listeners()
                 return
 
@@ -1222,6 +1375,7 @@ class MenuFSM:
                 for it in self.hardware_items if it.get("type") == "toggle"
             ],
             "system_items": self.system_items,
+            "skill_items": self.skill_items,
             "version": self.version_str,
             "update_status": self.update_status,
             "doctor": self.doctor_cache,
@@ -1231,7 +1385,12 @@ class MenuFSM:
                 "status": self.xiaomi_status_text,
                 "device_count": self.xiaomi_device_count
             },
+            "netease_qr": {
+                "active": (self.current_mode == "NETEASE_QR"),
+                "status": self.netease_status_text
+            },
             "settings_url": f"http://{ip}:8090/settings",
+            "skills_url": f"http://{ip}:8090/skills",
             "qr_base64": self.get_qr_base64(),
             "theme": getattr(self, "theme_key", "mint"),
             "is_mic_muted": self.is_mic_muted,
@@ -1282,9 +1441,9 @@ class MenuFSM:
             draw.text((26, 17), "控制中心", fill=on_surf, font=self.font_bold)
             draw.text((192, 21), "在线", fill=p_col, font=self.font_small)
 
-            y_start = 50
-            card_h = 50
-            card_gap = 10
+            y_start = 48
+            card_h = 46
+            card_gap = 7
             for idx, item in enumerate(self.main_menu_items):
                 is_selected = (idx == self.cursor)
                 card_y = y_start + idx * (card_h + card_gap)
@@ -1405,9 +1564,16 @@ class MenuFSM:
                 thumb_y = track_y1 + int((scroll_y / max_scroll) * (track_h - thumb_h))
                 draw.rounded_rectangle([232, thumb_y, 235, thumb_y + thumb_h], radius=1, fill=p_col)
 
-        # E. 系统设置界面 (SYSTEM: 连续视口平滑渲染，无生硬跳页)
-        elif self.current_mode == "SYSTEM":
-            total = len(self.system_items)
+        # E. 技能服务 & 系统设置统一滚动列表绘制
+        elif self.current_mode in ["SKILLS", "SYSTEM"]:
+            if self.current_mode == "SKILLS":
+                page_title = "技能服务"
+                list_items = self.skill_items
+            else:
+                page_title = "系统设置"
+                list_items = self.system_items
+
+            total = len(list_items)
             cur_idx = max(0, min(total - 1, self.cursor))
 
             card_w = 212
@@ -1416,18 +1582,18 @@ class MenuFSM:
             pitch = card_h + card_gap  # 58px
 
             viewport_h = 260
-            total_content_h = total * pitch - card_gap
+            total_content_h = max(0, total * pitch - card_gap)
             max_scroll = max(0, total_content_h - viewport_h + 8)
             scroll_y = max(0, min(max_scroll, (cur_idx - 1) * pitch))
 
             # 绘制落入视口 44 <= y <= 312 范围内的连续卡片
-            for idx, item in enumerate(self.system_items):
+            for idx, item in enumerate(list_items):
                 card_y = 48 + idx * pitch - scroll_y
                 if card_y + card_h >= 44 and card_y <= 312:
                     is_selected = (idx == cur_idx)
                     item_type = item.get("type", "")
-                    r_type = "badge" if item_type in ["cycle", "info"] else "chevron"
-                    r_val = str(item.get("val", "")) if item_type in ["cycle", "info"] else ""
+                    r_val = str(item.get("val", ""))
+                    r_type = "badge" if (item_type in ["cycle", "info"] or (r_val and item_type == "action")) else "chevron"
 
                     _draw_modern_tile(
                         draw, 12, card_y, card_w, card_h,
@@ -1439,7 +1605,7 @@ class MenuFSM:
             draw.rectangle([0, 0, 240, 44], fill=surf_col)
             draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
             draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), "系统设置", fill=on_surf, font=self.font_bold)
+            draw.text((26, 17), page_title, fill=on_surf, font=self.font_bold)
 
             # 底部遮罩
             draw.rectangle([0, 312, 240, 320], fill=surf_col)
@@ -1448,7 +1614,7 @@ class MenuFSM:
             if total > 4 and max_scroll > 0:
                 track_y1, track_y2 = 48, 302
                 track_h = track_y2 - track_y1
-                thumb_h = max(24, int((viewport_h / total_content_h) * track_h))
+                thumb_h = max(24, int((viewport_h / max(1, total_content_h)) * track_h))
                 thumb_y = track_y1 + int((scroll_y / max_scroll) * (track_h - thumb_h))
                 draw.rounded_rectangle([232, thumb_y, 235, thumb_y + thumb_h], radius=1, fill=p_col)
 
@@ -1478,30 +1644,34 @@ class MenuFSM:
             # 状态文案
             draw.text((28, 230), self.face_enroll_msg, fill=on_surf, font=self.font_bold)
 
-        # G. 米家生态授权弹窗 (XIAOMI_QR: 屏幕居中渲染米家二维码)
-        elif self.current_mode == "XIAOMI_QR":
+        # G. 技能服务二维码授权弹窗 (XIAOMI_QR / NETEASE_QR 共享居中白底卡渲染)
+        elif self.current_mode in ["XIAOMI_QR", "NETEASE_QR"]:
+            is_ncm = (self.current_mode == "NETEASE_QR")
+            header_title = "网易云登录" if is_ncm else "米家授权"
+            sub_headline = "打开网易云App 扫码登录" if is_ncm else "打开米家App 扫码授权"
+            st_line = self.netease_status_text if is_ncm else self.xiaomi_status_text
+            foot_tip = "绑定后畅听 VIP 与个人每日推荐" if is_ncm else "绑定后可直接语音控制台灯/水壶等"
+
             draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
             draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), "米家授权", fill=on_surf, font=self.font_bold)
+            draw.text((26, 17), header_title, fill=on_surf, font=self.font_bold)
             draw.text((188, 21), "BINDING", fill=on_surf_var, font=self.font_small)
 
-            # 居中纯白卡片放二维码
             draw.rounded_rectangle([42, 48, 198, 204], radius=16, fill=(255, 255, 255))
             try:
-                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
-                qr_bytes = qr_auth_manager.get_qr_png_bytes()
+                qr_bytes = self.get_qr_png_bytes()
                 if qr_bytes:
                     import io
                     qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
                     img.paste(qr_pil, (48, 54))
                 else:
-                    draw.text((56, 114), "获取米家码中...", fill=(0, 0, 0), font=self.font_small)
+                    draw.text((56, 114), "获取二维码中...", fill=(0, 0, 0), font=self.font_small)
             except Exception as e:
                 draw.text((50, 110), f"Error: {e}", fill=(0, 0, 0), font=self.font_small)
 
-            draw.text((24, 226), "打开米家App 扫码授权", fill=on_surf, font=self.font_bold)
-            draw.text((24, 248), self.xiaomi_status_text, fill=p_col if "成功" in self.xiaomi_status_text else (255, 180, 0), font=self.font_small)
-            draw.text((24, 270), "绑定后可直接语音控制台灯/水壶等", fill=on_surf_var, font=self.font_small)
+            draw.text((24, 226), sub_headline, fill=on_surf, font=self.font_bold)
+            draw.text((24, 248), st_line, fill=p_col if "成功" in st_line else (255, 180, 0), font=self.font_small)
+            draw.text((24, 270), foot_tip, fill=on_surf_var, font=self.font_small)
 
         # H. 彩蛋模式 (EASTER_EGG: 关于 PIG 的自述与介绍，全常规字体，无粗体，无底部翻页提示)
         elif self.current_mode == "EASTER_EGG":

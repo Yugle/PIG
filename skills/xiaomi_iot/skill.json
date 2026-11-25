@@ -25,5 +25,19 @@
   "default_behavior": {
     "emotion": "WINK",
     "action": "NOD"
+  },
+  "config_schema": {
+    "title": "小米米家智能生态",
+    "summary": "无需浏览器输密码，通过小猪 2.4 寸屏幕弹出米家官方二维码，手机扫码即可同步全部设备与局域网控制 Token。",
+    "config_section": "none",
+    "screen_menu": true,
+    "status_endpoint": "/api/xiaomi/qr_status",
+    "auth": {
+      "type": "screen_qr",
+      "label": "在小猪屏幕弹出米家二维码",
+      "start_endpoint": "/api/xiaomi/qr_start_screen",
+      "poll_endpoint": "/api/xiaomi/qr_status"
+    },
+    "fields": []
   }
 }

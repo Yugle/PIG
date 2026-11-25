@@ -25,5 +25,22 @@
   "default_behavior": {
     "emotion": "HAPPY",
     "action": "NOD"
+  },
+  "config_schema": {
+    "title": "网易云音乐账号与曲库",
+    "summary": "未登录默认走公网免登录模式可畅听免费歌曲与热歌榜；扫码绑定账号可解锁个人每日推荐与黑胶 VIP 完整曲库。",
+    "config_section": "none",
+    "screen_menu": true,
+    "status_endpoint": "/api/netease/status",
+    "auth": {
+      "type": "web_or_screen_qr",
+      "label": "生成网页扫码二维码",
+      "screen_label": "投屏到小猪屏幕扫码",
+      "start_endpoint": "/api/netease/qr_start",
+      "screen_start_endpoint": "/api/netease/qr_start_screen",
+      "poll_endpoint": "/api/netease/qr_status",
+      "logout_endpoint": "/api/netease/logout"
+    },
+    "fields": []
   }
 }

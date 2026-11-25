@@ -1064,6 +1064,7 @@
       <div style="background:rgba(0,0,0,0.4); padding:12px 20px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center;">
         <div style="font-size:0.72rem; color:var(--text-sub);" id="cfg-ip-hint">
           🌐 局域网管理地址: <span id="cfg-lan-ip" style="color:var(--cyan); font-weight:600;">http://localhost:8090</span>
+          · <a href="/skills" target="_blank" style="color:#bb86fc; text-decoration:none; font-weight:600;">🧩 独立技能配置页</a>
         </div>
         <div style="display:flex; gap:10px;">
           <button onclick="closeSystemSettingsModal()" style="background:transparent; border:1px solid var(--border-color); color:var(--text-sub); border-radius:8px; padding:6px 14px; font-size:0.82rem; cursor:pointer;">取消</button>
@@ -1700,10 +1701,11 @@
       update_status: "点击检查更新",
       qr_base64: "",
       main_menu_items: [
-        { id: "qr", num: "01", title: "无线与配网", desc: "AP热点配网 / 查IP / 手机设置" },
-        { id: "doctor", num: "02", title: "系统体检", desc: "网络延迟与外设实时排障" },
-        { id: "toggles", num: "03", title: "硬件控制", desc: "舵机归位 / 自检 / 麦克风 / 追踪" },
-        { id: "system", num: "04", title: "系统设置", desc: "面容 / 音量 / 音色 / 息屏 / 关机" }
+        { id: "qr", icon: "wifi", num: "01", title: "无线与配网", desc: "AP热点配网 / 查IP / 手机设置" },
+        { id: "doctor", icon: "doctor", num: "02", title: "系统体检", desc: "网络延迟与外设实时排障" },
+        { id: "toggles", icon: "hardware", num: "03", title: "硬件控制", desc: "舵机归位 / 自检 / 麦克风 / 追踪" },
+        { id: "skills", icon: "skills", num: "04", title: "技能服务", desc: "米家 / 网易云 / 飞书 / 技能配置" },
+        { id: "system", icon: "settings", num: "05", title: "系统设置", desc: "面容 / 音量 / 音色 / 息屏 / 关机" }
       ],
       hardware_items: [
         { id: "servo_center", name: "舵机居中归位", val: "ACTION (90°, 90°)", type: "action" },
@@ -1715,10 +1717,19 @@
         { id: "proactive", name: "主动关怀搭话", val: "ON (已开启)", type: "toggle", state: true },
         { id: "sfx", name: "萌宠情绪拟声", val: "ON (已开启)", type: "toggle", state: true }
       ],
+      skill_items: [
+        { id: "mijia", icon: "home", name: "米家扫码绑定", val: "待扫码", type: "info" },
+        { id: "netease", icon: "sfx", name: "网易云音乐绑定", val: "免登录", type: "info" },
+        { id: "feishu", icon: "chat", name: "飞书网关状态", val: "未配置", type: "info" },
+        { id: "skills_portal", icon: "skills", name: "手机配技能页", val: ":8090/skills", type: "info" }
+      ],
+      netease_qr: {
+        active: false,
+        status: "等待网易云App扫码..."
+      },
       system_items: [
         { id: "face_id", name: "录入主人面容", val: "SCAN 拍照绑定", type: "action" },
         { id: "face_clear", name: "重置主人面容", val: "RESET 清除面容", type: "action" },
-        { id: "mijia", name: "米家扫码绑定", val: "屏幕弹窗", type: "action" },
         { id: "voice", name: "发音音色切换", val: "冰糖", type: "cycle" },
         { id: "volume", name: "系统播报音量", val: "80%", type: "cycle" },
         { id: "timeout", name: "屏幕息屏时间", val: "15秒", type: "cycle" },
@@ -1860,32 +1871,42 @@
           }
           // 表情页面短按 K4 (返回): 直接触发手动唤醒 (后端 MenuFSM 自动执行 trigger_wake_manually)
         }
-      } else if (menuState.mode === "XIAOMI_QR") {
+      } else if (menuState.mode === "XIAOMI_QR" || menuState.mode === "NETEASE_QR") {
+        const isNcm = (menuState.mode === "NETEASE_QR");
         if (button === "K4") {
-          menuState.mode = "SYSTEM";
-          fetch("/api/xiaomi/qr_dismiss_screen", { method: "POST" }).catch(() => {});
+          menuState.mode = "SKILLS";
+          fetch(isNcm ? "/api/netease/qr_dismiss_screen" : "/api/xiaomi/qr_dismiss_screen", { method: "POST" }).catch(() => {});
         } else if (button === "K3") {
-          if (menuState.xiaomi_qr) menuState.xiaomi_qr.status = "正在向服务器刷新二维码...";
-          fetch("/api/xiaomi/qr_start_screen", { method: "POST" }).catch(() => {});
+          if (isNcm && menuState.netease_qr) menuState.netease_qr.status = "正在刷新网易云二维码...";
+          if (!isNcm && menuState.xiaomi_qr) menuState.xiaomi_qr.status = "正在向服务器刷新二维码...";
+          fetch(isNcm ? "/api/netease/qr_start_screen" : "/api/xiaomi/qr_start_screen", { method: "POST" }).catch(() => {});
           setTimeout(syncMenuState, 300);
         }
       } else if (menuState.mode === "MENU_MAIN") {
-        const mainLen = (menuState.main_menu_items && menuState.main_menu_items.length) || 4;
+        const mainItems = menuState.main_menu_items || [
+          { id: "qr" }, { id: "doctor" }, { id: "toggles" }, { id: "skills" }, { id: "system" }
+        ];
+        const mainLen = mainItems.length || 5;
         if (button === "K1") menuState.cursor = (menuState.cursor - 1 + mainLen) % mainLen;
         else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % mainLen;
         else if (button === "K4") menuState.mode = "FACE";
         else if (button === "K3") {
-          if (menuState.cursor === 0) {
+          const target = mainItems[menuState.cursor] || {};
+          if (target.id === "qr") {
             menuState.mode = "QR_CODE";
             preloadQrCode();
-          } else if (menuState.cursor === 1) {
+          } else if (target.id === "doctor") {
             menuState.mode = "DOCTOR";
             fetch("/api/system/doctor").then(r => r.json()).then(d => { menuState.doctor = d; }).catch(() => {});
-          } else if (menuState.cursor === 2) {
+          } else if (target.id === "toggles") {
             menuState.mode = "TOGGLES";
             menuState.cursor = 0;
             menuSmoothScroll.TOGGLES = 0;
-          } else if (menuState.cursor === 3) {
+          } else if (target.id === "skills") {
+            menuState.mode = "SKILLS";
+            menuState.cursor = 0;
+            menuSmoothScroll.SKILLS = 0;
+          } else if (target.id === "system") {
             menuState.mode = "SYSTEM";
             menuState.cursor = 0;
             menuSmoothScroll.SYSTEM = 0;
@@ -1930,12 +1951,28 @@
             item.val = (item.val === "九宫格灵动") ? "连续跟随" : "九宫格灵动";
           }
         }
+      } else if (menuState.mode === "SKILLS") {
+        const skItems = menuState.skill_items || [];
+        const skLen = skItems.length || 4;
+        if (button === "K1") menuState.cursor = (menuState.cursor - 1 + skLen) % skLen;
+        else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % skLen;
+        else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 3; }
+        else if (button === "K3") {
+          const cur = skItems[menuState.cursor] || {};
+          if (cur.id === "mijia") {
+            menuState.mode = "XIAOMI_QR";
+            fetch("/api/xiaomi/qr_start_screen", { method: "POST" }).catch(() => {});
+          } else if (cur.id === "netease") {
+            menuState.mode = "NETEASE_QR";
+            fetch("/api/netease/qr_start_screen", { method: "POST" }).catch(() => {});
+          }
+        }
       } else if (menuState.mode === "SYSTEM") {
         const sysItems = menuState.system_items || [];
         const sysLen = sysItems.length || 10;
         if (button === "K1") menuState.cursor = (menuState.cursor - 1 + sysLen) % sysLen;
         else if (button === "K2") menuState.cursor = (menuState.cursor + 1) % sysLen;
-        else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 3; }
+        else if (button === "K4") { menuState.mode = "MENU_MAIN"; menuState.cursor = 4; }
         else if (button === "K3") {
           const cur = sysItems[menuState.cursor] || {};
           if (cur.id === "theme") {
@@ -1949,9 +1986,6 @@
             menuState.mode = "FACE_ENROLL";
             menuState.face_enroll_msg = "请正对摄像头 (3s)";
             menuState.face_enroll_step = 3;
-          } else if (cur.id === "mijia") {
-            menuState.mode = "XIAOMI_QR";
-            fetch("/api/xiaomi/qr_start_screen", { method: "POST" }).catch(() => {});
           } else if (cur.id === "update") {
             cur.val = "检查更新中...";
             fetch("/api/system/update_check", { method: "POST" })
@@ -1987,7 +2021,7 @@
         } else if (button === "K4") {
           menuState.mode = "SYSTEM";
           menuState.easter_egg_scroll = 0;
-          menuState.cursor = 7;
+          menuState.cursor = 6;
         }
       }
 
@@ -2040,19 +2074,19 @@
         return;
       }
 
-      // 处于系统设置界面或硬件控制界面中时，支持鼠标点选卡片 (基于当前平滑滚动坐标精确判定)
-      if (menuState.mode === "SYSTEM" || menuState.mode === "TOGGLES") {
-        const isSys = (menuState.mode === "SYSTEM");
-        const items = isSys ? (menuState.system_items || []) : (menuState.hardware_items || []);
+      // 处于技能服务、系统设置或硬件控制界面中时，支持鼠标点选卡片 (基于当前平滑滚动坐标精确判定)
+      if (menuState.mode === "SKILLS" || menuState.mode === "SYSTEM" || menuState.mode === "TOGGLES") {
+        const mode = menuState.mode;
+        const items = mode === "SKILLS" ? (menuState.skill_items || []) : (mode === "SYSTEM" ? (menuState.system_items || []) : (menuState.hardware_items || []));
         const total = items.length;
-        const curScroll = (isSys ? menuSmoothScroll.SYSTEM : menuSmoothScroll.TOGGLES) || 0;
+        const curScroll = menuSmoothScroll[mode] || 0;
 
         for (let i = 0; i < total; i++) {
           const cardY = 48 + i * 58 - curScroll;
           if (cx >= 12 && cx <= 224 && cy >= cardY && cy <= cardY + 50 && cy >= 44 && cy <= 312) {
             menuState.cursor = i;
             const item = items[i];
-            if (isSys && item && item.id === "version") {
+            if (mode === "SYSTEM" && item && item.id === "version") {
               triggerEasterEggClick();
             } else {
               sendHwButton("K3");
@@ -2077,7 +2111,7 @@
         } else if (e.deltaY < 0) {
           sendHwButton("K1");
         }
-      } else if (menuState.mode === "SYSTEM" || menuState.mode === "TOGGLES") {
+      } else if (menuState.mode === "SKILLS" || menuState.mode === "SYSTEM" || menuState.mode === "TOGGLES") {
         e.preventDefault();
         lastWheelTime = now;
         if (e.deltaY > 0) {
@@ -2371,6 +2405,11 @@
       } else if (iconName === "trash") {
         ctx.beginPath(); ctx.moveTo(cx - 6, cy - 5); ctx.lineTo(cx + 6, cy - 5); ctx.moveTo(cx - 2, cy - 7); ctx.lineTo(cx + 2, cy - 7); ctx.stroke();
         roundRect(ctx, cx - 5, cy - 4, 10, 11, 1, false); ctx.stroke();
+      } else if (iconName === "skills") {
+        roundRect(ctx, cx - 7, cy - 7, 6, 6, 2, true);
+        roundRect(ctx, cx + 1, cy - 7, 6, 6, 2, true);
+        roundRect(ctx, cx - 7, cy + 1, 6, 6, 2, true);
+        roundRect(ctx, cx + 1, cy + 1, 6, 6, 2, false); ctx.stroke();
       } else {
         ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
       }
@@ -2470,12 +2509,13 @@
           { icon: "wifi", title: "无线与配网" },
           { icon: "doctor", title: "系统体检" },
           { icon: "hardware", title: "硬件控制" },
+          { icon: "skills", title: "技能服务" },
           { icon: "settings", title: "系统设置" }
         ];
 
-        const yStart = 50;
-        const cardH = 50;
-        const cardGap = 10;
+        const yStart = 48;
+        const cardH = 46;
+        const cardGap = 7;
         items.forEach((it, idx) => {
           const isSel = (idx === menuState.cursor);
           const cy = yStart + idx * (cardH + cardGap);
@@ -2543,13 +2583,14 @@
           ctx.fillText("手机扫码进入后台进行配网设置", 24, 272);
         }
 
-      } else if (menuState.mode === "XIAOMI_QR") {
+      } else if (menuState.mode === "XIAOMI_QR" || menuState.mode === "NETEASE_QR") {
+        const isNcm = (menuState.mode === "NETEASE_QR");
         ctx.strokeStyle = MD3.primary;
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
         ctx.fillStyle = MD3.onSurface;
         ctx.font = "bold 15px sans-serif";
-        ctx.fillText("米家授权", 26, 31);
+        ctx.fillText(isNcm ? "网易云登录" : "米家授权", 26, 31);
         ctx.fillStyle = MD3.onSurfaceVariant;
         ctx.font = "11px sans-serif";
         ctx.fillText("BINDING", 188, 30);
@@ -2578,14 +2619,16 @@
 
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 13px sans-serif";
-        ctx.fillText("打开米家App 扫码授权", 24, 228);
-        const xSt = (menuState.xiaomi_qr && menuState.xiaomi_qr.status) || "等待扫码中...";
-        ctx.fillStyle = xSt.includes("成功") ? MD3.primary : "#f59e0b";
+        ctx.fillText(isNcm ? "打开网易云App 扫码登录" : "打开米家App 扫码授权", 24, 228);
+        const qrSt = isNcm
+          ? ((menuState.netease_qr && menuState.netease_qr.status) || "等待扫码中...")
+          : ((menuState.xiaomi_qr && menuState.xiaomi_qr.status) || "等待扫码中...");
+        ctx.fillStyle = qrSt.includes("成功") ? MD3.primary : "#f59e0b";
         ctx.font = "11px monospace";
-        ctx.fillText(xSt, 24, 250);
+        ctx.fillText(qrSt, 24, 250);
         ctx.fillStyle = MD3.onSurfaceVariant;
         ctx.font = "11px sans-serif";
-        ctx.fillText("绑定后可直接语音控制米家台灯/插座", 24, 272);
+        ctx.fillText(isNcm ? "绑定后畅听 VIP 与个人每日推荐" : "绑定后可直接语音控制米家台灯/插座", 24, 272);
 
       } else if (menuState.mode === "DOCTOR") {
         ctx.strokeStyle = MD3.primary;
@@ -2700,22 +2743,29 @@
           roundRect(ctx, 232, thumbY, 3, thumbH, 1.5, true);
         }
 
-      } else if (menuState.mode === "SYSTEM") {
-        const sysItems = menuState.system_items || [
-          { id: "theme", icon: "theme", name: "系统主题风格", val: (THEMES_MD3[menuState.theme || "mint"] || THEMES_MD3.mint).name, type: "cycle" },
-          { id: "face_id", icon: "face", name: "录入主人面容", val: "", type: "action" },
-          { id: "face_clear", icon: "trash", name: "重置主人面容", val: "", type: "action" },
-          { id: "mijia", icon: "home", name: "米家扫码绑定", val: "", type: "action" },
-          { id: "voice", icon: "voice", name: "发音音色切换", val: "冰糖", type: "cycle" },
-          { id: "volume", icon: "volume", name: "系统播报音量", val: "80%", type: "cycle" },
-          { id: "timeout", icon: "clock", name: "屏幕息屏时间", val: "15秒", type: "cycle" },
-          { id: "version", icon: "chip", name: "系统固件版本", val: menuState.version || "v0.1.0", type: "info" },
-          { id: "update", icon: "cloud", name: "检查系统更新", val: menuState.update_status || "检查中", type: "action" },
-          { id: "restart", icon: "restart", name: "重启机器人服务", val: "", type: "action" },
-          { id: "shutdown", icon: "power", name: "树莓派安全关机", val: "", type: "action" }
-        ];
+      } else if (menuState.mode === "SKILLS" || menuState.mode === "SYSTEM") {
+        const isSkillsPage = (menuState.mode === "SKILLS");
+        const listItems = isSkillsPage
+          ? (menuState.skill_items || [
+              { id: "mijia", icon: "home", name: "米家扫码绑定", val: "待扫码", type: "info" },
+              { id: "netease", icon: "sfx", name: "网易云音乐绑定", val: "免登录", type: "info" },
+              { id: "feishu", icon: "chat", name: "飞书网关状态", val: "未配置", type: "info" },
+              { id: "skills_portal", icon: "skills", name: "手机配技能页", val: ":8090/skills", type: "info" }
+            ])
+          : (menuState.system_items || [
+              { id: "theme", icon: "theme", name: "系统主题风格", val: (THEMES_MD3[menuState.theme || "mint"] || THEMES_MD3.mint).name, type: "cycle" },
+              { id: "face_id", icon: "face", name: "录入主人面容", val: "", type: "action" },
+              { id: "face_clear", icon: "trash", name: "重置主人面容", val: "", type: "action" },
+              { id: "voice", icon: "voice", name: "发音音色切换", val: "冰糖", type: "cycle" },
+              { id: "volume", icon: "volume", name: "系统播报音量", val: "80%", type: "cycle" },
+              { id: "timeout", icon: "clock", name: "屏幕息屏时间", val: "15秒", type: "cycle" },
+              { id: "version", icon: "chip", name: "系统固件版本", val: menuState.version || "v0.1.0", type: "info" },
+              { id: "update", icon: "cloud", name: "检查系统更新", val: menuState.update_status || "检查中", type: "action" },
+              { id: "restart", icon: "restart", name: "重启机器人服务", val: "", type: "action" },
+              { id: "shutdown", icon: "power", name: "树莓派安全关机", val: "", type: "action" }
+            ]);
 
-        const total = sysItems.length;
+        const total = listItems.length;
         const curIdx = Math.max(0, Math.min(total - 1, menuState.cursor || 0));
 
         const cardH = 50;
@@ -2724,19 +2774,20 @@
         const pitch = cardH + cardGap; // 58px
 
         const viewportH = 264;
-        const totalContentH = total * pitch - cardGap;
+        const totalContentH = Math.max(0, total * pitch - cardGap);
         const maxScroll = Math.max(0, totalContentH - viewportH);
         const targetScroll = Math.max(0, Math.min(maxScroll, (curIdx - 1) * pitch));
 
         // 60 FPS 指数平滑阻尼插值 (Damped Lerp)
-        if (typeof menuSmoothScroll.SYSTEM !== "number") menuSmoothScroll.SYSTEM = targetScroll;
-        const scrollDiff = targetScroll - menuSmoothScroll.SYSTEM;
+        const scrollKey = menuState.mode;
+        if (typeof menuSmoothScroll[scrollKey] !== "number") menuSmoothScroll[scrollKey] = targetScroll;
+        const scrollDiff = targetScroll - menuSmoothScroll[scrollKey];
         if (Math.abs(scrollDiff) < 0.2) {
-          menuSmoothScroll.SYSTEM = targetScroll;
+          menuSmoothScroll[scrollKey] = targetScroll;
         } else {
-          menuSmoothScroll.SYSTEM += scrollDiff * 0.22;
+          menuSmoothScroll[scrollKey] += scrollDiff * 0.22;
         }
-        const scrollY = menuSmoothScroll.SYSTEM;
+        const scrollY = menuSmoothScroll[scrollKey];
 
         // 裁剪视口：44 <= y <= 312
         ctx.save();
@@ -2744,12 +2795,12 @@
         ctx.rect(0, 44, 240, 268);
         ctx.clip();
 
-        sysItems.forEach((it, idx) => {
+        listItems.forEach((it, idx) => {
           const cardY = 48 + idx * pitch - scrollY;
           if (cardY + cardH >= 40 && cardY <= 320) {
             const isSel = (idx === curIdx);
-            const rType = (it.type === "cycle" || it.type === "info") ? "badge" : "chevron";
-            const rVal = (it.type === "cycle" || it.type === "info") ? String(it.val) : "";
+            const rVal = it.val !== undefined ? String(it.val) : "";
+            const rType = (it.type === "cycle" || it.type === "info" || (rVal && it.type === "action")) ? "badge" : "chevron";
             drawCanvasModernTile(ctx, 12, cardY, cardW, cardH, it.icon || "settings", it.name, rType, rVal, isSel);
           }
         });
@@ -2763,7 +2814,7 @@
         ctx.beginPath(); ctx.moveTo(18, 22); ctx.lineTo(13, 27); ctx.lineTo(18, 32); ctx.stroke();
         ctx.fillStyle = MD3.onSurface;
         ctx.font = "bold 15px sans-serif";
-        ctx.fillText("系统设置", 26, 31);
+        ctx.fillText(isSkillsPage ? "技能服务" : "系统设置", 26, 31);
 
         // 底部微遮罩
         ctx.fillStyle = MD3.surface;
@@ -5964,6 +6015,9 @@
 
         let btnSection = "";
         if (currentSkillTab === "installed") {
+          const cfgBtn = item.has_config
+            ? `<button class="btn" style="border-color:#bb86fc; color:#bb86fc; font-size:0.75rem; padding:6px 12px;" onclick="openSkillConfigModal('${item.id}')">⚙️ 配置</button>`
+            : "";
           const uninstallBtn = item.can_uninstall
             ? `<button class="btn" style="border-color:#f85149; color:#f85149; font-size:0.75rem; padding:6px 12px;" onclick="uninstallSkill('${item.id}')">🗑️ 卸载</button>`
             : `<span style="font-size:0.68rem; color:#666; padding:6px 8px; border:1px solid #222; border-radius:6px;" title="系统基础运行必备技能">🔒 核心保护</span>`;
@@ -5971,6 +6025,7 @@
           btnSection = `
             <div style="display:flex; gap:8px; align-items:center;">
               <button class="btn" style="flex:1; border-color:var(--cyan); color:var(--cyan); font-size:0.75rem; padding:6px 0; font-weight:600;" onclick="testRunSkill('${item.id}')">▶️ 运行测试</button>
+              ${cfgBtn}
               ${uninstallBtn}
             </div>
           `;
@@ -6060,6 +6115,197 @@
       } catch (e) {
         alert("卸载技能异常: " + e);
       }
+    }
+
+    let activeSkillConfigMeta = null;
+    let skillCfgPollTimer = null;
+
+    async function openSkillConfigModal(skillId) {
+      const overlay = document.getElementById("skillConfigSubModal");
+      const titleEl = document.getElementById("skillCfgModalTitle");
+      const bodyEl = document.getElementById("skillCfgModalBody");
+      if (!overlay || !bodyEl) return;
+      overlay.style.display = "flex";
+      titleEl.innerText = `⚙️ 配置技能: ${skillId}`;
+      bodyEl.innerHTML = `<div style="text-align:center; color:var(--text-sub); padding:24px;">⏳ 正在读取技能配置元数据...</div>`;
+      try {
+        const res = await fetch("/api/skills/configs");
+        const data = await res.json();
+        const item = (data.skills || []).find(s => s.id === skillId);
+        if (!item) {
+          bodyEl.innerHTML = `<div style="color:#f59e0b; padding:12px;">该技能暂无可配置项。</div>`;
+          return;
+        }
+        activeSkillConfigMeta = item;
+        const schema = item.schema || {};
+        const values = item.values || {};
+        titleEl.innerText = `⚙️ ${schema.title || item.name}`;
+        let html = `<p style="font-size:0.78rem; color:var(--text-sub); margin-top:0; line-height:1.5;">${schema.summary || item.description || ""}</p>`;
+
+        if (schema.status_endpoint) {
+          html += `<div style="display:flex; justify-content:space-between; align-items:center; background:#161b22; border:1px solid var(--border-color); border-radius:8px; padding:8px 12px; margin-bottom:12px; font-size:0.78rem;">
+            <span style="color:var(--text-sub);">当前状态:</span>
+            <strong id="wb-skill-status-${item.id}" style="color:var(--cyan);">检测中...</strong>
+          </div>`;
+        }
+
+        const fields = Array.isArray(schema.fields) ? schema.fields : [];
+        fields.forEach(f => {
+          const val = values[f.key] !== undefined ? values[f.key] : (f.default || "");
+          const inpId = `wb-field-${item.id}-${f.key}`;
+          html += `<div style="margin-bottom:10px;">
+            <label style="display:block; font-size:0.76rem; color:var(--text-sub); margin-bottom:4px;">${f.label || f.key}</label>
+            <input type="${f.type === 'password' ? 'password' : 'text'}" id="${inpId}" value="${String(val).replace(/"/g, '&quot;')}" placeholder="${f.placeholder || ''}" style="width:100%; box-sizing:border-box; background:#0d1117; border:1px solid var(--border-color); border-radius:8px; padding:8px 10px; color:#fff; font-size:0.82rem; font-family:monospace;">
+          </div>`;
+        });
+        if (fields.length > 0) {
+          html += `<button class="btn" style="width:100%; margin-bottom:10px; background:var(--cyan); color:#051318; font-weight:700;" onclick="saveWorkbenchSkillConfig()">💾 保存配置并热生效</button>`;
+        }
+
+        if (schema.auth) {
+          const a = schema.auth;
+          if (a.type === "screen_qr") {
+            html += `<button class="btn" style="width:100%; background:#ff6700; color:#fff; border:none; font-weight:700;" onclick="wbTriggerScreenQr('${item.id}', '${a.start_endpoint}', '${a.poll_endpoint}')">${a.label || '投屏显示二维码'}</button>`;
+          } else if (a.type === "web_or_screen_qr") {
+            html += `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+              <button class="btn" style="flex:1; background:#e11d48; color:#fff; border:none; font-weight:700;" onclick="wbStartWebQr('${item.id}', '${a.start_endpoint}', '${a.poll_endpoint}')">${a.label || '生成扫码二维码'}</button>
+              <button class="btn" style="flex:1; border-color:var(--border-color); color:var(--text-main);" onclick="wbTriggerScreenQr('${item.id}', '${a.screen_start_endpoint}', '${a.poll_endpoint}')">${a.screen_label || '投屏扫码'}</button>
+              <button class="btn" id="wb-logout-${item.id}" style="display:none; border-color:#f85149; color:#f85149;" onclick="wbLogoutSkill('${item.id}', '${a.logout_endpoint}')">退出</button>
+            </div>`;
+          }
+          html += `<div id="wb-qrbox-${item.id}" style="display:none; text-align:center; background:#161b22; border:1px solid var(--border-color); border-radius:8px; padding:12px; margin-bottom:10px;">
+            <img id="wb-qrimg-${item.id}" style="display:none; width:150px; height:150px; background:#fff; border-radius:6px; margin:0 auto 8px;" />
+            <div id="wb-qrtip-${item.id}" style="font-size:0.76rem; color:#f59e0b;">等待扫码...</div>
+          </div>`;
+        }
+
+        const actions = Array.isArray(schema.actions) ? schema.actions : [];
+        if (actions.length > 0) {
+          html += `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">`;
+          actions.forEach((act, idx) => {
+            html += `<button class="btn" style="flex:1; font-size:0.75rem; border-color:var(--border-color); color:var(--text-main);" onclick="wbRunSkillAction(${idx})">${act.label}</button>`;
+          });
+          html += `</div>`;
+        }
+
+        bodyEl.innerHTML = html;
+        if (schema.status_endpoint) wbRefreshSkillStatus(item);
+      } catch (e) {
+        bodyEl.innerHTML = `<div style="color:#f85149;">加载失败: ${e}</div>`;
+      }
+    }
+
+    function closeSkillConfigModal() {
+      const overlay = document.getElementById("skillConfigSubModal");
+      if (overlay) overlay.style.display = "none";
+      if (skillCfgPollTimer) { clearInterval(skillCfgPollTimer); skillCfgPollTimer = null; }
+    }
+
+    async function wbRefreshSkillStatus(item) {
+      const el = document.getElementById(`wb-skill-status-${item.id}`);
+      if (!el || !item.schema || !item.schema.status_endpoint) return;
+      try {
+        const d = await fetch(item.schema.status_endpoint).then(r => r.json());
+        if (item.id === "xiaomi_iot") {
+          el.innerText = d.device_count > 0 ? `✅ 已绑定 (${d.device_count} 台)` : "⚪ 待扫码绑定";
+        } else if (item.id === "feishu_bot") {
+          el.innerText = d.ws_connected ? "🟢 长连在线" : (d.has_app ? "🟡 连接中" : "⚪ 未配置");
+        } else if (item.id === "netease_music") {
+          const outBtn = document.getElementById(`wb-logout-${item.id}`);
+          if (d.auth && d.auth.logged_in) {
+            el.innerText = `✅ 已登录 (${d.auth.nickname || "会员"})`;
+            if (outBtn) outBtn.style.display = "inline-block";
+          } else {
+            el.innerText = "公网免登录模式";
+            if (outBtn) outBtn.style.display = "none";
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function saveWorkbenchSkillConfig() {
+      if (!activeSkillConfigMeta) return;
+      const values = {};
+      (activeSkillConfigMeta.schema.fields || []).forEach(f => {
+        const el = document.getElementById(`wb-field-${activeSkillConfigMeta.id}-${f.key}`);
+        if (el) values[f.key] = el.value.trim();
+      });
+      const res = await fetch("/api/skills/configs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skill_id: activeSkillConfigMeta.id, values })
+      }).then(r => r.json());
+      if (res.status === "ok") {
+        showToast("技能配置已保存并热生效");
+        wbRefreshSkillStatus(activeSkillConfigMeta);
+      } else {
+        alert("保存失败: " + (res.message || "未知错误"));
+      }
+    }
+
+    async function wbTriggerScreenQr(skillId, startEp, pollEp) {
+      if (skillId === "xiaomi_iot") menuState.mode = "XIAOMI_QR";
+      if (skillId === "netease_music") menuState.mode = "NETEASE_QR";
+      const box = document.getElementById(`wb-qrbox-${skillId}`);
+      const img = document.getElementById(`wb-qrimg-${skillId}`);
+      const tip = document.getElementById(`wb-qrtip-${skillId}`);
+      if (img) img.style.display = "none";
+      if (box) box.style.display = "block";
+      if (tip) tip.innerText = "🟢 已在小猪面部屏幕弹出二维码，请扫码确认！";
+      await fetch(startEp, { method: "POST" }).catch(() => {});
+      if (skillCfgPollTimer) clearInterval(skillCfgPollTimer);
+      skillCfgPollTimer = setInterval(async () => {
+        const sr = await fetch(pollEp).then(r => r.json()).catch(() => null);
+        if (!sr) return;
+        if (sr.status === "success" || sr.code === 803 || sr.logged_in) {
+          clearInterval(skillCfgPollTimer);
+          tip.innerText = "🎉 扫码绑定成功！";
+          showToast("扫码绑定成功！");
+          if (activeSkillConfigMeta) wbRefreshSkillStatus(activeSkillConfigMeta);
+        }
+      }, 2000);
+    }
+
+    async function wbStartWebQr(skillId, startEp, pollEp) {
+      const box = document.getElementById(`wb-qrbox-${skillId}`);
+      const img = document.getElementById(`wb-qrimg-${skillId}`);
+      const tip = document.getElementById(`wb-qrtip-${skillId}`);
+      const d = await fetch(startEp, { method: "POST" }).then(r => r.json());
+      if (d.status !== "ok") { alert(d.message || "生成二维码失败"); return; }
+      if (box) box.style.display = "block";
+      if (img && d.qr_base64) { img.src = d.qr_base64; img.style.display = "block"; }
+      if (tip) tip.innerText = "请打开手机网易云音乐扫一扫";
+      if (skillCfgPollTimer) clearInterval(skillCfgPollTimer);
+      skillCfgPollTimer = setInterval(async () => {
+        const sr = await fetch(pollEp).then(r => r.json()).catch(() => null);
+        if (!sr) return;
+        if (sr.message && tip) tip.innerText = sr.message;
+        if (sr.code === 803 || sr.logged_in) {
+          clearInterval(skillCfgPollTimer);
+          if (box) box.style.display = "none";
+          showToast("账号绑定成功！");
+          if (activeSkillConfigMeta) wbRefreshSkillStatus(activeSkillConfigMeta);
+        }
+      }, 2000);
+    }
+
+    async function wbLogoutSkill(skillId, logoutEp) {
+      await fetch(logoutEp, { method: "POST" });
+      showToast("已退出账号");
+      if (activeSkillConfigMeta) wbRefreshSkillStatus(activeSkillConfigMeta);
+    }
+
+    async function wbRunSkillAction(idx) {
+      if (!activeSkillConfigMeta) return;
+      const act = (activeSkillConfigMeta.schema.actions || [])[idx];
+      if (!act) return;
+      showToast("正在执行...");
+      const opts = (act.method === "GET")
+        ? { method: "GET" }
+        : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(act.payload || {}) };
+      const d = await fetch(act.endpoint, opts).then(r => r.json());
+      if (d.status === "ok") showToast("执行成功！");
+      else alert("执行失败: " + (d.message || d.error || "请先保存配置"));
     }
 
     async function testRunSkill(id) {
@@ -6264,7 +6510,7 @@
             } else if (data.mode !== "EASTER_EGG" && menuState.mode === "EASTER_EGG") {
               menuState.mode = data.mode;
             }
-            if ((menuState.mode === "XIAOMI_QR" || menuState.mode === "QR_CODE") && menuState.qr_base64) {
+            if ((menuState.mode === "XIAOMI_QR" || menuState.mode === "NETEASE_QR" || menuState.mode === "QR_CODE") && menuState.qr_base64) {
               if (!qrCodeImg) {
                 qrCodeImg = new Image();
                 qrCodeImg.onload = () => { qrCodeLoaded = true; };
@@ -6351,7 +6597,10 @@
             支持查阅与运行测试机器人全部已安装技能、一键安装开源社区精选技能，或由大模型现场编程热装载为永久新本能！
           </p>
         </div>
-        <button onclick="closeSkillStoreModal()" class="btn" style="font-size:1.1rem; padding:4px 10px; cursor:pointer;">✕</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <a href="/skills" target="_blank" class="btn" style="font-size:0.78rem; padding:5px 12px; border-color:rgba(187,134,252,0.45); color:#bb86fc; background:rgba(187,134,252,0.1); text-decoration:none;">📱 手机独立技能页 (/skills)</a>
+          <button onclick="closeSkillStoreModal()" class="btn" style="font-size:1.1rem; padding:4px 10px; cursor:pointer;">✕</button>
+        </div>
       </div>
 
       <!-- 标签页切换栏 + 搜索框 -->
@@ -6434,6 +6683,16 @@
         </div>
       </div>
 
+    </div>
+  </div>
+  <!-- ⚙️ 技能参数与绑定配置子弹窗 -->
+  <div id="skillConfigSubModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.75); backdrop-filter:blur(6px); z-index:10050; justify-content:center; align-items:center;">
+    <div style="background:#0d1117; border:1px solid rgba(187,134,252,0.45); border-radius:14px; width:92%; max-width:520px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 16px 40px rgba(0,0,0,0.85);">
+      <div style="padding:14px 18px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; background:#161b22;">
+        <span id="skillCfgModalTitle" style="font-weight:700; color:#bb86fc; font-size:0.98rem;">⚙️ 技能配置</span>
+        <button onclick="closeSkillConfigModal()" class="btn" style="padding:3px 9px; font-size:0.95rem; cursor:pointer;">✕</button>
+      </div>
+      <div id="skillCfgModalBody" style="padding:18px; overflow-y:auto;"></div>
     </div>
   </div>
   <!-- 📷 多模态视觉抓拍原图查看 Lightbox 弹窗 -->

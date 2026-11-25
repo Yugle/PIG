@@ -17,5 +17,56 @@
       "type": "string",
       "description": "详细内容或文本描述"
     }
+  },
+  "config_schema": {
+    "title": "飞书机器人与远程通知",
+    "summary": "已接入飞书官方 WebSocket 双向长连接：免公网 IP 直连，支持多端会话隔离、异常实时卡片告警与远程看家抓拍。",
+    "config_section": "feishu",
+    "status_endpoint": "/api/feishu/status",
+    "fields": [
+      {
+        "key": "app_id",
+        "label": "App ID (企业自建应用 / 长连接必填)",
+        "type": "text",
+        "placeholder": "cli_a..."
+      },
+      {
+        "key": "app_secret",
+        "label": "App Secret",
+        "type": "password",
+        "placeholder": "App Secret"
+      },
+      {
+        "key": "webhook_url",
+        "label": "群自定义 Webhook (可选高级备用)",
+        "type": "text",
+        "placeholder": "https://open.feishu.cn/open-apis/bot/v2/hook/..."
+      }
+    ],
+    "actions": [
+      {
+        "label": "🔔 发送测试告警",
+        "endpoint": "/api/feishu/test_notify",
+        "payload": {
+          "type": "alert",
+          "title": "PIG 机器人测试告警",
+          "content": "这是一条来自技能配置中心的手动触发测试告警卡片。硬件与多通道服务一切正常！"
+        }
+      },
+      {
+        "label": "🌙 发送进化日记",
+        "endpoint": "/api/feishu/test_notify",
+        "payload": {
+          "type": "diary",
+          "title": "PIG 每日进化日记 (测试)",
+          "content": "今天主人跟我进行了多次互动。在听到主人叹气时，我自创了轻柔歪头陪伴动作；亲密度稳步成长！"
+        }
+      },
+      {
+        "label": "📷 测试远程抓拍",
+        "method": "GET",
+        "endpoint": "/api/feishu/test_snapshot"
+      }
+    ]
   }
 }

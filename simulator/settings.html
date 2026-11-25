@@ -327,6 +327,11 @@
     <div class="status-badge" id="onlineBadge">ONLINE</div>
   </header>
 
+  <nav style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; background:var(--surface); padding:4px; border-radius:12px; border:1px solid var(--border);">
+    <a href="/settings" style="text-align:center; text-decoration:none; padding:9px 10px; border-radius:9px; font-size:0.84rem; font-weight:600; background:rgba(0,229,255,0.14); color:var(--primary); border:1px solid rgba(0,229,255,0.35);">⚙️ 系统设置</a>
+    <a href="/skills" style="text-align:center; text-decoration:none; padding:9px 10px; border-radius:9px; font-size:0.84rem; font-weight:600; color:var(--text-muted);">🧩 技能与绑定</a>
+  </nav>
+
   <!-- 0. Wi-Fi 配网与网络管理 -->
   <section class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
@@ -355,21 +360,6 @@
     </div>
 
     <button class="btn" id="btnConnectWifi" onclick="connectWifi()">连接配网</button>
-  </section>
-
-  <!-- 1. 米家智能生态直连 (屏幕弹窗授权) -->
-  <section class="card">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-      <div class="card-title" style="margin-bottom:0;">01 / MI HOME ECOSYSTEM</div>
-      <span id="mijiaStatusBadge" style="font-size:0.72rem; padding:2px 8px; border-radius:4px; background:#181a1f; color:#f59e0b; border:1px solid #23252a;">未绑定</span>
-    </div>
-    <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">
-      无需在手机浏览器内授权。点击下方按钮后，小猪将在自身 2.4 寸屏幕上直接弹窗显示米家官方二维码，请用米家 App 扫码即可。
-    </p>
-    <button class="btn" style="background:#ff6700; color:#fff;" onclick="triggerMijiaScreenQr()">在小猪屏幕上显示绑定二维码</button>
-    <div id="xiaomiScreenTip" style="display:none; padding:10px; background:#17221b; border:1px solid #10b981; border-radius:8px; font-size:0.8rem; color:#10b981; margin-top:12px; line-height:1.4;">
-      🟢 已在小猪屏幕上弹出米家授权二维码！请使用手机【米家 App】右上角「扫一扫」直接对准小猪屏幕完成授权。
-    </div>
   </section>
 
   <!-- 1. API Token 与大模型配置 -->
@@ -498,74 +488,12 @@
     <button class="btn btn-secondary" style="margin-top:12px;" onclick="runDoctorCheck()">重新检测</button>
   </section>
 
-  <!-- 6. 飞书机器人与远程通知 (多 Session 隔离) -->
-  <section class="card">
-    <div class="card-title">06 / FEISHU BOT & REMOTE NOTIFICATIONS</div>
-    <p style="font-size:0.75rem; color:#888; margin-top:-6px; margin-bottom:12px; line-height:1.4;">
-      已接入飞书官方 WebSocket 双向长连接：免公网 IP 直连，支持多端会话隔离、异常实时卡片告警与自进化日记推送。
-    </p>
-
-    <div class="form-row">
-      <div class="form-group" style="flex:1;">
-        <label>App ID (企业自建应用 / 长连接必填)</label>
-        <input type="text" id="feishuAppIdInput" placeholder="cli_a..." style="font-size:0.8rem; font-family:monospace;">
-      </div>
-      <div class="form-group" style="flex:1;">
-        <label>App Secret</label>
-        <input type="password" id="feishuAppSecretInput" placeholder="App Secret" style="font-size:0.8rem; font-family:monospace;">
-      </div>
+  <div class="card" style="text-align:center; padding:14px;">
+    <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">
+      米家绑定、飞书机器人、网易云账号、城市天气等插件设置已解耦迁移至独立技能配置中心
     </div>
-
-    <!-- 可选折叠 Webhook (单向群提醒备用) -->
-    <details style="margin-top:4px; margin-bottom:12px; font-size:0.75rem; color:#777; background:#0d0e11; border:1px dashed #23252a; border-radius:6px; padding:8px 10px;">
-      <summary style="cursor:pointer; color:#999; font-weight:500;">⚙️ 高级备用: 飞书群自定义 Webhook (可选)</summary>
-      <div style="margin-top:8px;">
-        <input type="text" id="feishuWebhookInput" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." style="font-size:0.75rem; font-family:monospace;">
-        <span style="font-size:0.68rem; color:#666; display:block; margin-top:4px;">注：已配置 App ID/Secret 双向长连接时无需填写，通知将直接通过应用推送。</span>
-      </div>
-    </details>
-
-    <!-- 操作按钮组 (避免折行，主操作与测试操作分层) -->
-    <button class="btn" onclick="saveFeishuConfig()">💾 保存飞书配置</button>
-    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px; margin-top:8px;">
-      <button class="btn btn-secondary" style="white-space:nowrap; padding:10px 4px; font-size:0.75rem;" onclick="testFeishuAlert()">🔔 发送测试告警</button>
-      <button class="btn btn-secondary" style="white-space:nowrap; padding:10px 4px; font-size:0.75rem;" onclick="testFeishuDiary()">🌙 发送进化日记</button>
-      <button class="btn btn-secondary" style="white-space:nowrap; padding:10px 4px; font-size:0.75rem; border-color:#00e5ff; color:#00e5ff; background:rgba(0, 229, 255, 0.08);" onclick="testFeishuSnapshot()">📷 测试远程抓拍</button>
-    </div>
-
-    <!-- 状态监控仪表板 -->
-    <div style="margin-top:14px; padding:12px; background:#0d0e11; border:1px solid #1f2127; border-radius:8px; font-size:0.74rem;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <span style="color:#888;">长连接网关:</span>
-        <span id="feishuWsStatusDisplay" style="font-family:monospace; font-weight:600;">检测中...</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <span style="color:#888; white-space:nowrap;">推送绑定用户:</span>
-        <span id="feishuLastOpenIdDisplay" style="font-family:monospace; text-align:right;">检测中...</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="color:#888; white-space:nowrap; margin-right:8px;">活跃会话通道:</span>
-        <span id="activeSessionsDisplay" style="font-family:monospace; color:#10b981; font-weight:600; text-align:right; display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end;">device</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- 7. 网易云音乐账号与黑胶 VIP 绑定 -->
-  <section class="card">
-    <div class="card-title">07 / NETEASE CLOUD MUSIC</div>
-    <p style="font-size:0.75rem; color:#888; margin-top:-6px; margin-bottom:12px; line-height:1.4;">
-      扫码绑定网易云账号，即可完整播放个人歌单、每日推荐与 VIP 歌曲。未登录时默认播放公网可试听/完整音源。
-    </p>
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:0.8rem;">
-      <span>登录状态: <strong id="ncmStatusText" style="color:#888;">检测中...</strong></span>
-      <button class="btn btn-secondary" style="width:auto; padding:5px 12px; margin-top:0; font-size:0.75rem;" id="ncmLogoutBtn" onclick="logoutNetease()">退出账号</button>
-    </div>
-    <button class="btn" style="background:linear-gradient(135deg, #e11d48, #be123c);" onclick="startNeteaseQr()">📱 生成网易云扫码登录二维码</button>
-    <div id="ncmQrBox" style="display:none; text-align:center; margin-top:12px; padding:12px; background:#0d0e11; border:1px solid #262930; border-radius:8px;">
-      <img id="ncmQrImg" style="width:160px; height:160px; border-radius:6px; background:#fff;" />
-      <div id="ncmQrTip" style="font-size:0.76rem; color:#fbbf24; margin-top:8px;">请打开手机网易云音乐扫一扫</div>
-    </div>
-  </section>
+    <a href="/skills" class="btn btn-secondary" style="display:inline-block; width:auto; text-decoration:none; padding:8px 18px; color:var(--primary); border-color:rgba(0,229,255,0.35);">前往 🧩 技能与绑定中心 →</a>
+  </div>
 
   <div class="toast" id="toast">已保存</div>
 
@@ -614,13 +542,6 @@
           document.getElementById("diagIp").innerText = data.local_ip || location.hostname;
           document.getElementById("diagTemp").innerText = data.cpu_temp || "45°C";
           document.getElementById("diagMimo").innerText = data.mimo_status || "正常 (OK)";
-
-          if (data.feishu) {
-            if (data.feishu.webhook_url) document.getElementById("feishuWebhookInput").value = data.feishu.webhook_url;
-            if (data.feishu.app_id) document.getElementById("feishuAppIdInput").value = data.feishu.app_id;
-            if (data.feishu.app_secret) document.getElementById("feishuAppSecretInput").value = data.feishu.app_secret;
-          }
-          refreshFeishuStatus();
         }
       } catch (e) {
         console.error("加载配置失败:", e);
@@ -864,238 +785,8 @@
       } catch (e) {}
     }
 
-    let mijiaPollTimer = null;
-    async function triggerMijiaScreenQr() {
-      const tip = document.getElementById("xiaomiScreenTip");
-      tip.style.display = "block";
-      tip.innerHTML = "🟢 正在通知小猪在屏幕上弹出米家官方二维码... 请对准小猪屏幕扫码！";
-      
-      try {
-        const res = await fetch("/api/xiaomi/qr_start_screen", { method: "POST" });
-        if (res.ok) {
-          showToast("已在小猪屏幕显示米家二维码");
-          startPollingMijia();
-        }
-      } catch (e) {
-        tip.innerHTML = "❌ 唤起屏幕二维码失败: " + e;
-      }
-    }
-
-    function startPollingMijia() {
-      if (mijiaPollTimer) clearInterval(mijiaPollTimer);
-      mijiaPollTimer = setInterval(async () => {
-        try {
-          const res = await fetch("/api/xiaomi/qr_status");
-          if (res.ok) {
-            const data = await res.json();
-            const tip = document.getElementById("xiaomiScreenTip");
-            const badge = document.getElementById("mijiaStatusBadge");
-            if (data.status === "success") {
-              tip.innerHTML = `🎉 绑定成功！已为小猪自动同步 ${data.device_count || 0} 台米家设备。可直接语音控制台灯/水壶啦！`;
-              badge.innerText = `已绑定 (${data.device_count || 0}台)`;
-              badge.style.color = "#10b981";
-              clearInterval(mijiaPollTimer);
-              showToast("米家设备绑定成功！");
-            } else if (data.status === "expired") {
-              tip.innerHTML = "⚠️ 二维码已超时，请重新点击按钮唤起二维码。";
-              clearInterval(mijiaPollTimer);
-            }
-          }
-        } catch (e) {}
-      }, 2000);
-    }
-
-    async function refreshFeishuStatus() {
-      try {
-        const res = await fetch("/api/feishu/status");
-        if (res.ok) {
-          const d = await res.json();
-          const wsDisp = document.getElementById("feishuWsStatusDisplay");
-          if (wsDisp) {
-            if (d.ws_connected) {
-              wsDisp.innerHTML = "<span style='color:#10b981;'>🟢 已连接 (免公网IP/长连接监听中)</span>";
-            } else if (d.has_app) {
-              wsDisp.innerHTML = "<span style='color:#f59e0b;'>🟡 正在连接...</span>";
-            } else {
-              wsDisp.innerHTML = "<span style='color:#666;'>⚪ 未启动 (需 App ID 与 Secret)</span>";
-            }
-          }
-          const openIdDisp = document.getElementById("feishuLastOpenIdDisplay");
-          if (openIdDisp) {
-            if (d.last_open_id) {
-              const shortId = d.last_open_id.length > 20 ? d.last_open_id.slice(0, 9) + '...' + d.last_open_id.slice(-6) : d.last_open_id;
-              openIdDisp.innerHTML = `<span style="background:#064e3b; color:#34d399; padding:2px 7px; border-radius:4px; font-weight:500;" title="${d.last_open_id}">🟢 已绑定 (${shortId})</span>`;
-            } else {
-              openIdDisp.innerHTML = `<span style="color:#777;">⚪ 暂未绑定 (在飞书发句消息即可)</span>`;
-            }
-          }
-          const disp = document.getElementById("activeSessionsDisplay");
-          if (d.active_sessions && Object.keys(d.active_sessions).length > 0) {
-            const badges = Object.keys(d.active_sessions).map(k => {
-              if (k === "device") return "<span style='background:#1f2937; color:#10b981; padding:2px 6px; border-radius:4px;'>实体机</span>";
-              if (k.startsWith("feishu_oc_")) return `<span style='background:#1e1b4b; color:#a5b4fc; padding:2px 6px; border-radius:4px;' title='${k}'>飞书群聊</span>`;
-              if (k.startsWith("feishu_ou_")) return `<span style='background:#064e3b; color:#6ee7b7; padding:2px 6px; border-radius:4px;' title='${k}'>飞书私聊</span>`;
-              return `<span style='background:#1f2937; color:#9ca3af; padding:2px 6px; border-radius:4px;'>${k}</span>`;
-            });
-            disp.innerHTML = badges.join("");
-          } else {
-            disp.innerHTML = "<span style='background:#1f2937; color:#10b981; padding:2px 6px; border-radius:4px;'>实体机</span>";
-          }
-        }
-      } catch (e) {}
-    }
-
-    async function saveFeishuConfig() {
-      const webhook_url = document.getElementById("feishuWebhookInput").value.trim();
-      const app_id = document.getElementById("feishuAppIdInput").value.trim();
-      const app_secret = document.getElementById("feishuAppSecretInput").value.trim();
-      try {
-        const res = await fetch("/api/settings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            feishu: { webhook_url, app_id, app_secret }
-          })
-        });
-        if (res.ok) {
-          showToast("飞书配置已保存");
-          refreshFeishuStatus();
-        } else {
-          alert("保存失败");
-        }
-      } catch (e) {
-        alert("保存失败: " + e);
-      }
-    }
-
-    async function testFeishuAlert() {
-      try {
-        showToast("正在发送测试告警...");
-        const res = await fetch("/api/feishu/test_notify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "alert",
-            title: "PIG 机器人测试告警",
-            content: "这是一条来自小猪机器人管理后台的手动触发测试告警卡片。硬件与多通道服务一切正常！"
-          })
-        });
-        const d = await res.json();
-        if (d.status === "ok") {
-          showToast("飞书告警卡片已送达！");
-        } else {
-          alert("发送失败: " + (d.message || d.error || "请检查 Webhook 或私聊绑定配置"));
-        }
-      } catch (e) {
-        alert("请求失败: " + e);
-      }
-    }
-
-    async function testFeishuDiary() {
-      try {
-        showToast("正在发送进化日记...");
-        const res = await fetch("/api/feishu/test_notify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "diary",
-            title: "PIG 每日进化日记 (测试)",
-            content: "今天主人跟我进行了多次互动。在听到主人叹气时，我自创了轻柔歪头陪伴动作；亲密度稳步成长，五维共情度提升！"
-          })
-        });
-        const d = await res.json();
-        if (d.status === "ok") {
-          showToast("自进化日记卡片已送达！");
-        } else {
-          alert("发送失败: " + (d.message || d.error || "请检查 Webhook 或私聊绑定配置"));
-        }
-      } catch (e) {
-        alert("请求失败: " + e);
-      }
-    }
-
-    async function testFeishuSnapshot() {
-      try {
-        showToast("正在启动摄像头抓拍并推送到飞书...");
-        const res = await fetch("/api/feishu/test_snapshot");
-        const d = await res.json();
-        if (d.status === "ok") {
-          showToast("📷 现场安防抓拍卡片已送达飞书！");
-          if (d.report) {
-            alert(d.report);
-          }
-        } else {
-          alert("抓拍推送失败: " + (d.message || "请确认飞书配置或摄像头状态"));
-        }
-      } catch (e) {
-        alert("请求失败: " + e);
-      }
-    }
-
-    let ncmQrTimer = null;
-    async function refreshNeteaseStatus() {
-      try {
-        const res = await fetch("/api/netease/status");
-        if (!res.ok) return;
-        const d = await res.json();
-        const stEl = document.getElementById("ncmStatusText");
-        const outBtn = document.getElementById("ncmLogoutBtn");
-        if (d.auth && d.auth.logged_in) {
-          stEl.innerText = `✅ 已登录 (${d.auth.nickname || "会员"})`;
-          stEl.style.color = "#10b981";
-          if (outBtn) outBtn.style.display = "inline-block";
-        } else {
-          stEl.innerText = d.auth && d.auth.has_pyncm ? "未登录 (公网模式)" : "公网免登录模式 (未装 pyncm)";
-          stEl.style.color = "#fbbf24";
-          if (outBtn) outBtn.style.display = "none";
-        }
-      } catch (e) {}
-    }
-
-    async function startNeteaseQr() {
-      try {
-        const res = await fetch("/api/netease/qr_start", { method: "POST" });
-        const d = await res.json();
-        if (d.status !== "ok") {
-          alert(d.message || "生成二维码失败");
-          return;
-        }
-        const box = document.getElementById("ncmQrBox");
-        const img = document.getElementById("ncmQrImg");
-        const tip = document.getElementById("ncmQrTip");
-        box.style.display = "block";
-        if (d.qr_base64) img.src = d.qr_base64;
-        tip.innerText = "请打开手机网易云音乐 App 扫一扫确认登录";
-        if (ncmQrTimer) clearInterval(ncmQrTimer);
-        ncmQrTimer = setInterval(async () => {
-          const sr = await fetch("/api/netease/qr_status").then(r => r.json()).catch(() => null);
-          if (!sr) return;
-          if (sr.message) tip.innerText = sr.message;
-          if (sr.code === 803 || sr.logged_in) {
-            clearInterval(ncmQrTimer);
-            box.style.display = "none";
-            refreshNeteaseStatus();
-            showToast("网易云账号绑定成功！");
-          } else if (sr.code === 800) {
-            clearInterval(ncmQrTimer);
-          }
-        }, 2000);
-      } catch (e) {
-        alert("二维码请求异常: " + e);
-      }
-    }
-
-    async function logoutNetease() {
-      await fetch("/api/netease/logout", { method: "POST" });
-      refreshNeteaseStatus();
-      showToast("已退出网易云账号");
-    }
-
     loadSettings();
     refreshWifiStatus();
-    refreshFeishuStatus();
-    refreshNeteaseStatus();
-    setInterval(refreshFeishuStatus, 3000);
   </script>
 </body>
 </html>

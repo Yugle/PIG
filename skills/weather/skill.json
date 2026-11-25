@@ -15,5 +15,19 @@
   "default_behavior": {
     "emotion": "THINKING",
     "action": "LOOK_UP"
+  },
+  "config_schema": {
+    "title": "实时天气默认城市",
+    "summary": "默认根据网络 IP 自动定位城市；如果网关定位不准，可在此固定默认播报城市。",
+    "config_section": "root",
+    "fields": [
+      {
+        "key": "city",
+        "label": "默认城市（填 auto 为自动定位）",
+        "type": "text",
+        "placeholder": "auto / 上海 / 北京 / 杭州",
+        "default": "auto"
+      }
+    ]
   }
 }

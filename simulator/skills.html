@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>PIG · 技能服务与绑定中心</title>
+  <style>
+    :root {
+      --bg: #0f1014;
+      --surface: #181a20;
+      --surface-alt: #22252d;
+      --border: #2a2d37;
+      --primary: #00e5ff;
+      --primary-hover: #00b8d4;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --success: #10b981;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 16px;
+      padding-bottom: 60px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 4px 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 14px;
+      gap: 10px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-avatar {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, #00e5ff, #6366f1);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; color: #0a0b0d; font-size: 1.05rem;
+      box-shadow: 0 4px 12px rgba(0, 229, 255, 0.22);
+    }
+    .brand-title { font-weight: 700; font-size: 1rem; letter-spacing: 0.4px; }
+    .brand-sub { font-size: 0.7rem; color: var(--text-muted); font-family: monospace; }
+    .nav-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 18px;
+      background: var(--surface);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .nav-tab {
+      text-align: center;
+      text-decoration: none;
+      padding: 9px 10px;
+      border-radius: 9px;
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: all 0.2s;
+    }
+    .nav-tab.active {
+      background: linear-gradient(135deg, rgba(0, 229, 255, 0.16), rgba(99, 102, 241, 0.16));
+      color: var(--primary);
+      border: 1px solid rgba(0, 229, 255, 0.35);
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+    }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .card-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .card-meta {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-family: monospace;
+      margin-top: 2px;
+    }
+    .badge {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: #13151a;
+      border: 1px solid var(--border);
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    .summary {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+    .form-group { margin-bottom: 12px; }
+    .form-group label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .password-wrap { position: relative; }
+    input[type="text"], input[type="password"], input[type="number"], select {
+      width: 100%;
+      background: #0d0e11;
+      border: 1px solid #2b2e38;
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--text-main);
+      font-size: 0.85rem;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--primary); }
+    .toggle-pwd {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--primary); font-size: 0.72rem;
+      font-weight: 600; cursor: pointer;
+    }
+    .btn {
+      width: 100%;
+      padding: 11px 14px;
+      border-radius: 10px;
+      border: none;
+      background: var(--primary);
+      color: #051318;
+      font-weight: 700;
+      font-size: 0.86rem;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      margin-top: 4px;
+    }
+    .btn:active { opacity: 0.85; }
+    .btn-secondary {
+      background: var(--surface-alt);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+    }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .btn-row .btn {
+      flex: 1;
+      min-width: 110px;
+      font-size: 0.78rem;
+      padding: 9px 8px;
+    }
+    .qr-box {
+      display: none;
+      text-align: center;
+      margin-top: 12px;
+      padding: 12px;
+      background: #0d0e11;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .qr-box img {
+      width: 164px; height: 164px;
+      border-radius: 8px;
+      background: #fff;
+      padding: 4px;
+    }
+    .qr-tip {
+      font-size: 0.76rem;
+      color: var(--warn);
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: rgba(16, 185, 129, 0.95); color: #052e16; font-weight: 700;
+      padding: 10px 20px; border-radius: 999px; font-size: 0.84rem;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 999;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="brand">
+      <div class="brand-avatar">🧩</div>
+      <div>
+        <div class="brand-title">PIG SKILLS</div>
+        <div class="brand-sub">PLUGIN CONFIG PORTAL</div>
+      </div>
+    </div>
+    <a href="/" style="font-size:0.74rem; color:var(--primary); text-decoration:none; border:1px solid rgba(0,229,255,0.3); padding:4px 10px; border-radius:999px;">3D 工作台</a>
+  </header>
+
+  <nav class="nav-tabs">
+    <a class="nav-tab" href="/settings">⚙️ 系统设置</a>
+    <a class="nav-tab active" href="/skills">🧩 技能与绑定</a>
+  </nav>
+
+  <div id="skillsContainer">
+    <div class="card" style="text-align:center; color:var(--text-muted); font-size:0.84rem;">
+      ⏳ 正在从已安装技能元数据加载配置项...
+    </div>
+  </div>
+
+  <div class="toast" id="toast">已保存</div>
+
+  <script>
+    const pollTimers = {};
+
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.innerText = msg;
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 2000);
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function toggleSecret(inputId, btn) {
+      const inp = document.getElementById(inputId);
+      if (!inp) return;
+      inp.type = inp.type === "password" ? "text" : "password";
+      btn.innerText = inp.type === "password" ? "SHOW" : "HIDE";
+    }
+
+    async function loadSkillConfigs() {
+      const container = document.getElementById("skillsContainer");
+      try {
+        const res = await fetch("/api/skills/configs");
+        const data = await res.json();
+        const skills = data.skills || [];
+        if (skills.length === 0) {
+          container.innerHTML = `<div class="card" style="text-align:center; color:var(--text-muted);">当前已安装技能无需额外配置。</div>`;
+          return;
+        }
+        container.innerHTML = "";
+        skills.forEach(item => {
+          container.appendChild(renderSkillCard(item));
+          if (item.schema && item.schema.status_endpoint) {
+            refreshSkillStatus(item);
+          }
+        });
+      } catch (e) {
+        container.innerHTML = `<div class="card" style="color:var(--danger);">加载技能配置失败: ${escapeHtml(e)}</div>`;
+      }
+    }
+
+    function renderSkillCard(item) {
+      const schema = item.schema || {};
+      const values = item.values || {};
+      const card = document.createElement("section");
+      card.className = "card";
+      card.id = `skill-card-${item.id}`;
+
+      const hasStatus = Boolean(schema.status_endpoint);
+      let html = `
+        <div class="card-head">
+          <div>
+            <div class="card-title">${escapeHtml(schema.title || item.name)}</div>
+            <div class="card-meta">${escapeHtml(item.category || "技能")} · ${escapeHtml(item.id)}</div>
+          </div>
+          ${hasStatus ? `<span class="badge" id="badge-${item.id}" style="color:var(--text-muted);">检测中...</span>` : ""}
+        </div>
+        <p class="summary">${escapeHtml(schema.summary || item.description || "")}</p>
+      `;
+
+      const fields = Array.isArray(schema.fields) ? schema.fields : [];
+      if (fields.length > 0) {
+        fields.forEach(f => {
+          const inpId = `field-${item.id}-${f.key}`;
+          const val = values[f.key] !== undefined ? values[f.key] : (f.default || "");
+          html += `<div class="form-group"><label>${escapeHtml(f.label || f.key)}</label>`;
+          if (f.type === "password") {
+            html += `
+              <div class="password-wrap">
+                <input type="password" id="${inpId}" value="${escapeHtml(val)}" placeholder="${escapeHtml(f.placeholder || "")}" />
+                <button class="toggle-pwd" type="button" onclick="toggleSecret('${inpId}', this)">SHOW</button>
+              </div>`;
+          } else {
+            html += `<input type="text" id="${inpId}" value="${escapeHtml(val)}" placeholder="${escapeHtml(f.placeholder || "")}" />`;
+          }
+          html += `</div>`;
+        });
+        html += `<button class="btn" onclick="saveSkillFields('${item.id}')">💾 保存 ${escapeHtml(schema.title || item.name)} 配置</button>`;
+      }
+
+      if (schema.auth) {
+        const a = schema.auth;
+        if (a.type === "screen_qr") {
+          html += `
+            <button class="btn" style="background:linear-gradient(135deg, #ff6700, #ea580c); color:#fff;" onclick="triggerScreenQr('${item.id}', '${a.start_endpoint}', '${a.poll_endpoint}')">${escapeHtml(a.label || "在小猪屏幕显示二维码")}</button>
+            <div class="qr-box" id="qrbox-${item.id}" style="text-align:left;">
+              <div class="qr-tip" id="qrtip-${item.id}" style="margin-top:0;">等待操作...</div>
+            </div>
+          `;
+        } else if (a.type === "web_or_screen_qr") {
+          html += `
+            <div class="btn-row">
+              <button class="btn" style="background:linear-gradient(135deg, #e11d48, #be123c); color:#fff;" onclick="startWebQr('${item.id}', '${a.start_endpoint}', '${a.poll_endpoint}', '${schema.status_endpoint || ""}')">${escapeHtml(a.label || "生成扫码二维码")}</button>
+              <button class="btn btn-secondary" onclick="triggerScreenQr('${item.id}', '${a.screen_start_endpoint}', '${a.poll_endpoint}')">${escapeHtml(a.screen_label || "投屏到小猪扫码")}</button>
+              <button class="btn btn-secondary" id="logout-${item.id}" style="display:none; flex:0 0 auto; min-width:auto; padding:9px 14px;" onclick="logoutAuth('${item.id}', '${a.logout_endpoint}', '${schema.status_endpoint || ""}')">退出登录</button>
+            </div>
+            <div class="qr-box" id="qrbox-${item.id}">
+              <img id="qrimg-${item.id}" style="display:none;" />
+              <div class="qr-tip" id="qrtip-${item.id}">请用对应手机 App 扫一扫确认</div>
+            </div>
+          `;
+        }
+      }
+
+      const actions = Array.isArray(schema.actions) ? schema.actions : [];
+      if (actions.length > 0) {
+        html += `<div class="btn-row">`;
+        actions.forEach((act, idx) => {
+          html += `<button class="btn btn-secondary" onclick="runSkillAction('${item.id}', ${idx})">${escapeHtml(act.label)}</button>`;
+        });
+        html += `</div>`;
+      }
+
+      html += `<div id="extra-status-${item.id}" style="margin-top:10px; font-size:0.75rem; color:var(--text-muted);"></div>`;
+      card.innerHTML = html;
+      card._skillMeta = item;
+      return card;
+    }
+
+    async function saveSkillFields(skillId) {
+      const card = document.getElementById(`skill-card-${skillId}`);
+      const item = card && card._skillMeta;
+      if (!item) return;
+      const values = {};
+      (item.schema.fields || []).forEach(f => {
+        const el = document.getElementById(`field-${skillId}-${f.key}`);
+        if (el) values[f.key] = el.value.trim();
+      });
+      try {
+        const res = await fetch("/api/skills/configs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ skill_id: skillId, values })
+        });
+        const d = await res.json();
+        if (d.status === "ok") {
+          showToast("配置已保存并热生效");
+          if (item.schema.status_endpoint) refreshSkillStatus(item);
+        } else {
+          alert("保存失败: " + (d.message || "未知错误"));
+        }
+      } catch (e) {
+        alert("请求异常: " + e);
+      }
+    }
+
+    async function refreshSkillStatus(item) {
+      const badge = document.getElementById(`badge-${item.id}`);
+      const extra = document.getElementById(`extra-status-${item.id}`);
+      try {
+        const res = await fetch(item.schema.status_endpoint);
+        if (!res.ok) return;
+        const d = await res.json();
+        if (item.id === "xiaomi_iot") {
+          const cnt = d.device_count || 0;
+          if (cnt > 0 || d.status === "success") {
+            badge.innerText = `已绑定 (${cnt} 台)`;
+            badge.style.color = "var(--success)";
+          } else {
+            badge.innerText = "待扫码绑定";
+            badge.style.color = "var(--warn)";
+          }
+        } else if (item.id === "feishu_bot") {
+          if (d.ws_connected) {
+            badge.innerText = "🟢 长连在线";
+            badge.style.color = "var(--success)";
+          } else if (d.has_app || d.has_webhook) {
+            badge.innerText = "🟡 已配置/连接中";
+            badge.style.color = "var(--warn)";
+          } else {
+            badge.innerText = "⚪ 未配置";
+            badge.style.color = "var(--text-muted)";
+          }
+          if (extra) {
+            const bindInfo = d.last_open_id ? `绑定接收人: ${escapeHtml(d.last_open_id)}` : "暂未绑定接收人（在飞书给机器人发条消息即可自动记住）";
+            extra.innerText = bindInfo;
+          }
+        } else if (item.id === "netease_music") {
+          const outBtn = document.getElementById(`logout-${item.id}`);
+          if (d.auth && d.auth.logged_in) {
+            badge.innerText = `✅ ${d.auth.nickname || "已登录"}`;
+            badge.style.color = "var(--success)";
+            if (outBtn) outBtn.style.display = "inline-block";
+          } else {
+            badge.innerText = "公网免登录模式";
+            badge.style.color = "var(--warn)";
+            if (outBtn) outBtn.style.display = "none";
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function triggerScreenQr(skillId, startEp, pollEp) {
+      const box = document.getElementById(`qrbox-${skillId}`);
+      const img = document.getElementById(`qrimg-${skillId}`);
+      const tip = document.getElementById(`qrtip-${skillId}`);
+      if (img) img.style.display = "none";
+      if (box) box.style.display = "block";
+      if (tip) tip.innerText = "🟢 已在小猪 2.4 寸屏幕上弹出二维码，请使用手机 App 扫码确认！";
+      try {
+        await fetch(startEp, { method: "POST" });
+        showToast("已投屏到小猪屏幕");
+        if (pollTimers[skillId]) clearInterval(pollTimers[skillId]);
+        pollTimers[skillId] = setInterval(async () => {
+          const sr = await fetch(pollEp).then(r => r.json()).catch(() => null);
+          if (!sr) return;
+          if (sr.status === "success" || sr.code === 803 || sr.logged_in) {
+            clearInterval(pollTimers[skillId]);
+            tip.innerText = "🎉 扫码绑定成功！";
+            showToast("扫码绑定成功！");
+            loadSkillConfigs();
+          } else if (sr.status === "expired" || sr.code === 800) {
+            clearInterval(pollTimers[skillId]);
+            tip.innerText = "⚠️ 二维码已过期，请重新点击生成。";
+          }
+        }, 2000);
+      } catch (e) {
+        if (tip) tip.innerText = "❌ 唤醒屏幕二维码失败: " + e;
+      }
+    }
+
+    async function startWebQr(skillId, startEp, pollEp, statusEp) {
+      const box = document.getElementById(`qrbox-${skillId}`);
+      const img = document.getElementById(`qrimg-${skillId}`);
+      const tip = document.getElementById(`qrtip-${skillId}`);
+      try {
+        const d = await fetch(startEp, { method: "POST" }).then(r => r.json());
+        if (d.status !== "ok") {
+          alert(d.message || "生成二维码失败");
+          return;
+        }
+        box.style.display = "block";
+        if (img && d.qr_base64) {
+          img.src = d.qr_base64;
+          img.style.display = "inline-block";
+        }
+        tip.innerText = "请打开手机网易云音乐 App「扫一扫」确认登录";
+        if (pollTimers[skillId]) clearInterval(pollTimers[skillId]);
+        pollTimers[skillId] = setInterval(async () => {
+          const sr = await fetch(pollEp).then(r => r.json()).catch(() => null);
+          if (!sr) return;
+          if (sr.message) tip.innerText = sr.message;
+          if (sr.code === 803 || sr.logged_in) {
+            clearInterval(pollTimers[skillId]);
+            box.style.display = "none";
+            showToast("账号绑定成功！");
+            loadSkillConfigs();
+          } else if (sr.code === 800) {
+            clearInterval(pollTimers[skillId]);
+          }
+        }, 2000);
+      } catch (e) {
+        alert("二维码请求失败: " + e);
+      }
+    }
+
+    async function logoutAuth(skillId, logoutEp) {
+      await fetch(logoutEp, { method: "POST" });
+      showToast("已退出账号");
+      loadSkillConfigs();
+    }
+
+    async function runSkillAction(skillId, actionIdx) {
+      const card = document.getElementById(`skill-card-${skillId}`);
+      const item = card && card._skillMeta;
+      const act = item && item.schema.actions && item.schema.actions[actionIdx];
+      if (!act) return;
+      try {
+        showToast("正在执行...");
+        const opts = (act.method === "GET")
+          ? { method: "GET" }
+          : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(act.payload || {}) };
+        const d = await fetch(act.endpoint, opts).then(r => r.json());
+        if (d.status === "ok") {
+          showToast("操作执行成功！");
+        } else {
+          alert("执行失败: " + (d.message || d.error || "请检查技能配置是否已保存"));
+        }
+      } catch (e) {
+        alert("请求失败: " + e);
+      }
+    }
+
+    loadSkillConfigs();
+  </script>
+</body>
+</html>

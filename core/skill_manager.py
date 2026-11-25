@@ -254,8 +254,47 @@ class SkillManager:
                 m["skill_type"] = "builtin" if is_builtin else ("self_evolved" if is_self_evolved else "community")
                 m["type_label"] = "官方内置本能" if is_builtin else ("✨ AI自创本能" if is_self_evolved else "🌐 社区扩展")
                 m["can_uninstall"] = not is_builtin
+                m["has_config"] = bool(isinstance(m.get("config_schema"), dict))
                 res.append(m)
             return res
+
+    def list_configurable_skills(self, cur_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """返回所有声明了 config_schema 的已安装技能及当前生效配置值"""
+        items: List[Dict[str, Any]] = []
+        skills_cfg = cur_cfg.get("skills_config") if isinstance(cur_cfg.get("skills_config"), dict) else {}
+        with self.lock:
+            plugins_snapshot = list(self.installed_plugins.items())
+        for sid, obj in plugins_snapshot:
+            meta = dict(obj.get("meta", {}))
+            schema = meta.get("config_schema")
+            if not isinstance(schema, dict):
+                continue
+            section = schema.get("config_section") or f"skills_config.{sid}"
+            if section == "root":
+                sec_data = cur_cfg
+            elif section.startswith("skills_config."):
+                sub_key = section.split(".", 1)[1]
+                sec_data = skills_cfg.get(sub_key, {}) if isinstance(skills_cfg.get(sub_key), dict) else {}
+            elif section == "none":
+                sec_data = {}
+            else:
+                sec_data = cur_cfg.get(section, {}) if isinstance(cur_cfg.get(section), dict) else {}
+
+            values: Dict[str, Any] = {}
+            for field in schema.get("fields", []):
+                fk = field.get("key")
+                if fk:
+                    values[fk] = sec_data.get(fk, field.get("default", ""))
+
+            items.append({
+                "id": sid,
+                "name": meta.get("name", sid),
+                "category": meta.get("category", "综合"),
+                "description": meta.get("description", ""),
+                "schema": schema,
+                "values": values,
+            })
+        return items
 
     def install_skill(self, skill_id: str, auto_load: bool = True) -> bool:
         """从线上社区市场或远程下载安装一个指定技能"""
