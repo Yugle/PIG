@@ -2054,12 +2054,14 @@
           const curV = menuState.volume || 80;
           const newV = Math.min(100, curV + 10);
           menuState.volume = newV;
-          showToast(`🔊 播报音量: ${newV}%`);
+          simVolumeToastVal = newV;
+          simVolumeToastUntil = Date.now() + 2000;
         } else if (button === "K2") {
           const curV = menuState.volume || 80;
           const newV = Math.max(0, curV - 10);
           menuState.volume = newV;
-          showToast(newV === 0 ? "🔇 已静音" : `🔊 播报音量: ${newV}%`);
+          simVolumeToastVal = newV;
+          simVolumeToastUntil = Date.now() + 2000;
         } else if (button === "K3") {
           // 点击确认 -> 进入主菜单 (绝不触发快照发问答)
           menuState.mode = "MENU_MAIN";
@@ -2727,6 +2729,56 @@
       ctx.restore();
     }
 
+    let simVolumeToastUntil = 0;
+    let simVolumeToastVal = 80;
+
+    function drawSimVolumeToast(ctx, vol) {
+      vol = Math.max(0, Math.min(100, parseInt(vol) || 0));
+      const cardW = 154, cardH = 22;
+      const x1 = Math.floor((240 - cardW) / 2);
+      const y1 = 16;
+      const x2 = x1 + cardW, y2 = y1 + cardH;
+
+      ctx.save();
+      ctx.fillStyle = "rgba(18, 22, 28, 0.95)";
+      ctx.strokeStyle = "rgba(52, 64, 76, 0.9)";
+      ctx.lineWidth = 1;
+      roundRect(ctx, x1, y1, cardW, cardH, 11, true);
+      ctx.stroke();
+
+      const pCol = (typeof MD3 !== "undefined" && MD3.primary) ? MD3.primary : "#00E5FF";
+      const iconCol = (vol === 0) ? "#ef4444" : pCol;
+
+      // 左侧矢量小喇叭
+      const cx = x1 + 15, cy = y1 + 11;
+      ctx.fillStyle = iconCol;
+      ctx.strokeStyle = iconCol;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - 6, cy - 3); ctx.lineTo(cx - 3, cy - 3); ctx.lineTo(cx + 1, cy - 6);
+      ctx.lineTo(cx + 1, cy + 6); ctx.lineTo(cx - 3, cy + 3); ctx.lineTo(cx - 6, cy + 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + 1, cy, 5, -Math.PI * 0.35, Math.PI * 0.35);
+      ctx.stroke();
+
+      // 右侧纯净音量条 (高 6px，圆角 3px，纯无文字)
+      const bx1 = x1 + 30, bx2 = x2 - 12;
+      const by1 = y1 + 8, by2 = y1 + 14;
+      const barW = bx2 - bx1, barH = 6;
+
+      ctx.fillStyle = "rgba(36, 44, 54, 0.95)";
+      roundRect(ctx, bx1, by1, barW, barH, 3, true);
+
+      const fillW = Math.floor(barW * (vol / 100.0));
+      if (fillW > 0) {
+        ctx.fillStyle = (vol === 0) ? "#ef4444" : pCol;
+        roundRect(ctx, bx1, by1, fillW, barH, 3, true);
+      }
+      ctx.restore();
+    }
+
     // 2.4 寸屏幕 Canvas Material Design 3 (Material You) 菜单渲染器
     function renderMenuOverlayCanvas(ctx, w, h, now) {
       if (menuState.mode === "FACE") {
@@ -2740,6 +2792,9 @@
           ctx.fillStyle = MD3.primary;
           ctx.font = "bold 10px monospace";
           ctx.fillText("Z", 204, 19);
+        }
+        if (simVolumeToastUntil > now) {
+          drawSimVolumeToast(ctx, simVolumeToastVal);
         }
         return;
       }
@@ -3194,6 +3249,9 @@
         const thumbY = trackY1 + Math.round((Math.max(0, Math.min(scrollY, maxScroll)) / maxScroll) * (trackH - thumbH));
         ctx.fillStyle = MD3.primary;
         roundRect(ctx, 226, thumbY, 3, thumbH, 1.5, true);
+      }
+      if (simVolumeToastUntil > now) {
+        drawSimVolumeToast(ctx, simVolumeToastVal);
       }
     }
 
@@ -5169,6 +5227,10 @@
       if (!ev || !ev.type) return;
 
       if (ev.type === "menu_state" && ev.data) {
+        if (ev.data.volume_toast && ev.data.volume_toast.active) {
+          simVolumeToastUntil = Date.now() + 2000;
+          simVolumeToastVal = ev.data.volume_toast.val;
+        }
         // 关键防回跳保护：当本地在 1500ms 内触发过按键导航，或按键仍在在途队列中时，
         // 绝不让异步 SSE 推送包冲刷覆盖本地当前的 mode、cursor 与 easter_egg_scroll，彻底根除模式跳级回弹与菜单闪烁！
         if (Date.now() - lastLocalNavTime < 1500 || hwButtonQueue.length > 0 || isProcessingHwButton) {

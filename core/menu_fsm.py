@@ -1605,47 +1605,37 @@ class MenuFSM:
                     self.qr_view.get("status"), self.qr_view.get("foot_tip"))
 
     def _draw_volume_toast(self, draw: ImageDraw.ImageDraw, vol: int):
-        """在 240x320 画布上渲染悬浮式音量条 HUD 胶囊卡片 (矢量图标 + 纯正排版，杜绝 Emoji 方框)"""
+        """在 240x320 画布上渲染极简悬浮式音量条 HUD (纯净音量条，零文字干扰)"""
         vol = max(0, min(100, int(vol)))
-        card_w = 186
-        card_h = 46
+        card_w = 154
+        card_h = 22
         x1 = (240 - card_w) // 2
-        y1 = 18
+        y1 = 16
         x2 = x1 + card_w
         y2 = y1 + card_h
 
-        # 卡片底色与半透明质感描边
-        draw.rounded_rectangle([x1, y1, x2, y2], radius=12, fill=(20, 24, 30), outline=(58, 70, 84), width=1)
+        # 极简胶囊底色与微弱描边
+        draw.rounded_rectangle([x1, y1, x2, y2], radius=11, fill=(18, 22, 28), outline=(52, 64, 76), width=1)
 
         theme_key = getattr(self, "theme_key", "mint")
         primary_col = THEMES.get(theme_key, THEMES["mint"])["primary"]
-
-        # 矢量音量小喇叭图标
         icon_col = (239, 68, 68) if vol == 0 else primary_col
-        _draw_vector_icon(draw, "volume", x1 + 24, y1 + 16, icon_col, scale=1)
 
-        # 文字排版
-        if vol == 0:
-            txt = "系统静音 (0%)"
-            txt_color = (239, 68, 68)
-        else:
-            txt = f"播报音量: {vol}%"
-            txt_color = (242, 245, 248)
+        # 左侧矢量音量小喇叭
+        _draw_vector_icon(draw, "volume", x1 + 15, y1 + 11, icon_col, scale=1)
 
-        _draw_text_vcenter(draw, x1 + 42, y1 + 16, txt, self.font_bold, txt_color, "l")
-
-        # 进度条背景与前景色
-        bar_w = 154
-        bar_h = 5
-        bx1 = (240 - bar_w) // 2
-        by1 = y1 + 31
-        bx2 = bx1 + bar_w
-        by2 = by1 + bar_h
-        draw.rounded_rectangle([bx1, by1, bx2, by2], radius=3, fill=(38, 46, 56))
+        # 右侧纯净音量条 (高 6px，圆角 3px，纯无文字)
+        bx1 = x1 + 30
+        bx2 = x2 - 12
+        by1 = y1 + 8
+        by2 = y1 + 14
+        bar_w = bx2 - bx1
+        draw.rounded_rectangle([bx1, by1, bx2, by2], radius=3, fill=(36, 44, 54))
 
         fill_w = int(bar_w * (vol / 100.0))
         if fill_w > 0:
-            draw.rounded_rectangle([bx1, by1, bx1 + fill_w, by2], radius=3, fill=primary_col)
+            fill_col = (239, 68, 68) if vol == 0 else primary_col
+            draw.rounded_rectangle([bx1, by1, bx1 + fill_w, by2], radius=3, fill=fill_col)
 
     def render_pil_overlay(self, base_image: Image.Image) -> Image.Image:
         """
