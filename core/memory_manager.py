@@ -2,6 +2,8 @@ import os
 import json
 import time
 import re
+import threading
+from datetime import datetime, timedelta
 
 class MemoryManager:
     """
@@ -15,13 +17,16 @@ class MemoryManager:
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             memory_file = os.path.join(project_root, "data", "memory.json")
         self.memory_file = memory_file
+        self.daily_log_file = os.path.join(os.path.dirname(self.memory_file), "daily_dialogue.json")
         self.max_history_turns = max_history_turns
+        self._io_lock = threading.Lock()
 
         # 多通道会话管理 (Multi-Session: "device" 为树莓派实体, "feishu_xxx" 为飞书私聊/群聊)
         self.sessions = {
             "device": {"history": [], "last_active": time.time()}
         }
-        self.session_timeout = 7200  # 2小时无交互的 Session 自动重置上下文
+        self.session_timeout = 7200  # 2小时无交互的 Session 自动重置短期对话窗口
+        self.daily_turns = []        # 按天滚动落盘的近两日对话流水 (专供海马体反思，重启/超2小时不丢失)
 
         # 长期记忆结构 (跨通道全局共享灵魂)
         self.long_term_data = {
@@ -78,8 +83,65 @@ class MemoryManager:
             for sid, data in self.sessions.items()
         }
 
+    def _prune_daily_turns(self):
+        """只保留今天和昨天最多 60 轮有效对话，过期自动滚动淘汰"""
+        now_dt = datetime.now()
+        keep_dates = {
+            now_dt.strftime("%Y-%m-%d"),
+            (now_dt - timedelta(days=1)).strftime("%Y-%m-%d"),
+        }
+        self.daily_turns = [t for t in self.daily_turns if isinstance(t, dict) and t.get("date") in keep_dates][-60:]
+
+    def _load_daily_log(self):
+        if os.path.exists(self.daily_log_file):
+            try:
+                with open(self.daily_log_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    self.daily_turns = data
+                elif isinstance(data, dict):
+                    self.daily_turns = data.get("turns", [])
+            except Exception as e:
+                print(f"⚠️ [Memory] 读取 daily_dialogue.json 失败: {e}")
+                self.daily_turns = []
+        self._prune_daily_turns()
+
+    def _save_daily_log(self):
+        self._prune_daily_turns()
+        os.makedirs(os.path.dirname(os.path.abspath(self.daily_log_file)), exist_ok=True)
+        tmp = self.daily_log_file + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"turns": self.daily_turns}, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, self.daily_log_file)
+        except Exception as e:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
+            print(f"⚠️ [Memory] 保存 daily_dialogue.json 失败: {e}")
+
+    def get_dialogue_for_reflection(self, max_turns: int = 30) -> list:
+        """
+        为海马体反思获取按天滚动的持久化对话记录：
+        优先返回今天的全部对话（跨网页/真机语音/飞书），若跨过零点今天尚无新对话则读取昨天的；
+        绝不因 2 小时短期上下文超时而丢失。
+        """
+        with self._io_lock:
+            self._prune_daily_turns()
+            if self.daily_turns:
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                today_turns = [t for t in self.daily_turns if t.get("date") == today_str]
+                chosen = today_turns if today_turns else self.daily_turns
+                return list(chosen[-max_turns:])
+
+            # 兜底兼容：仅内存尚存的旧对话 (不触发 2 小时超时清理)
+            raw_hist = self.sessions.get("device", {}).get("history", [])
+            return list(raw_hist[-(max_turns * 2):])
+
     def load(self):
-        """从本地磁盘加载长期记忆"""
+        """从本地磁盘加载长期记忆与按天滚动对话流水"""
         if os.path.exists(self.memory_file):
             try:
                 with open(self.memory_file, "r", encoding="utf-8") as f:
@@ -89,21 +151,27 @@ class MemoryManager:
                 print(f"⚠️ [Memory] 读取 memory.json 失败: {e}")
         self.long_term_data.setdefault("bot_name", "PIG")
         self.long_term_data.setdefault("user_name", "主人")
+        self._load_daily_log()
 
     def save(self):
         """持久化保存长期记忆到本地磁盘"""
         try:
             self.long_term_data["last_seen"] = time.strftime("%Y-%m-%d %H:%M:%S")
-            with open(self.memory_file, "w", encoding="utf-8") as f:
+            tmp = self.memory_file + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self.long_term_data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, self.memory_file)
         except Exception as e:
             print(f"⚠️ [Memory] 保存 memory.json 失败: {e}")
 
     def clear(self):
-        """清空所有通道短期会话与长期记忆"""
-        self.sessions = {
-            "device": {"history": [], "last_active": time.time()}
-        }
+        """清空所有通道短期会话、按天对话日志与长期记忆"""
+        with self._io_lock:
+            self.sessions = {
+                "device": {"history": [], "last_active": time.time()}
+            }
+            self.daily_turns = []
+            self._save_daily_log()
         self.long_term_data = {
             "bot_name": "PIG",
             "user_name": "主人",
@@ -251,7 +319,7 @@ class MemoryManager:
         return messages
 
     def record_turn(self, user_text: str, bot_reply_text: str, session_id: str = "device"):
-        """记录指定通道的本轮对话，更新亲密度与事实画像并持久化"""
+        """记录指定通道的本轮对话，更新按天滚动流水、亲密度与事实画像并持久化"""
         # 1. 记入当前 Session 的短期上下文
         sid = session_id or "device"
         history = self.get_session_history(sid)
@@ -263,7 +331,19 @@ class MemoryManager:
         if len(history) > max_messages:
             self.sessions[sid]["history"] = history[-max_messages:]
 
-        # 2. 更新长期画像与亲密度 (跨通道全局共享灵魂累积)
+        # 2. 追加至按天滚动持久化对话流水 (供夜间海马体反思，重启/刷新/跨2小时不丢失)
+        now_dt = datetime.now()
+        with self._io_lock:
+            self.daily_turns.append({
+                "date": now_dt.strftime("%Y-%m-%d"),
+                "ts": now_dt.strftime("%H:%M:%S"),
+                "channel": sid,
+                "user": str(user_text or "").strip(),
+                "assistant": str(bot_reply_text or "").strip(),
+            })
+            self._save_daily_log()
+
+        # 3. 更新长期画像与亲密度 (跨通道全局共享灵魂累积)
         self._extract_facts(user_text)
         self.long_term_data["interaction_count"] += 1
 
@@ -271,5 +351,5 @@ class MemoryManager:
         new_intimacy = min(10, 1 + self.long_term_data["interaction_count"] // 10)
         self.long_term_data["intimacy_level"] = new_intimacy
 
-        # 3. 持久化到磁盘
+        # 4. 持久化到磁盘
         self.save()

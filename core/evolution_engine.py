@@ -166,15 +166,33 @@ class EvolutionEngine:
         if not self.memory:
             return {"status": "error", "msg": "未绑定 MemoryManager"}
 
-        history = self.memory.short_term_history
-        if not history:
-            return {"status": "skipped", "msg": "近期无交互记录，无需反思"}
+        records = (
+            self.memory.get_dialogue_for_reflection(max_turns=30)
+            if hasattr(self.memory, "get_dialogue_for_reflection")
+            else self.memory.short_term_history
+        )
+        if not records:
+            return {"status": "skipped", "msg": "今日及近期无交互记录，无需反思"}
 
         user_name = self.memory.long_term_data.get("user_name", "主人")
         existing_facts = self.memory.long_term_data.get("facts", [])
 
-        # 整理最近对话文本
-        dialogue_text = "\n".join([f"{t['role']}: {t['content']}" for t in history[-12:]])
+        # 整理按天滚动保留的对话文本（支持全天多通道流水与旧格式兼容）
+        lines = []
+        for item in records:
+            if "user" in item or "assistant" in item:
+                ch = "飞书" if str(item.get("channel", "")).startswith("feishu") else "桌面交互"
+                ts = f"{item.get('date', '')} {item.get('ts', '')}".strip()
+                prefix = f"[{ts} {ch}] " if ts else f"[{ch}] "
+                if item.get("user"):
+                    lines.append(f"{prefix}{user_name}: {item['user']}")
+                if item.get("assistant"):
+                    lines.append(f"PIG: {item['assistant']}")
+            elif "role" in item:
+                lines.append(f"{item['role']}: {item.get('content', '')}")
+        dialogue_text = "\n".join(lines)
+        if not dialogue_text.strip():
+            return {"status": "skipped", "msg": "今日及近期无有效交互记录，无需反思"}
 
         prompt = f"""你是一个桌面陪伴机器人的海马体深度元认知模块。
 请回顾以下【{user_name}】与机器人的近期对话记录：
@@ -215,8 +233,8 @@ class EvolutionEngine:
                 for nf in new_facts:
                     if nf and nf not in self.memory.long_term_data["facts"]:
                         self.memory.long_term_data["facts"].append(nf)
-                if len(self.memory.long_term_data["facts"]) > 15:
-                    self.memory.long_term_data["facts"] = self.memory.long_term_data["facts"][-15:]
+                if len(self.memory.long_term_data["facts"]) > 30:
+                    self.memory.long_term_data["facts"] = self.memory.long_term_data["facts"][-30:]
 
                 # 记录沉淀的反思摘要
                 self.memory.long_term_data["daily_reflection"] = {

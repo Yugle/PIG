@@ -16,6 +16,7 @@ config.json
 # Runtime Memory state & User Data
 memory.json
 data/memory.json
+data/daily_dialogue.json
 data/master_face.json
 data/proactive_state.json
 data/netease_session.json
