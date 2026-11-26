@@ -16,9 +16,12 @@ import time
 import json
 import wave
 import math
+import queue
+import asyncio
 import base64
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Optional, Callable, List
 from core.face_tracker import FaceTracker
 
@@ -350,7 +353,7 @@ class HardwareAgent:
             if clip_path and os.path.exists(clip_path) and self.asr_engine:
                 self.emit_event("status_change", {
                     "status": self.STATE_THINKING,
-                    "message": "🔍 百度智能云语音识别转写中..."
+                    "message": "🔍 语音识别转写中..."
                 })
                 user_text = self.asr_engine.recognize(clip_path)
 
@@ -671,7 +674,7 @@ class HardwareAgent:
             except Exception:
                 pass
 
-    def record_audio_clip(self, max_seconds=6, silence_timeout=0.75, min_seconds=0.5) -> str:
+    def record_audio_clip(self, max_seconds=6, silence_timeout=None, min_seconds=0.45) -> str:
         """动态能量 VAD 静音自适应录音"""
         if not self.audio_stream or not self.p_audio:
             return ""
@@ -684,11 +687,15 @@ class HardwareAgent:
         FORMAT = pyaudio.paInt16
         CHANNELS = 1
 
+        if silence_timeout is None:
+            silence_timeout = float(self.cfg.get("vad_silence_timeout", 0.55))
+
         frames = []
         chunk_per_sec = int(RATE / CHUNK)
         max_chunks = int(chunk_per_sec * max_seconds)
+        no_speech_limit = int(chunk_per_sec * min(3.5, max_seconds))
         min_chunks = int(chunk_per_sec * min_seconds)
-        silence_limit = int(chunk_per_sec * silence_timeout)
+        silence_limit = max(3, int(chunk_per_sec * silence_timeout))
 
         silence_counter = 0
         has_spoken = False
@@ -740,6 +747,8 @@ class HardwareAgent:
                         if silence_counter >= silence_limit and len(frames) >= min_chunks:
                             print(f"🛑 [VAD] 检测到说话停顿 (持续静音约 {silence_timeout}s)，自动截止录音并提交识别...", flush=True)
                             break
+                    elif len(frames) >= no_speech_limit:
+                        break
             except Exception:
                 break
 
@@ -794,6 +803,67 @@ class HardwareAgent:
         stream_sentences = []
         final_behaviors = []
         final_reply = ""
+        done_payload = None
+
+        # 并发预合成线程池 + 有序播报队列：LLM 边吐字边预合成后续句子，杜绝首句播放阻塞后续句与工具调用
+        tts_executor = ThreadPoolExecutor(max_workers=2)
+        play_queue: "queue.Queue[Optional[tuple]]" = queue.Queue()
+
+        def _synth_task(txt: str) -> bytes:
+            return asyncio.run(tts_streamer.synthesize_chunk(txt))
+
+        def _playback_worker():
+            while True:
+                item = play_queue.get()
+                try:
+                    if item is None or self._interrupt_requested:
+                        break
+                    seq_idx, s_txt, fut = item
+                    try:
+                        audio_b = fut.result(timeout=10.0)
+                    except Exception as ex:
+                        logger.warning(f"TTS 分片并发合成失败: {ex}")
+                        audio_b = b""
+
+                    if self._interrupt_requested:
+                        break
+
+                    b64_audio = base64.b64encode(audio_b).decode("utf-8") if audio_b else ""
+
+                    # 1. 优先立即触发物理喇叭播放（跳过 ffprobe 子进程探测时长，直接以进程轮询控制收尾）
+                    est_dur = max(3.0, len(s_txt) * 0.45 + 1.5)
+                    started_hw = False
+                    if self.tts_engine and audio_b:
+                        try:
+                            tmp_chunk_path = f"/tmp/chunk_{seq_idx}.mp3"
+                            with open(tmp_chunk_path, "wb") as f:
+                                f.write(audio_b)
+                            self.tts_engine.play_async(tmp_chunk_path, est_dur)
+                            started_hw = True
+                            if self.hal:
+                                self.hal.set_angles(90, 85)
+                        except Exception as ex:
+                            logger.warning(f"音频播放异常: {ex}")
+
+                    # 2. 物理喇叭拉起后再向 Web 孪生大屏推流，消除工作台明显抢跑感
+                    self.emit_event("robot_chunk", {
+                        "text": s_txt,
+                        "audio": b64_audio,
+                        "seq": seq_idx
+                    })
+
+                    if started_hw and self.tts_engine:
+                        play_start = time.time()
+                        while self.tts_engine.is_playing() and (time.time() - play_start) < (est_dur + 1.0):
+                            if self._interrupt_requested:
+                                self.tts_engine.stop()
+                                break
+                            time.sleep(0.04)
+                finally:
+                    play_queue.task_done()
+
+        play_thread = threading.Thread(target=_playback_worker, daemon=True, name="VoiceTTSPlayback")
+        play_thread.start()
 
         try:
             for ev in reasoner.run_react_loop_stream(
@@ -812,58 +882,42 @@ class HardwareAgent:
                     self.emit_event("tool_start", {"name": ev.get("name"), "args": ev.get("args")})
                 elif ev_type == "observation":
                     self.emit_event("observation", {"name": ev.get("name"), "result": str(ev.get("result"))})
+                elif ev_type == "behaviors":
+                    bh = ev.get("behaviors")
+                    if bh:
+                        final_behaviors = bh
+                        self.emit_event("behaviors", {"behaviors": bh})
                 elif ev_type == "sentence":
                     s_text = ev.get("text", "").strip()
                     if s_text:
                         stream_sentences.append(s_text)
                         self.state = self.STATE_SPEAKING
-
-                        # 异步生成音频
-                        import asyncio
-                        audio_b = asyncio.run(tts_streamer.synthesize_chunk(s_text))
-                        b64_audio = base64.b64encode(audio_b).decode("utf-8") if audio_b else ""
-
-                        # 广播给 Web 孪生大屏
-                        self.emit_event("robot_chunk", {
-                            "text": s_text,
-                            "audio": b64_audio,
-                            "seq": len(stream_sentences)
-                        })
-
-                        # 如果有物理硬件/TTS引擎，驱动耳机/音响播放
-                        if self.tts_engine and audio_b:
-                            try:
-                                tmp_chunk_path = f"/tmp/chunk_{len(stream_sentences)}.mp3"
-                                with open(tmp_chunk_path, "wb") as f:
-                                    f.write(audio_b)
-                                dur = self.tts_engine.get_audio_duration(tmp_chunk_path)
-                                self.tts_engine.play_async(tmp_chunk_path, dur)
-                                if self.hal:
-                                    self.hal.set_angles(90, 85)
-                                # 等待本句音频完整播报完毕，避免流式断句重叠；支持打断即停
-                                play_start = time.time()
-                                while self.tts_engine.is_playing() and (time.time() - play_start) < (dur + 0.5):
-                                    if self._interrupt_requested:
-                                        self.tts_engine.stop()
-                                        break
-                                    time.sleep(0.05)
-                            except Exception as e:
-                                logger.warning(f"音频播放异常: {e}")
+                        fut = tts_executor.submit(_synth_task, s_text)
+                        play_queue.put((len(stream_sentences), s_text, fut))
 
                 elif ev_type == "done":
                     final_reply = ev.get("reply") or "".join(stream_sentences) or "收到啦！"
-                    final_behaviors = ev.get("behaviors", [])
-                    self.emit_event("done", {
+                    final_behaviors = ev.get("behaviors", final_behaviors)
+                    done_payload = {
                         "reply": final_reply,
                         "behaviors": final_behaviors,
                         "steps": ev.get("steps", [])
-                    })
+                    }
+
+            play_queue.put(None)
+            play_thread.join(timeout=120.0)
+            if done_payload and not self._interrupt_requested:
+                self.emit_event("done", done_payload)
 
         except Exception as e:
             print(f"⚠️ 语音指令处理异常: {e}", flush=True)
             logger.error(f"语音指令处理异常: {e}")
             final_reply = f"抱歉主人，执行过程遇到异常错误：{e}，未能完成操作。"
+            play_queue.put(None)
+            play_thread.join(timeout=5.0)
             self.emit_event("done", {"reply": final_reply, "behaviors": []})
+        finally:
+            tts_executor.shutdown(wait=False)
 
         # 若中途被摸头或语音打断，跳过正常余韵，由打断处理逻辑恢复待机
         if self._interrupt_requested:
