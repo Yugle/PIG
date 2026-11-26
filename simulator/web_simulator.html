@@ -5916,7 +5916,10 @@
           audio.src = m.stream_path + "&ts=" + Date.now();
         }
         if (m.playing && audio.paused) {
-          audio.play().catch(() => {});
+          audio.play().catch((err) => {
+            console.warn("[MusicHUD] 浏览器自动播放受限:", err);
+            showToast("🎵 歌曲已就绪，点击左下角 ▶ 继续即可播放");
+          });
         } else if (!m.playing && !audio.paused) {
           audio.pause();
         }

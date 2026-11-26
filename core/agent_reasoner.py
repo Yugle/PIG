@@ -76,9 +76,12 @@ def is_action_skill(tool_name: str, tool_args: Dict[str, Any]) -> bool:
     return True
 
 def is_skill_failure(obs: Any) -> bool:
-    """判断技能执行结果是否包含明确失败语义"""
+    """判断技能执行结果是否包含明确失败/无结果语义"""
     obs_str = str(obs).lower()
-    return any(k in obs_str for k in ["失败", "错误", "未能", "异常", "未找到", "无效", "error", "fail", "invalid", "超时", "离线", "未识别的技能"])
+    return any(k in obs_str for k in [
+        "失败", "错误", "未能", "异常", "未找到", "没有找到", "没找到", "暂时没有", "暂时没", "暂未", "没拉到",
+        "未登录", "无效", "error", "fail", "invalid", "超时", "离线", "未识别的技能"
+    ])
 
 
 class AgentReasoner:

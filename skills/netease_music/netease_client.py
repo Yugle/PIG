@@ -503,51 +503,53 @@ class NeteaseClient:
         return res
 
     def search_playable_tracks(self, query: str, limit: int = 8) -> List[Dict[str, Any]]:
-        """搜索歌曲并过滤出真正可播放的候选列表"""
+        """搜索歌曲并批量解析真正可播放的候选列表（带超时重试与 WEAPI/Web 双端点兜底）"""
         kw = (query or "").strip()
+        if not kw:
+            return []
+
         raw_songs: List[Dict[str, Any]] = []
 
-        if HAS_PYNCM and kw:
+        if HAS_PYNCM:
             try:
                 res = ncm_apis.cloudsearch.GetSearchResult(keyword=kw, stype=1, limit=limit)
                 raw_songs = (res or {}).get("result", {}).get("songs") or []
             except Exception:
                 pass
 
-        if not raw_songs and kw:
-            try:
-                r = self._http.get(
+        # 端点 1: /weapi/cloudsearch/get/web -> 端点 2: /api/search/get/web（最多各试一次，timeout=8）
+        if not raw_songs:
+            endpoints = [
+                (
+                    "post",
+                    "https://music.163.com/weapi/cloudsearch/get/web",
+                    {"data": _weapi_encrypt({"s": kw, "type": 1, "limit": limit, "offset": 0, "total": True})},
+                ),
+                (
+                    "get",
                     "https://music.163.com/api/search/get/web",
-                    params={"s": kw, "type": 1, "offset": 0, "limit": limit},
-                    timeout=5,
-                )
-                if r.status_code == 200:
-                    raw_songs = (r.json() or {}).get("result", {}).get("songs") or []
-            except Exception as e:
-                logger.warning(f"网易云搜索失败: {e}")
+                    {"params": {"s": kw, "type": 1, "offset": 0, "limit": limit}},
+                ),
+                (
+                    "get",
+                    "https://music.163.com/api/search/get/web",
+                    {"params": {"s": kw, "type": 1, "offset": 0, "limit": limit}},
+                ),
+            ]
+            for method, url, req_kw in endpoints:
+                try:
+                    r = self._http.post(url, timeout=8, **req_kw) if method == "post" else self._http.get(url, timeout=8, **req_kw)
+                    if r.status_code == 200:
+                        raw_songs = (r.json() or {}).get("result", {}).get("songs") or []
+                        if raw_songs:
+                            break
+                except Exception as e:
+                    logger.warning(f"网易云搜索重试中 ({url}): {e}")
 
-        playable: List[Dict[str, Any]] = []
-        for s in raw_songs:
-            sid = s.get("id")
-            if not sid:
-                continue
-            artists = s.get("ar") or s.get("artists") or []
-            artist_name = " / ".join(a.get("name", "") for a in artists if a.get("name")) or "未知歌手"
-            title = s.get("name", "未知歌曲")
-            duration_ms = int(s.get("dt") or s.get("duration") or 0)
+        if not raw_songs:
+            return []
 
-            url = self._resolve_track_url(int(sid))
-            if url:
-                playable.append({
-                    "id": int(sid),
-                    "title": title,
-                    "artist": artist_name,
-                    "duration_sec": max(0, duration_ms // 1000),
-                    "url": url,
-                })
-                if len(playable) >= 5:
-                    break
-        return playable
+        return self._songs_to_playable(raw_songs, max_tracks=min(5, limit))
 
     def get_recommended_tracks(self, limit: int = 10) -> List[Dict[str, Any]]:
         """获取每日推荐或云音乐热歌榜中的可播曲目"""
