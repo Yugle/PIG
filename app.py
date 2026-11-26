@@ -195,6 +195,11 @@ alarms_lock = threading.Lock()
 def on_alarm_triggered(rem):
     with alarms_lock:
         pending_web_alarms.append(rem)
+    try:
+        if "menu_fsm" in globals() and menu_fsm and hasattr(menu_fsm, "trigger_alarm_overlay"):
+            menu_fsm.trigger_alarm_overlay(rem)
+    except Exception:
+        pass
     print(f"🔔 [WebSim] 收到闹钟事件已推入前端队列: {rem.get('content')}")
 
 skill_mgr.register_trigger_callback(on_alarm_triggered)
@@ -1484,6 +1489,26 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 闹钟稍后再响 (贪睡延后)
+        if self.path == "/api/reminders/snooze":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                rid = body.get("id", "") or ""
+                minutes = float(body.get("minutes", 5) or 5)
+                content = body.get("content", "") or ""
+                rem = skill_mgr.snooze_reminder(reminder_id=rid, minutes=minutes, content=content)
+                if "menu_fsm" in globals() and menu_fsm and hasattr(menu_fsm, "dismiss_alarm_overlay"):
+                    menu_fsm.dismiss_alarm_overlay()
+                if rem:
+                    self._send_json({"status": "ok", "reminder": rem})
+                else:
+                    self._send_json({"status": "error", "msg": "未找到可延后的闹钟"}, status_code=404)
+            except Exception as e:
+                self.send_error(400, str(e))
             return
 
         # 取消提醒或闹钟

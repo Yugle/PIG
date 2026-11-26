@@ -1325,10 +1325,14 @@
         </div>
 
         <!-- 🔔 PIG 主动打断提醒弹窗 -->
-        <div id="alarmAlertModal" style="display:none; position:absolute; top:20px; left:50%; transform:translateX(-50%); background:rgba(22, 27, 34, 0.96); border:2px solid #ffb020; box-shadow:0 0 25px rgba(255, 176, 32, 0.6); border-radius:12px; padding:12px 24px; z-index:100; text-align:center; min-width:300px; backdrop-filter:blur(8px); animation: pulseAlert 1.5s infinite alternate;">
-          <div style="font-size:1.15rem; margin-bottom:4px; font-weight:bold; color:#ffb020;">🔔 <span id="alarmModalTitle">闹钟提醒到点啦！</span></div>
+        <div id="alarmAlertModal" style="display:none; position:absolute; top:20px; left:50%; transform:translateX(-50%); background:rgba(16, 20, 26, 0.96); border:2px solid #ffb020; box-shadow:0 0 25px rgba(255, 176, 32, 0.55); border-radius:12px; padding:14px 22px; z-index:100; text-align:center; min-width:320px; backdrop-filter:blur(8px); animation: pulseAlert 1.5s infinite alternate;">
+          <div style="font-size:1.12rem; margin-bottom:4px; font-weight:bold; color:#ffb020;">🔔 <span id="alarmModalTitle">闹钟提醒到点啦！</span></div>
           <div id="alarmModalContent" style="color:#ffffff; font-size:0.95rem; margin-bottom:12px; font-weight:500;">主人，提醒你：关火！</div>
-          <button class="btn" style="background:#ffb020; color:#0d1117; font-weight:bold; padding:5px 20px; border:none; border-radius:6px; cursor:pointer;" onclick="dismissAlarmModal()">👌 我知道了 / 关闭提醒</button>
+          <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+            <button class="btn" style="background:rgba(0, 229, 255, 0.16); color:#00e5ff; font-weight:bold; padding:5px 12px; border:1px solid rgba(0, 229, 255, 0.5); border-radius:6px; cursor:pointer;" onclick="snoozeAlarmModal(5)">💤 5分钟后再响</button>
+            <button class="btn" style="background:rgba(163, 113, 247, 0.16); color:#c4b5fd; font-weight:bold; padding:5px 12px; border:1px solid rgba(163, 113, 247, 0.5); border-radius:6px; cursor:pointer;" onclick="snoozeAlarmModal(10)">⏳ 10分钟后再响</button>
+            <button class="btn" style="background:#ffb020; color:#0d1117; font-weight:bold; padding:5px 14px; border:none; border-radius:6px; cursor:pointer;" onclick="dismissAlarmModal()">👌 关闭提醒</button>
+          </div>
         </div>
 
         <!-- 🎵 网易云音乐迷你播放浮窗 + 可展开队列/歌单面板 -->
@@ -4816,24 +4820,55 @@
       }
     }
 
-    // 闹钟触发全屏抢占提醒与弹窗
+    // 闹钟触发全屏抢占提醒与弹窗（支持稍后再响）
     let alarmModalTimer = null;
-    function showAlarmModal(content) {
+    let currentAlertReminder = null;
+    function showAlarmModal(remOrContent) {
       const modal = document.getElementById("alarmAlertModal");
       if (!modal) return;
+      const isObj = (remOrContent && typeof remOrContent === "object");
+      const content = isObj ? (remOrContent.content || "日程提醒") : String(remOrContent || "日程提醒");
+      currentAlertReminder = isObj ? remOrContent : { content };
       document.getElementById("alarmModalContent").innerText = `主人，提醒你：${content}！`;
       modal.style.display = "block";
       if (alarmModalTimer) clearTimeout(alarmModalTimer);
       alarmModalTimer = setTimeout(() => {
         dismissAlarmModal();
-      }, 15000);
+      }, 30000);
     }
 
     function dismissAlarmModal() {
       const modal = document.getElementById("alarmAlertModal");
       if (modal) modal.style.display = "none";
       if (alarmModalTimer) clearTimeout(alarmModalTimer);
+      currentAlertReminder = null;
       setEmotion("NORMAL");
+    }
+
+    async function snoozeAlarmModal(minutes = 5) {
+      const target = currentAlertReminder || {};
+      dismissAlarmModal();
+      try {
+        const resp = await fetch("/api/reminders/snooze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: target.id || "",
+            content: target.content || "",
+            minutes: minutes
+          })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === "ok" && data.reminder) {
+          const tStr = (data.reminder.target_time_str || "").slice(11, 16);
+          showToast(`💤 已延后 ${minutes} 分钟，将在 ${tStr || "稍后"} 再响`);
+          fetchReminders();
+        } else {
+          showToast("⚠️ 延后失败: " + (data.msg || "未找到闹钟"));
+        }
+      } catch (e) {
+        showToast("⚠️ 网络异常，稍后再响设置失败");
+      }
     }
 
     // 后台秒级拉取到点闹钟事件 (Preemption Event)
@@ -4866,8 +4901,8 @@
       targetTilt = 75;
       setEmotion("SURPRISED");
 
-      // 3. 弹出强提醒视窗
-      showAlarmModal(rem.content);
+      // 3. 弹出强提醒视窗 (传入完整提醒对象以支持稍后再响)
+      showAlarmModal(rem);
 
       // 4. 在聊天框写入闹钟提醒
       const chatLogs = document.getElementById("chatLogs");

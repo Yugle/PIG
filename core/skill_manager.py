@@ -72,6 +72,7 @@ class SkillManager:
         self.load_installed_plugins()
 
         self.trigger_callbacks: List[Callable[[Dict[str, Any]], None]] = []
+        self.last_triggered_reminder: Optional[Dict[str, Any]] = None
         self.register_face_callback: Optional[Callable[[], Any]] = None
         self._running = True
         global _global_skill_manager
@@ -688,6 +689,58 @@ class SkillManager:
             active.sort(key=lambda x: x.get("target_time", 0))
             return active
 
+    def snooze_reminder(self, reminder_id: str = "", minutes: float = 5.0, content: str = "") -> Optional[Dict[str, Any]]:
+        """将刚响过的或指定的闹钟延后 N 分钟稍后再响（不影响 daily 原重复周期）"""
+        mins = max(0.05, float(minutes or 5.0))
+        target_ts = time.time() + mins * 60.0
+        target_dt = datetime.fromtimestamp(target_ts)
+
+        with self.lock:
+            source = None
+            rid = (reminder_id or "").strip()
+            kw = (content or "").strip()
+            if rid:
+                for r in reversed(self.reminders):
+                    if r.get("id") == rid:
+                        source = r
+                        break
+            if source is None and kw:
+                for r in reversed(self.reminders):
+                    if kw in str(r.get("content", "")):
+                        source = r
+                        break
+            if source is None and self.last_triggered_reminder:
+                source = self.last_triggered_reminder
+            if source is None:
+                completed = [r for r in self.reminders if r.get("completed", False)]
+                if completed:
+                    completed.sort(key=lambda x: x.get("target_time", 0))
+                    source = completed[-1]
+
+            if source is None and not kw:
+                return None
+
+            base_content = (source.get("content") if source else None) or kw or "日程提醒"
+            prev_count = int((source or {}).get("snooze_count", 0) or 0)
+            snooze_item = {
+                "id": f"snooze_{uuid.uuid4().hex[:6]}",
+                "type": "alarm",
+                "content": base_content,
+                "target_time": target_ts,
+                "target_time_str": target_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "display_str": f"稍后再响 [{target_dt.strftime('%H:%M')}]: {base_content}",
+                "repeat": "none",
+                "is_snooze": True,
+                "snooze_count": prev_count + 1,
+                "completed": False,
+                "created_at": time.time(),
+            }
+            self.reminders.append(snooze_item)
+            self._save_reminders()
+
+        print(f"💤 [SkillManager] 闹钟已贪睡延后 {mins:g} 分钟: {snooze_item['display_str']}")
+        return snooze_item
+
     def cancel_reminder(self, keyword_or_id: str) -> List[str]:
         cancelled_ids = []
         kw = keyword_or_id.strip().lower()
@@ -796,6 +849,7 @@ class SkillManager:
                 for r in self.reminders:
                     if not r.get("completed", False) and now >= r.get("target_time", 0):
                         r["completed"] = True
+                        self.last_triggered_reminder = dict(r)
                         triggered.append(r)
 
                         if r.get("repeat") == "daily":
@@ -829,6 +883,12 @@ class SkillManager:
             return self.set_timer(args.get("seconds", 60), args.get("content", ""))
         elif name == "set_alarm":
             return self.set_alarm(args.get("time_str", "08:00"), args.get("content", ""), args.get("repeat", "none"))
+        elif name in ["snooze_alarm", "snooze_reminder"]:
+            return self.snooze_reminder(
+                args.get("id", "") or args.get("keyword", ""),
+                args.get("minutes", 5),
+                args.get("content", ""),
+            )
         elif name == "cancel_reminder":
             return self.cancel_reminder(args.get("keyword", "") or args.get("id", ""))
         elif name == "list_reminders":

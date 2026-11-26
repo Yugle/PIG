@@ -8,7 +8,7 @@
   "parameters": {
     "action": {
       "type": "string",
-      "description": "操作类型：'set_alarm' (设定闹钟), 'set_timer' (设定倒计时), 'cancel' (取消闹钟), 'list' (查看所有闹钟)",
+      "description": "操作类型：'set_alarm' (设定闹钟), 'set_timer' (设定倒计时), 'snooze' (稍后再响/贪睡延后), 'cancel' (取消闹钟), 'list' (查看所有闹钟)",
       "default": "list"
     },
     "time_str": {
@@ -20,6 +20,11 @@
       "type": "number",
       "description": "倒计时的秒数（如 60, 300, 1800）",
       "default": 0
+    },
+    "minutes": {
+      "type": "number",
+      "description": "稍后再响(snooze)延后的分钟数，默认 5 分钟",
+      "default": 5
     },
     "content": {
       "type": "string",

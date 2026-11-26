@@ -5,12 +5,13 @@
 """
 from typing import Optional
 
-def run(action="list", time_str="", seconds=0, content="日程提醒", repeat="none", keyword=""):
+def run(action="list", time_str="", seconds=0, minutes=5, content="日程提醒", repeat="none", keyword=""):
     """
     提醒技能执行入口：
-    :param action: 操作类型 ('set_alarm', 'set_timer', 'cancel', 'list')
+    :param action: 操作类型 ('set_alarm', 'set_timer', 'snooze', 'cancel', 'list')
     :param time_str: 闹钟时间 (如 '08:00', '14:30')
     :param seconds: 倒计时秒数 (如 60, 300)
+    :param minutes: 稍后再响延后分钟数 (默认 5 分钟)
     :param content: 提醒内容 (如 '喝水', '关火', '起床')
     :param repeat: 重复周期 ('none', 'daily')
     :param keyword: 取消提醒时的关键词或ID
@@ -39,6 +40,13 @@ def run(action="list", time_str="", seconds=0, content="日程提醒", repeat="n
             time_str = "08:00"
         reminder = mgr.set_alarm(time_str, content or "起床/日程提醒", repeat=repeat)
         return f"⏰ 闹钟设定成功！已设定在 {reminder.get('target_time_str', '')} 提醒你：【{reminder.get('content', '')}】。"
+
+    elif act in ["snooze", "delay", "稍后再响", "贪睡", "延后", "再睡会"]:
+        mins = float(minutes) if minutes else 5.0
+        rem = mgr.snooze_reminder(reminder_id=keyword, minutes=mins, content=content if content != "日程提醒" else "")
+        if rem:
+            return f"💤 好嘞！已为你将提醒【{rem.get('content')}】推迟 {int(mins)} 分钟，将在 {rem.get('target_time_str', '')} 再次叫你～"
+        return "没有找到最近响过的闹钟，如需新提醒请告诉我时间哦～"
 
     elif act in ["cancel", "取消", "删除"]:
         kw = keyword or content or time_str

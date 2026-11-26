@@ -528,9 +528,11 @@ class MenuFSM:
         self._menu_cache_img = None
         self._init_fonts()
         
-        # 人脸录入状态
+        # 人脸录入与响铃弹窗状态
         self.face_enroll_msg = ""
         self.face_enroll_step = 0
+        self.active_alarm: Optional[Dict[str, Any]] = None
+        self.active_alarm_until: float = 0.0
 
         # 启动超时守卫线程
         self._running = True
@@ -1064,6 +1066,19 @@ class MenuFSM:
                         self.cursor = 0
                         self._notify_listeners()
 
+    def trigger_alarm_overlay(self, rem: Dict[str, Any], duration_sec: float = 30.0):
+        """闹钟响铃时在真机 LCD 弹出稍后再响/关闭快捷提示（同时支持物理按键操作）"""
+        with self._lock:
+            self.active_alarm = dict(rem or {})
+            self.active_alarm_until = time.time() + float(duration_sec)
+        self._notify_listeners()
+
+    def dismiss_alarm_overlay(self):
+        with self._lock:
+            self.active_alarm = None
+            self.active_alarm_until = 0.0
+        self._notify_listeners()
+
     def handle_key(self, button: str, event_type: str = "click"):
         """
         统一按键处理入口 (K1:上, K2:下, K3:确认, K4:返回)
@@ -1071,6 +1086,25 @@ class MenuFSM:
         with self._lock:
             self.last_interaction_time = time.time()
             button = button.upper()
+
+            # 0. 若当前正在真机响铃窗口内，按键优先处理“稍后再响 / 关闭闹钟”
+            if self.active_alarm and time.time() < self.active_alarm_until:
+                if button in ["K1", "K2", "K3"]:
+                    try:
+                        from core.skill_manager import get_skill_manager
+                        sm = get_skill_manager()
+                        if sm:
+                            sm.snooze_reminder(
+                                reminder_id=self.active_alarm.get("id", ""),
+                                minutes=5,
+                                content=self.active_alarm.get("content", ""),
+                            )
+                    except Exception:
+                        pass
+                self.active_alarm = None
+                self.active_alarm_until = 0.0
+                self._notify_listeners()
+                return
             
             # 1. 处于默认灵动表情模式 (FACE)
             if self.current_mode == "FACE":
@@ -1543,9 +1577,10 @@ class MenuFSM:
         """
         在 240x320 PIL 图像上渲染 2x SSAA Pure-Black OLED 高对比菜单
         """
-        # 1. 灵动表情模式下：保持纯净，仅在右上角标注状态
+        # 1. 灵动表情模式下：保持纯净，仅在右上角标注状态；若在响铃期则叠加底部闹钟操作浮条
         if self.current_mode == "FACE":
-            if not self.is_mic_muted and not self.is_servo_sleeping:
+            alarm_active = bool(self.active_alarm and time.time() < self.active_alarm_until)
+            if not self.is_mic_muted and not self.is_servo_sleeping and not alarm_active:
                 return base_image
             img = base_image.copy()
             draw = ImageDraw.Draw(img)
@@ -1553,6 +1588,11 @@ class MenuFSM:
                 draw.ellipse([218, 12, 228, 22], fill=(239, 68, 68))
             if self.is_servo_sleeping:
                 draw.text((200, 11), "Z", fill=(140, 140, 140), font=self.font_small)
+            if alarm_active:
+                title_c = _fit_pil_text(draw, f"闹钟: {self.active_alarm.get('content', '时间到')}", self.font_bold, 196)
+                draw.rounded_rectangle([10, 236, 230, 310], radius=14, fill=(24, 18, 8), outline=(255, 176, 32), width=2)
+                _draw_text_vcenter(draw, 120, 258, title_c, self.font_bold, (255, 210, 80), "c")
+                _draw_text_vcenter(draw, 120, 290, "[K3] 5分后再响 · [K4] 关闭", self.font_small, (0, 229, 255), "c")
             return img
 
         theme_key = getattr(self, "theme_key", "mint")
