@@ -185,6 +185,15 @@ def build_ppinyin_keywords_file(
     if not generated_lines:
         return False
 
+    # 为含“你好”(n ǐ h ǎo) 的唤醒词自动追加口语连读变调 (n í h ǎo)，显著提升自然语调命中率
+    extra_lines: List[str] = []
+    for ln in generated_lines:
+        if "n ǐ h ǎo" in ln:
+            sandhi_ln = ln.replace("n ǐ h ǎo", "n í h ǎo")
+            if sandhi_ln not in generated_lines and sandhi_ln not in extra_lines:
+                extra_lines.append(sandhi_ln)
+    generated_lines.extend(extra_lines)
+
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(generated_lines) + "\n")
     return True
@@ -253,8 +262,8 @@ class WakeWordEngine:
             else:
                 return False
 
-        thresh = max(0.05, min(0.80, float(self.cfg.get("wakeword_threshold", 0.25))))
-        score_boost = float(self.cfg.get("sherpa_keywords_score", 1.5))
+        thresh = max(0.05, min(0.80, float(self.cfg.get("wakeword_threshold", 0.20))))
+        score_boost = float(self.cfg.get("sherpa_keywords_score", 2.2))
 
         try:
             self.kws = sherpa_onnx.KeywordSpotter(

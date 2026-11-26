@@ -738,7 +738,9 @@ class HardwareAgent:
                         data = self.audio_stream.read(CHUNK, exception_on_overflow=False)
                         audio_raw = np.frombuffer(data, dtype=np.int16)
                         if mic_gain != 1.0:
-                            audio_np = np.clip(audio_raw.astype(np.float32) * mic_gain, -32768, 32767).astype(np.int16)
+                            raw_peak = float(np.max(np.abs(audio_raw))) if len(audio_raw) else 0.0
+                            eff_gain = min(mic_gain, 28000.0 / raw_peak) if raw_peak > 0 else mic_gain
+                            audio_np = np.clip(audio_raw.astype(np.float32) * eff_gain, -32768, 32767).astype(np.int16)
                             chunk_bytes = audio_np.tobytes()
                         else:
                             audio_np = audio_raw
@@ -1026,7 +1028,10 @@ class HardwareAgent:
                 audio_raw = np.frombuffer(data, dtype=np.int16)
                 mic_gain = float(self.cfg.get("mic_gain", 2.5))
                 if mic_gain != 1.0:
-                    audio_np = np.clip(audio_raw.astype(np.float32) * mic_gain, -32768, 32767).astype(np.int16)
+                    # 自适应防削波增益：人声近讲时不产生方波削波失真，保障离线唤醒模型声学特征清晰
+                    raw_peak = float(np.max(np.abs(audio_raw))) if len(audio_raw) else 0.0
+                    eff_gain = min(mic_gain, 28000.0 / raw_peak) if raw_peak > 0 else mic_gain
+                    audio_np = np.clip(audio_raw.astype(np.float32) * eff_gain, -32768, 32767).astype(np.int16)
                 else:
                     audio_np = audio_raw
 
