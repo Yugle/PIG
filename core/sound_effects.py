@@ -122,6 +122,12 @@ def play_sound(sound_name: str, async_play: bool = True):
         if _pygame_available:
             try:
                 sound = pygame.mixer.Sound(filepath)
+                try:
+                    from core.audio_volume import get_system_volume
+                    cur_vol = get_system_volume()
+                    sound.set_volume(cur_vol / 100.0)
+                except Exception:
+                    pass
                 sound.play()
             except Exception:
                 pass

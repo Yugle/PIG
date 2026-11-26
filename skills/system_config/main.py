@@ -49,6 +49,40 @@ def run(action="query", value="", **kwargs):
     act = (action or "query").lower().strip()
     val_str = str(value or "").strip().lower()
 
+    # 0. 播报音量调节
+    if "vol" in act or "volume" in act or "音量" in act or "声音" in act:
+        import re
+        from core.audio_volume import get_system_volume, set_system_volume, adjust_volume
+        cur_v = get_system_volume()
+        digits = "".join(re.findall(r"\d+", val_str))
+        if digits:
+            target_v = int(digits)
+            new_v = set_system_volume(target_v, play_feedback=True)
+        elif any(w in val_str for w in ["大", "高", "up", "plus", "+", "加"]):
+            new_v = adjust_volume(+15, play_feedback=True)
+        elif any(w in val_str for w in ["小", "低", "down", "minus", "-", "减"]):
+            new_v = adjust_volume(-15, play_feedback=True)
+        elif any(w in val_str for w in ["静音", "mute", "闭嘴", "别出声", "0"]):
+            new_v = set_system_volume(0, play_feedback=False)
+        elif any(w in val_str for w in ["最大", "满", "max", "100"]):
+            new_v = set_system_volume(100, play_feedback=True)
+        else:
+            new_v = adjust_volume(+10, play_feedback=True)
+
+        try:
+            from core.menu_fsm import menu_fsm
+            if menu_fsm:
+                menu_fsm.show_volume_toast(new_v)
+        except Exception:
+            pass
+
+        msg = "🔇 已为你切换为静音模式啦。" if new_v == 0 else f"🔊 好的，播报音量已经调节到 {new_v}% 啦！"
+        return {
+            "status": "success",
+            "message": msg,
+            "behavior": {"emotion": "HAPPY" if new_v > 0 else "NORMAL", "action": "NOD"}
+        }
+
     # 1. 人脸视线追踪开关
     if "face" in act or "track" in act or "注视" in act or "人脸" in act or "摄像头" in act:
         enable = val_str in ["true", "1", "on", "yes", "开启", "打开", "开"]

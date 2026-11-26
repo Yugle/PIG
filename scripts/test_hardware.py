@@ -99,6 +99,22 @@ def test_audio_output():
         import core.sound_effects as se
         se.ensure_sound_assets()
 
+    # 打印声卡与音量自检诊断
+    try:
+        from core.audio_volume import get_audio_diagnostics, set_system_volume
+        diag = get_audio_diagnostics()
+        print(f"📊 音频系统探测:")
+        print(f"  • 当前配置音量: {diag.get('current_volume')}%")
+        print(f"  • ALSA amixer: {'可用' if diag.get('has_amixer') else '未找到'}")
+        print(f"  • PulseAudio pactl: {'可用' if diag.get('has_pactl') else '未找到'}")
+        print(f"  • PipeWire wpctl: {'可用' if diag.get('has_wpctl') else '未找到'}")
+        for c in diag.get("cards", []):
+            print(f"  • 物理声卡 #{c['card_id']}: 混音器控件 -> {c['controls']}")
+        # 预先设置 80% 测试音量
+        set_system_volume(80, play_feedback=False)
+    except Exception as e:
+        print(f"⚠️ 音量模块自检异常: {e}")
+
     print(f"🔊 正在通过声卡播放非语言萌趣音效: {os.path.basename(wav_path)}...")
     try:
         res = subprocess.run(["aplay", "-q", wav_path], timeout=4)

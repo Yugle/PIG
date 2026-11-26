@@ -104,6 +104,12 @@ class TTSEngine:
         self.mimo_design_prompt = mimo_design_prompt
         self._clone_audio_b64 = None
         self.audio_available = False
+        self.volume = 80
+        try:
+            from core.audio_volume import get_system_volume
+            self.volume = get_system_volume()
+        except Exception:
+            pass
 
         self._start_time = 0
         self._current_duration = 0.0
@@ -124,6 +130,11 @@ class TTSEngine:
             return
         if "tts_mode" in cfg:
             self.mode = cfg["tts_mode"] or self.mode
+        if "volume" in cfg:
+            try:
+                self.volume = max(0, min(100, int(cfg["volume"])))
+            except Exception:
+                pass
         if "mimo_api_key" in cfg or "api_key" in cfg:
             self.mimo_api_key = cfg.get("mimo_api_key") or cfg.get("api_key") or self.mimo_api_key
         new_voice = cfg.get("mimo_voice") or cfg.get("tts_voice")
@@ -227,7 +238,9 @@ class TTSEngine:
         ext = os.path.splitext(audio_path)[1].lower()
         player_cmd = None
         if ext == ".mp3":
-            player_cmd = ["mpg123", "-q", audio_path]
+            # mpg123 -f 参数支持 0~32768 的数字音量缩放，实现应用层 100% 可靠的软件控音
+            vol_scale = int(32768 * (max(0, min(100, self.volume)) / 100.0))
+            player_cmd = ["mpg123", "-q", "-f", str(vol_scale), audio_path]
         elif ext in [".wav", ".pcm"]:
             player_cmd = ["aplay", "-q", audio_path]
 
@@ -243,6 +256,7 @@ class TTSEngine:
         if self.audio_available:
             try:
                 pygame.mixer.music.load(audio_path)
+                pygame.mixer.music.set_volume(max(0.0, min(1.0, self.volume / 100.0)))
                 pygame.mixer.music.play()
             except Exception as e:
                 print(f"⚠️ [TTS 播放异常]: {e}")

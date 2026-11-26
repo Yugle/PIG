@@ -2050,7 +2050,17 @@
 
       // 1. 本地极速 0ms 响应 (绝对安全边界钳制 Clamping，彻底根除快速连续按造成的跳顶与反复跳)
       if (menuState.mode === "FACE") {
-        if (button === "K3") {
+        if (button === "K1") {
+          const curV = menuState.volume || 80;
+          const newV = Math.min(100, curV + 10);
+          menuState.volume = newV;
+          showToast(`🔊 播报音量: ${newV}%`);
+        } else if (button === "K2") {
+          const curV = menuState.volume || 80;
+          const newV = Math.max(0, curV - 10);
+          menuState.volume = newV;
+          showToast(newV === 0 ? "🔇 已静音" : `🔊 播报音量: ${newV}%`);
+        } else if (button === "K3") {
           // 点击确认 -> 进入主菜单 (绝不触发快照发问答)
           menuState.mode = "MENU_MAIN";
           menuState.cursor = 0;

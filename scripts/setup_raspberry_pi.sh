@@ -93,6 +93,7 @@ $SUDO apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends \
     ffmpeg \
     mpv \
     alsa-utils \
+    pulseaudio-utils \
     fswebcam \
     dnsmasq-base \
     bzip2 \

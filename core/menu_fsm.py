@@ -521,6 +521,15 @@ class MenuFSM:
         self.active_alarm: Optional[Dict[str, Any]] = None
         self.active_alarm_until: float = 0.0
 
+        # 音量悬浮 HUD 状态
+        self.volume_toast_until: float = 0.0
+        self.volume_toast_val: int = 80
+        try:
+            from core.audio_volume import get_system_volume
+            self.volume_toast_val = get_system_volume()
+        except Exception:
+            pass
+
         # 启动超时守卫线程
         self._running = True
         self._guard_thread = threading.Thread(target=self._timeout_loop, daemon=True, name="MenuTimeoutGuard")
@@ -692,17 +701,22 @@ class MenuFSM:
         self._notify_listeners()
 
     def cycle_volume(self):
-        """循环切换系统音量"""
-        vols = [40, 60, 80, 100]
+        """循环切换系统音量 (20% -> 40% -> 60% -> 80% -> 100%)"""
+        vols = [20, 40, 60, 80, 100]
         c = self._load_cfg()
         cur_vol = c.get("volume", 80)
-        idx = vols.index(cur_vol) if cur_vol in vols else 2
+        idx = vols.index(cur_vol) if cur_vol in vols else 3
         new_vol = vols[(idx + 1) % len(vols)]
-        self._save_cfg_key("volume", new_vol)
         try:
-            os.system(f"amixer set Master {new_vol}% >/dev/null 2>&1 || true")
-        except Exception:
-            pass
+            from core.audio_volume import set_system_volume
+            set_system_volume(new_vol, play_feedback=True)
+        except Exception as e:
+            print(f"⚠️ [MenuFSM] set_system_volume 异常: {e}")
+            self._save_cfg_key("volume", new_vol)
+        self.volume_toast_val = new_vol
+        self.volume_toast_until = time.time() + 2.0
+        if self.agent and hasattr(self.agent, "tts_engine"):
+            self.agent.tts_engine.volume = new_vol
         self._sync_system_items()
         self._notify_listeners()
 
@@ -1412,8 +1426,28 @@ class MenuFSM:
             self.agent.cfg["face_tracking"] = enabled
 
     def _adjust_volume(self, delta: int):
-        """调节音量"""
-        print(f"🔊 [MenuFSM] 音量微调: {delta:+d}%")
+        """实体按键 (K1音量+/K2音量-) 微调系统音量"""
+        try:
+            from core.audio_volume import adjust_volume
+            new_vol = adjust_volume(delta, play_feedback=True)
+        except Exception as e:
+            print(f"⚠️ [MenuFSM] adjust_volume 异常: {e}")
+            c = self._load_cfg()
+            new_vol = max(0, min(100, c.get("volume", 80) + delta))
+            self._save_cfg_key("volume", new_vol)
+        self.volume_toast_val = new_vol
+        self.volume_toast_until = time.time() + 2.0
+        if self.agent and hasattr(self.agent, "tts_engine"):
+            self.agent.tts_engine.volume = new_vol
+        self._sync_system_items()
+        self._notify_listeners()
+
+    def show_volume_toast(self, vol: int):
+        """弹出音量 HUD 浮层并刷新界面"""
+        self.volume_toast_val = int(vol)
+        self.volume_toast_until = time.time() + 2.0
+        self._sync_system_items()
+        self._notify_listeners()
 
     def _execute_power_action(self, action: str):
         if action == "restart":
@@ -1499,9 +1533,18 @@ class MenuFSM:
                         extra_screen.update(res)
         except Exception:
             pass
+        vol_val = getattr(self, "volume_toast_val", 80)
+        c_cfg = self._load_cfg()
+        if "volume" in c_cfg:
+            vol_val = c_cfg["volume"]
         state_dict = {
             "mode": self.current_mode,
             "cursor": self.cursor,
+            "volume": vol_val,
+            "volume_toast": {
+                "val": getattr(self, "volume_toast_val", vol_val),
+                "active": (getattr(self, "volume_toast_until", 0.0) > time.time())
+            },
             "main_menu_items": self.main_menu_items,
             "hardware_items": self.hardware_items,
             "toggle_items": [
@@ -1561,14 +1604,58 @@ class MenuFSM:
                     self.qr_view.get("title"), self.qr_view.get("headline"),
                     self.qr_view.get("status"), self.qr_view.get("foot_tip"))
 
+    def _draw_volume_toast(self, draw: ImageDraw.ImageDraw, vol: int):
+        """在 240x320 画布上渲染悬浮式音量条 HUD 胶囊卡片 (矢量图标 + 纯正排版，杜绝 Emoji 方框)"""
+        vol = max(0, min(100, int(vol)))
+        card_w = 186
+        card_h = 46
+        x1 = (240 - card_w) // 2
+        y1 = 18
+        x2 = x1 + card_w
+        y2 = y1 + card_h
+
+        # 卡片底色与半透明质感描边
+        draw.rounded_rectangle([x1, y1, x2, y2], radius=12, fill=(20, 24, 30), outline=(58, 70, 84), width=1)
+
+        theme_key = getattr(self, "theme_key", "mint")
+        primary_col = THEMES.get(theme_key, THEMES["mint"])["primary"]
+
+        # 矢量音量小喇叭图标
+        icon_col = (239, 68, 68) if vol == 0 else primary_col
+        _draw_vector_icon(draw, "volume", x1 + 24, y1 + 16, icon_col, scale=1)
+
+        # 文字排版
+        if vol == 0:
+            txt = "系统静音 (0%)"
+            txt_color = (239, 68, 68)
+        else:
+            txt = f"播报音量: {vol}%"
+            txt_color = (242, 245, 248)
+
+        _draw_text_vcenter(draw, x1 + 42, y1 + 16, txt, self.font_bold, txt_color, "l")
+
+        # 进度条背景与前景色
+        bar_w = 154
+        bar_h = 5
+        bx1 = (240 - bar_w) // 2
+        by1 = y1 + 31
+        bx2 = bx1 + bar_w
+        by2 = by1 + bar_h
+        draw.rounded_rectangle([bx1, by1, bx2, by2], radius=3, fill=(38, 46, 56))
+
+        fill_w = int(bar_w * (vol / 100.0))
+        if fill_w > 0:
+            draw.rounded_rectangle([bx1, by1, bx1 + fill_w, by2], radius=3, fill=primary_col)
+
     def render_pil_overlay(self, base_image: Image.Image) -> Image.Image:
         """
         在 240x320 PIL 图像上渲染 2x SSAA Pure-Black OLED 高对比菜单
         """
-        # 1. 灵动表情模式下：保持纯净，仅在右上角标注状态；若在响铃期则叠加底部闹钟操作浮条
+        vol_active = bool(getattr(self, "volume_toast_until", 0) > time.time())
+        # 1. 灵动表情模式下：保持纯净，仅在右上角标注状态；若在响铃期则叠加底部闹钟操作浮条；若处于音量调节期则叠加 HUD
         if self.current_mode == "FACE":
             alarm_active = bool(self.active_alarm and time.time() < self.active_alarm_until)
-            if not self.is_mic_muted and not self.is_servo_sleeping and not alarm_active:
+            if not self.is_mic_muted and not self.is_servo_sleeping and not alarm_active and not vol_active:
                 return base_image
             img = base_image.copy()
             draw = ImageDraw.Draw(img)
@@ -1581,12 +1668,14 @@ class MenuFSM:
                 draw.rounded_rectangle([10, 236, 230, 310], radius=14, fill=(24, 18, 8), outline=(255, 176, 32), width=2)
                 _draw_text_vcenter(draw, 120, 258, title_c, self.font_bold, (255, 210, 80), "c")
                 _draw_text_vcenter(draw, 120, 290, "[K3] 5分后再响 · [K4] 关闭", self.font_small, (0, 229, 255), "c")
+            if vol_active:
+                self._draw_volume_toast(draw, getattr(self, "volume_toast_val", 80))
             return img
 
         theme_key = getattr(self, "theme_key", "mint")
         theme = THEMES.get(theme_key, THEMES["mint"])
         cache_key = self._build_menu_cache_key(self.current_mode, theme_key)
-        if cache_key == self._menu_cache_key and self._menu_cache_img is not None:
+        if not vol_active and cache_key == self._menu_cache_key and self._menu_cache_img is not None:
             return self._menu_cache_img
 
         p_col = theme["primary"]
@@ -1911,6 +2000,13 @@ class MenuFSM:
 
         self._menu_cache_key = cache_key
         self._menu_cache_img = img
+
+        if vol_active:
+            res_img = img.copy()
+            draw_toast = ImageDraw.Draw(res_img)
+            self._draw_volume_toast(draw_toast, getattr(self, "volume_toast_val", 80))
+            return res_img
+
         return img
 
 
