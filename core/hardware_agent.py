@@ -97,6 +97,8 @@ class HardwareAgent:
         self.has_mic = False
         self.p_audio = None
         self.audio_stream = None
+        self._audio_lock = threading.Lock()
+        self._recording_active = False
         self.oww_model = None
         self.wakeword_engine = None
 
@@ -712,45 +714,50 @@ class HardwareAgent:
             "is_listening": True
         })
 
-        for _ in range(max_chunks):
-            if not self._running:
-                break
-            try:
-                data = self.audio_stream.read(CHUNK, exception_on_overflow=False)
-                audio_raw = np.frombuffer(data, dtype=np.int16)
-                if mic_gain != 1.0:
-                    audio_np = np.clip(audio_raw.astype(np.float32) * mic_gain, -32768, 32767).astype(np.int16)
-                    frames.append(audio_np.tobytes())
-                else:
-                    audio_np = audio_raw
-                    frames.append(data)
-
-                energy = float(np.abs(audio_np).mean())
-
-                rec_meter_counter += 1
-                if rec_meter_counter >= 2:
-                    rec_meter_counter = 0
-                    self.emit_event("audio_meter", {
-                        "energy": round(energy, 1),
-                        "score": 0.0,
-                        "model": self.cfg.get("wakeword_model", "hey_jarvis"),
-                        "threshold": float(self.cfg.get("wakeword_threshold", 0.20)),
-                        "is_listening": True
-                    })
-
-                if energy > speech_thresh:
-                    has_spoken = True
-                    silence_counter = 0
-                else:
-                    if has_spoken:
-                        silence_counter += 1
-                        if silence_counter >= silence_limit and len(frames) >= min_chunks:
-                            print(f"🛑 [VAD] 检测到说话停顿 (持续静音约 {silence_timeout}s)，自动截止录音并提交识别...", flush=True)
-                            break
-                    elif len(frames) >= no_speech_limit:
+        self._recording_active = True
+        try:
+            with self._audio_lock:
+                for _ in range(max_chunks):
+                    if not self._running:
                         break
-            except Exception:
-                break
+                    try:
+                        data = self.audio_stream.read(CHUNK, exception_on_overflow=False)
+                        audio_raw = np.frombuffer(data, dtype=np.int16)
+                        if mic_gain != 1.0:
+                            audio_np = np.clip(audio_raw.astype(np.float32) * mic_gain, -32768, 32767).astype(np.int16)
+                            frames.append(audio_np.tobytes())
+                        else:
+                            audio_np = audio_raw
+                            frames.append(data)
+
+                        energy = float(np.abs(audio_np).mean())
+
+                        rec_meter_counter += 1
+                        if rec_meter_counter >= 2:
+                            rec_meter_counter = 0
+                            self.emit_event("audio_meter", {
+                                "energy": round(energy, 1),
+                                "score": 0.0,
+                                "model": self.cfg.get("wakeword_model", "hey_jarvis"),
+                                "threshold": float(self.cfg.get("wakeword_threshold", 0.20)),
+                                "is_listening": True
+                            })
+
+                        if energy > speech_thresh:
+                            has_spoken = True
+                            silence_counter = 0
+                        else:
+                            if has_spoken:
+                                silence_counter += 1
+                                if silence_counter >= silence_limit and len(frames) >= min_chunks:
+                                    print(f"🛑 [VAD] 检测到说话停顿 (持续静音约 {silence_timeout}s)，自动截止录音并提交识别...", flush=True)
+                                    break
+                            elif len(frames) >= no_speech_limit:
+                                break
+                    except Exception:
+                        break
+        finally:
+            self._recording_active = False
 
         wav_path = "/tmp/user_input.wav"
         try:
@@ -960,9 +967,17 @@ class HardwareAgent:
                             self.trigger_proactive_care_payload(care_payload)
                 continue
 
+            if self._recording_active or self.state in (self.STATE_WAKING, self.STATE_LISTENING):
+                time.sleep(0.04)
+                continue
+
             try:
                 CHUNK = 1280
-                data = self.audio_stream.read(CHUNK, exception_on_overflow=False)
+                with self._audio_lock:
+                    if self._recording_active or self.state in (self.STATE_WAKING, self.STATE_LISTENING):
+                        data = b""
+                    else:
+                        data = self.audio_stream.read(CHUNK, exception_on_overflow=False)
                 if not data:
                     time.sleep(0.01)
                     continue
