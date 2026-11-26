@@ -3,7 +3,7 @@ import time
 import random
 import threading
 from typing import Optional, Tuple
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageChops, ImageFilter
 
 try:
     from core.svg_animator import SVGAnimator
@@ -122,8 +122,7 @@ class EyeRenderer:
 
     def render_eyes(self, emotion: str = "NORMAL", look_x: float = 0, look_y: float = 0, now: float = None) -> Image.Image:
         """
-        单帧灵动面部渲染（兼容旧版接口，自动叠加动态生物参数）。
-        在树莓派 3 耗时 < 1.5ms。
+        单帧灵动面部渲染（2x 超采样抗锯齿 + 轻量霓虹光晕 + 纯黑高对比背景）。
         """
         if now is None:
             now = time.time()
@@ -139,109 +138,107 @@ class EyeRenderer:
             blink_scale, breathe_scale, eff_x, eff_y = self._update_dynamics(now)
             emo = self.target_emotion
 
-        # 创建基础画布与画笔
-        img = Image.new("RGB", (self.width, self.height), (10, 14, 20))
-        draw = ImageDraw.Draw(img)
+        # 2x 超采样画布，消除弧线与斜边锯齿；纯黑底提升 TFT 屏幕对比度
+        S = 2
+        sw, sh = self.width * S, self.height * S
+        img_hi = Image.new("RGB", (sw, sh), (0, 0, 0))
+        draw = ImageDraw.Draw(img_hi)
 
-        eye_color = (0, 220, 255)
+        eye_color = (0, 229, 255)
         highlight_color = (255, 255, 255)
 
-        cy = int(self.height // 2 + eff_y)
-        lx = int(self.width // 4 + eff_x)
-        rx = int(self.width * 3 // 4 + eff_x)
+        cy = int((self.height // 2 + eff_y) * S)
+        lx = int((self.width // 4 + eff_x) * S)
+        rx = int((self.width * 3 // 4 + eff_x) * S)
 
-        # 基础眼眶尺寸
-        base_w = int(72 * breathe_scale)
-        base_h = int(100 * breathe_scale * blink_scale)
-        if base_h < 6:
-            base_h = 6
+        # 更饱满灵动的眼眶比例
+        base_w = int(78 * breathe_scale * S)
+        base_h = int(96 * breathe_scale * blink_scale * S)
+        if base_h < 10:
+            base_h = 10
+
+        def _draw_eye_highlights(x_center, y_center, scale=1.0):
+            hl_y = y_center - int(26 * scale * S)
+            hl_x = x_center - int(14 * scale * S)
+            draw.ellipse([hl_x - 14, hl_y - 14, hl_x + 14, hl_y + 14], fill=highlight_color)
+            draw.ellipse([hl_x + 16, hl_y + 14, hl_x + 28, hl_y + 26], fill=(210, 248, 255))
 
         if emo == "NORMAL":
-            radius = min(22, base_h // 2)
+            radius = min(28 * S, base_h // 2)
             for cx in [lx, rx]:
                 draw.rounded_rectangle(
                     [cx - base_w // 2, cy - base_h // 2, cx + base_w // 2, cy + base_h // 2],
                     radius=radius,
                     fill=eye_color,
                 )
-                if blink_scale > 0.4:
-                    hl_y = cy - int(30 * breathe_scale)
-                    draw.ellipse([cx - 16, hl_y - 6, cx - 6, hl_y + 4], fill=highlight_color)
+                if blink_scale > 0.45:
+                    _draw_eye_highlights(cx, cy, breathe_scale)
 
         elif emo == "HAPPY":
-            # 拟真笑眼弯弯 + 律动微跃
-            bounce_y = int(4 * math.sin(now * 5.0))
+            bounce_y = int(4 * math.sin(now * 5.0) * S)
             for cx in [lx, rx]:
                 draw.arc(
-                    [cx - 40, cy - 35 + bounce_y, cx + 40, cy + 30 + bounce_y],
+                    [cx - 42 * S, cy - 34 * S + bounce_y, cx + 42 * S, cy + 34 * S + bounce_y],
                     start=195,
                     end=345,
                     fill=eye_color,
-                    width=14,
+                    width=13 * S,
                 )
-            # 俏皮腮红
-            pink = (255, 64, 129)
-            draw.ellipse([lx - 38, cy + 26, lx - 18, cy + 38], fill=pink)
-            draw.ellipse([rx + 18, cy + 26, rx + 38, cy + 38], fill=pink)
+            pink = (255, 77, 141)
+            draw.ellipse([lx - 40 * S, cy + 26 * S, lx - 16 * S, cy + 40 * S], fill=pink)
+            draw.ellipse([rx + 16 * S, cy + 26 * S, rx + 40 * S, cy + 40 * S], fill=pink)
 
         elif emo == "BLINK":
             for cx in [lx, rx]:
-                draw.rounded_rectangle([cx - base_w // 2, cy - 4, cx + base_w // 2, cy + 4], radius=3, fill=eye_color)
+                draw.rounded_rectangle([cx - base_w // 2, cy - 4 * S, cx + base_w // 2, cy + 4 * S], radius=4 * S, fill=eye_color)
 
         elif emo == "CONFUSED":
-            # 左大眼 + 右小眼微斜
-            r_left = min(22, base_h // 2)
+            r_left = min(28 * S, base_h // 2)
             draw.rounded_rectangle(
                 [lx - base_w // 2, cy - base_h // 2, lx + base_w // 2, cy + base_h // 2],
                 radius=r_left,
                 fill=eye_color,
             )
-            if blink_scale > 0.4:
-                draw.ellipse([lx - 16, cy - 30, lx - 6, cy - 20], fill=highlight_color)
+            if blink_scale > 0.45:
+                _draw_eye_highlights(lx, cy, breathe_scale)
 
-            # 右侧好奇微眯方块
-            r_w = int(48 * breathe_scale)
-            r_h = int(48 * breathe_scale * blink_scale)
+            r_w = int(50 * breathe_scale * S)
+            r_h = int(50 * breathe_scale * blink_scale * S)
             draw.rounded_rectangle(
                 [rx - r_w // 2, cy - r_h // 2, rx + r_w // 2, cy + r_h // 2],
-                radius=14,
+                radius=16 * S,
                 fill=eye_color,
             )
 
         elif emo == "SAD":
-            # 下垂弧度 + 滴落泪花动效
             for cx in [lx, rx]:
-                draw.arc([cx - 40, cy - 20, cx + 40, cy + 50], start=15, end=165, fill=eye_color, width=12)
-            # 周期性下滑水滴 (周期 2.0s)
+                draw.arc([cx - 40 * S, cy - 20 * S, cx + 40 * S, cy + 50 * S], start=15, end=165, fill=eye_color, width=12 * S)
             tear_progress = (now % 2.0) / 2.0
-            tear_y = int(cy + 25 + tear_progress * 35)
-            draw.ellipse([rx + 16, tear_y - 4, rx + 24, tear_y + 6], fill=(0, 220, 255))
+            tear_y = int((self.height // 2 + eff_y + 25 + tear_progress * 35) * S)
+            draw.ellipse([rx + 16 * S, tear_y - 5 * S, rx + 25 * S, tear_y + 7 * S], fill=eye_color)
 
         elif emo == "ANGRY":
-            # 愤怒斜切眼 + 紧张微颤
-            quiver = int(2.0 * math.sin(now * 30.0))
-            red_color = (255, 50, 60)
+            quiver = int(2.0 * math.sin(now * 30.0) * S)
+            red_color = (255, 56, 72)
             for cx, is_left in [(lx + quiver, True), (rx + quiver, False)]:
-                draw.rounded_rectangle([cx - 36, cy - 45, cx + 36, cy + 45], radius=18, fill=red_color)
+                draw.rounded_rectangle([cx - 38 * S, cy - 44 * S, cx + 38 * S, cy + 44 * S], radius=18 * S, fill=red_color)
                 cut_pts = [
-                    (cx - 40, cy - 55),
-                    (cx + 40, cy - (30 if is_left else 55)),
-                    (cx + 40, cy - 40),
-                    (cx - 40, cy - (40 if is_left else 25)),
+                    (cx - 42 * S, cy - 56 * S),
+                    (cx + 42 * S, cy - (26 if is_left else 56) * S),
+                    (cx + 42 * S, cy - 42 * S),
+                    (cx - 42 * S, cy - (42 if is_left else 24) * S),
                 ]
-                draw.polygon(cut_pts, fill=(10, 14, 20))
+                draw.polygon(cut_pts, fill=(0, 0, 0))
 
         elif emo == "SURPRISED":
-            # 吃惊圆眼 + 瞳孔收缩律动
             shock_scale = 1.0 + 0.08 * math.sin(now * 8.0)
-            rad_outer = int(46 * shock_scale)
+            rad_outer = int(46 * shock_scale * S)
             for cx in [lx, rx]:
                 draw.ellipse([cx - rad_outer, cy - rad_outer, cx + rad_outer, cy + rad_outer], fill=eye_color)
-                draw.ellipse([cx - 18, cy - 18, cx + 18, cy + 18], fill=(10, 14, 20))
-                draw.ellipse([cx - 10, cy - 14, cx - 2, cy - 6], fill=highlight_color)
+                draw.ellipse([cx - 18 * S, cy - 18 * S, cx + 18 * S, cy + 18 * S], fill=(0, 0, 0))
+                draw.ellipse([cx - 11 * S, cy - 15 * S, cx - 1 * S, cy - 5 * S], fill=highlight_color)
 
         elif emo == "LOVE":
-            # 拟真爱心跳动 (Lub-Dub 心脏搏动节律)
             t_phase = (now % 1.2) / 1.2
             heart_scale = 1.0
             if t_phase < 0.15:
@@ -254,49 +251,51 @@ class EyeRenderer:
                 heart_scale = 1.21 - ((t_phase - 0.45) / 0.15) * 0.21
 
             pink = (255, 64, 129)
-            r = int(16 * heart_scale)
+            r = int(17 * heart_scale * S)
             for cx in [lx, rx]:
-                draw.ellipse([cx - r * 2 + 2, cy - r - 10, cx + 2, cy + r - 10], fill=pink)
-                draw.ellipse([cx - 2, cy - r - 10, cx + r * 2 - 2, cy + r - 10], fill=pink)
-                draw.polygon([(cx - r * 2 + 4, cy - 4), (cx + r * 2 - 4, cy - 4), (cx, cy + r * 2)], fill=pink)
-                draw.ellipse([cx - 14, cy - 16, cx - 6, cy - 8], fill=highlight_color)
+                draw.ellipse([cx - r * 2 + 2 * S, cy - r - 10 * S, cx + 2 * S, cy + r - 10 * S], fill=pink)
+                draw.ellipse([cx - 2 * S, cy - r - 10 * S, cx + r * 2 - 2 * S, cy + r - 10 * S], fill=pink)
+                draw.polygon([(cx - r * 2 + 4 * S, cy - 4 * S), (cx + r * 2 - 4 * S, cy - 4 * S), (cx, cy + r * 2)], fill=pink)
+                draw.ellipse([cx - 16 * S, cy - 18 * S, cx - 5 * S, cy - 7 * S], fill=highlight_color)
 
         elif emo == "WINK":
-            # 左眼笑，右眼睁
-            draw.arc([lx - 40, cy - 35, lx + 40, cy + 30], start=195, end=345, fill=eye_color, width=14)
-            draw.rounded_rectangle([rx - base_w // 2, cy - base_h // 2, rx + base_w // 2, cy + base_h // 2], radius=22, fill=eye_color)
-            if blink_scale > 0.4:
-                draw.ellipse([rx - 16, cy - 30, rx - 6, cy - 20], fill=highlight_color)
+            draw.arc([lx - 42 * S, cy - 34 * S, lx + 42 * S, cy + 34 * S], start=195, end=345, fill=eye_color, width=13 * S)
+            draw.rounded_rectangle([rx - base_w // 2, cy - base_h // 2, rx + base_w // 2, cy + base_h // 2], radius=28 * S, fill=eye_color)
+            if blink_scale > 0.45:
+                _draw_eye_highlights(rx, cy, breathe_scale)
 
         elif emo == "SLEEPY":
-            # 瞌睡半闭眼 + 浮动 Z 字符
-            sleep_blue = (100, 180, 246)
+            sleep_blue = (96, 175, 250)
             for cx in [lx, rx]:
-                draw.rounded_rectangle([cx - 32, cy + 8, cx + 32, cy + 22], radius=5, fill=sleep_blue)
-            # 浮动上升的 z Z
-            z_y1 = cy - 40 - int(((now * 25) % 45))
-            draw.text((rx + 22, z_y1), "z", fill=(0, 220, 255))
-            z_y2 = cy - 65 - int(((now * 25 + 20) % 45))
-            draw.text((rx + 34, z_y2), "Z", fill=(0, 220, 255))
+                draw.rounded_rectangle([cx - 34 * S, cy + 6 * S, cx + 34 * S, cy + 20 * S], radius=7 * S, fill=sleep_blue)
+            z_y1 = int((self.height // 2 + eff_y - 40 - ((now * 25) % 45)) * S)
+            draw.text((rx + 22 * S, z_y1), "z", fill=eye_color)
+            z_y2 = int((self.height // 2 + eff_y - 65 - ((now * 25 + 20) % 45)) * S)
+            draw.text((rx + 34 * S, z_y2), "Z", fill=eye_color)
 
         elif emo == "DIZZY":
-            # 动态同心旋转蚊香圆圈
             orange = (255, 170, 0)
             angle_offset = int((now * 280) % 360)
             for cx in [lx, rx]:
-                draw.arc([cx - 36, cy - 36, cx + 36, cy + 36], start=angle_offset, end=angle_offset + 260, fill=orange, width=6)
-                draw.arc([cx - 24, cy - 24, cx + 24, cy + 24], start=(angle_offset + 90) % 360, end=(angle_offset + 330) % 360, fill=orange, width=5)
-                draw.arc([cx - 12, cy - 12, cx + 12, cy + 12], start=(angle_offset + 180) % 360, end=(angle_offset + 380) % 360, fill=orange, width=4)
+                draw.arc([cx - 38 * S, cy - 38 * S, cx + 38 * S, cy + 38 * S], start=angle_offset, end=angle_offset + 260, fill=orange, width=7 * S)
+                draw.arc([cx - 25 * S, cy - 25 * S, cx + 25 * S, cy + 25 * S], start=(angle_offset + 90) % 360, end=(angle_offset + 330) % 360, fill=orange, width=6 * S)
+                draw.arc([cx - 12 * S, cy - 12 * S, cx + 12 * S, cy + 12 * S], start=(angle_offset + 180) % 360, end=(angle_offset + 380) % 360, fill=orange, width=5 * S)
 
         elif emo == "THINKING":
-            # 思考向上望与水平左右微扫视
-            scan_x = int(8 * math.sin(now * 2.5))
+            scan_x = int(8 * math.sin(now * 2.5) * S)
             for cx in [lx, rx]:
-                draw.rounded_rectangle([cx - 36, cy - 32, cx + 36, cy + 42], radius=18, fill=eye_color)
-                draw.ellipse([cx - 6 + scan_x, cy - 28, cx + 18 + scan_x, cy - 4], fill=highlight_color)
+                draw.rounded_rectangle([cx - 38 * S, cy - 32 * S, cx + 38 * S, cy + 44 * S], radius=22 * S, fill=eye_color)
+                draw.ellipse([cx - 6 * S + scan_x, cy - 28 * S, cx + 18 * S + scan_x, cy - 4 * S], fill=highlight_color)
 
         else:
             return self.render_eyes("NORMAL", look_x, look_y, now)
+
+        # 2x -> 1x 抗锯齿前景 + 极低成本霓虹外发光层 (缩放到 1/4 做微模糊再拉回合成)
+        fg = img_hi.resize((self.width, self.height), Image.Resampling.BILINEAR)
+        glow_small = fg.resize((self.width // 4, self.height // 4), Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(radius=2))
+        glow_dim = glow_small.point(lambda p: int(p * 0.48))
+        glow_full = glow_dim.resize((self.width, self.height), Image.Resampling.BILINEAR)
+        img = ImageChops.lighter(glow_full, fg)
 
         # 叠加 MenuFSM 菜单与二维码浮层 (树莓派 ST7789 硬件屏同构渲染)
         try:
