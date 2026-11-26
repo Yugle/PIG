@@ -1,7 +1,7 @@
 """
 Real Git Tag-based Firmware Version & OTA Update Manager
 Zero-mock implementation:
-- Reads genuine SemVer version tags from Git repository (with VERSION fallback).
+- Reads genuine SemVer version tags from Git repository.
 - Checks remote Git tags (via git ls-remote) across remotes (origin / github).
 - Compares SemVer versions dynamically.
 """
@@ -95,8 +95,7 @@ def get_current_version() -> str:
     """
     获取当前系统固件真实版本号:
     1. 优先读取 Git Release Tag (如 v0.1.0)
-    2. 若未打 Tag，读取根目录 VERSION 文件
-    3. 若均不存在，动态读取当前 commit hash 生成开发态版本号 (如 dev-115ec49)
+    2. 若未打 Tag，动态读取当前 commit hash 生成开发态版本号 (如 dev-115ec49)
     绝不使用虚假硬编码 mock 数据！
     """
     # 1. 尝试读取最近 Tag
@@ -104,19 +103,7 @@ def get_current_version() -> str:
     if tag:
         return tag
 
-    # 2. 尝试读取 VERSION 文件
-    ver_file = DIRECTORY / "VERSION"
-    if ver_file.exists():
-        try:
-            content = ver_file.read_text(encoding="utf-8").strip()
-            if content:
-                if not content.startswith("v") and not content.startswith("V"):
-                    content = f"v{content}"
-                return content
-        except Exception:
-            pass
-
-    # 3. 读取当前 Git Commit Hash 构造开发版本
+    # 2. 读取当前 Git Commit Hash 构造开发版本
     try:
         res = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],

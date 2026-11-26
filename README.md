@@ -645,7 +645,6 @@ PIG/
 ├── app.py                 # 全栈主服务端入口（真机物理屏/按键联动 + 3D 控制台 + 插件路由分发，端口 8090）
 ├── main_agent.py          # PIG 纯命令行多模态主程序 (语音唤醒/感知/决策/执行闭环)
 ├── config.json            # 核心全局配置 (大模型/ASR/TTS/OTA域名/舵机校准)
-├── VERSION                # 语义化版本标识文件 (SemVer: 0.1.0)
 ├── requirements.txt       # Python 依赖清单
 ├── ota/                   # Vercel 无服务器 OTA 版本服务 (自动拉取 GitHub Tag/Release 与 Changelog)
 │   ├── vercel.json        # Vercel 路由重写 (/version.json -> /api/version) 与边缘缓存配置
@@ -1202,7 +1201,7 @@ if __name__ == "__main__":
    * 将仓库 `ota/` 目录作为 Root Directory 部署至 Vercel 并绑定自定义域名（例如 `ota.你的域名.com`）；
    * 在 `/settings` 页的 **OTA 更新域名** 或 `config.json` 中配置 `"ota_url": "ota.你的域名.com"`（无需手动补全 `https://` 或 `/version.json`）；
    * 当 GitHub 仓库打 Tag 或发布 Release 后，Vercel Serverless Function 自动拉取最新 Tag/Release 与 Changelog（带 60s 边缘缓存），设备毫秒级检测新版本；
-   * 若未配置自定义域名或域名不可达，自动回退至 `git ls-remote --tags`（`origin` Gitee → `github` GitHub）探测远端真实标签，并比对本地版本（Git Tag / `VERSION` / Commit Hash）。
+   * 若未配置自定义域名或域名不可达，自动回退至 `git ls-remote --tags`（`origin` Gitee → `github` GitHub）探测远端真实标签，并比对本地版本（Git Tag / Commit Hash）。
 
 2. **一键增量升级 (`core/version.py`)**:
    * 在 `/settings` 页或屏幕系统菜单点击升级，后台调用 `perform_ota_update()` 优先向 `origin`（Gitee）拉取最新 Tag 并切换版本（失败自动回退 `github`），无需重新下载完整压缩包。
