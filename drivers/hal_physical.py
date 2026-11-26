@@ -1,6 +1,7 @@
 import time
 import threading
 import subprocess
+import numpy as np
 from PIL import Image
 from .hal_base import BaseRobotHAL
 
@@ -126,16 +127,19 @@ class PhysicalRobotHAL(BaseRobotHAL):
                 print(f"⚠️ [HAL-Physical] 毫米波雷达初始化跳过: {e}")
 
 
-        # 初始化 ST7789 2.4 寸 SPI 彩屏 (240x320)
+        # 初始化 ST7789 2.4 寸 SPI 彩屏 (240x320, 48MHz SPI + 16-bit RGB565)
         self.screen = None
+        self._spi_serial = None
         if spi is not None and st7789 is not None:
             try:
-                serial_spi = spi(port=spi_port, device=spi_device, gpio_DC=dc_pin, gpio_RST=rst_pin, bus_speed_hz=32000000)
+                serial_spi = spi(port=spi_port, device=spi_device, gpio_DC=dc_pin, gpio_RST=rst_pin, bus_speed_hz=48000000)
                 self.screen = st7789(serial_spi, width=240, height=320, rotate=0)
-                # 覆盖 luma.lcd 默认横屏 MADCTL(0x70) 与反色 INVON(0x21)，适配 GMT024 竖屏 240x320 正色显示
+                self._spi_serial = serial_spi
+                # 覆盖 luma.lcd 默认横屏 MADCTL(0x70)、反色 INVON(0x21) 与 18-bit(0x06)，切换 16-bit RGB565(0x05)
                 self.screen.command(0x36, 0x00)
                 self.screen.command(0x20)
-                print("📺 [HAL-Physical] ST7789 屏幕初始化成功")
+                self.screen.command(0x3A, 0x05)
+                print("📺 [HAL-Physical] ST7789 屏幕初始化成功 (48MHz RGB565)")
             except Exception as e:
                 print(f"⚠️ [HAL-Physical] ST7789 屏幕初始化失败: {e}")
         else:
@@ -308,7 +312,23 @@ class PhysicalRobotHAL(BaseRobotHAL):
     def display_face(self, pil_image: Image.Image):
         if self.screen is not None:
             try:
-                self.screen.display(pil_image)
+                if pil_image.mode != "RGB":
+                    pil_image = pil_image.convert("RGB")
+                if pil_image.size != (240, 320):
+                    pil_image = pil_image.resize((240, 320))
+                arr = np.asarray(pil_image, dtype=np.uint16)
+                rgb565 = ((arr[:, :, 0] & 0xF8) << 8) | ((arr[:, :, 1] & 0xFC) << 3) | (arr[:, :, 2] >> 3)
+                raw_bytes = rgb565.astype(">u2", copy=False).tobytes()
+
+                self.screen.set_window(0, 0, 240, 320)
+                ser = self._spi_serial
+                if ser is not None and hasattr(ser, "_spi") and hasattr(ser._spi, "writebytes2") and hasattr(ser, "_gpio") and hasattr(ser, "_DC"):
+                    ser._gpio.output(ser._DC, 1)
+                    ser._spi.writebytes2(raw_bytes)
+                elif ser is not None:
+                    ser.data(raw_bytes)
+                else:
+                    self.screen.display(pil_image)
             except Exception as e:
                 print(f"⚠️ [HAL-Physical] 屏幕刷新错误: {e}")
 

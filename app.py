@@ -342,7 +342,7 @@ if hardware_agent and hardware_agent.hal:
 
     hardware_agent.add_radar_listener(_on_radar_event_link)
 
-    # 📺 真机 ST7789 物理屏幕实时渲染循环 (~15 FPS)
+    # 📺 真机 ST7789 物理屏幕极速渲染循环 (目标 30 FPS + 脏帧去重)
     if getattr(hardware_agent.hal, "screen", None) is not None:
         def _physical_screen_render_loop():
             from PIL import Image
@@ -350,8 +350,11 @@ if hardware_agent and hardware_agent.hal:
             renderer = EyeRenderer()
             last_black = False
             last_frame_bytes = None
-            print("📺 [PhysicalScreen] 物理屏幕渲染线程已启动 (240x320, 脏帧去重)")
+            target_interval = 1.0 / 30.0
+            print("📺 [PhysicalScreen] 物理屏幕极速渲染线程已启动 (240x320 RGB565, 目标 30 FPS)")
             while True:
+                t0 = time.monotonic()
+                redrawn = False
                 try:
                     if getattr(menu_fsm, "_shutting_down", False):
                         return
@@ -373,9 +376,12 @@ if hardware_agent and hardware_agent.hal:
                     if frame_bytes != last_frame_bytes:
                         hardware_agent.hal.display_face(frame)
                         last_frame_bytes = frame_bytes
+                        redrawn = True
                 except Exception as e:
                     print(f"⚠️ [PhysicalScreen] 渲染异常: {e}")
-                time.sleep(0.05)
+                elapsed = time.monotonic() - t0
+                sleep_dur = max(0.002, target_interval - elapsed) if redrawn else 0.025
+                time.sleep(sleep_dur)
 
         threading.Thread(target=_physical_screen_render_loop, daemon=True).start()
 
