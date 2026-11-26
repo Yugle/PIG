@@ -391,7 +391,7 @@ def handle_http(method: str, path: str, handler, ctx: dict) -> bool:
 
     if method == "POST" and req_path == "/api/netease/qr_start_screen":
         if menu_fsm:
-            menu_fsm.show_netease_qr_on_screen()
+            menu_fsm.show_skill_qr_on_screen("netease_music", mode_name="NETEASE_QR")
         handler._send_json({
             "status": "waiting",
             "action": "displayed_on_robot_screen",
@@ -401,7 +401,7 @@ def handle_http(method: str, path: str, handler, ctx: dict) -> bool:
 
     if method == "POST" and req_path == "/api/netease/qr_dismiss_screen":
         if menu_fsm:
-            menu_fsm.close_netease_qr()
+            menu_fsm.close_skill_qr()
         handler._send_json({"status": "ok"})
         return True
 

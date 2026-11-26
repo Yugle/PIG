@@ -772,18 +772,6 @@ class MenuFSM:
             self.last_interaction_time = time.time()
             self._notify_listeners()
 
-    def show_xiaomi_qr_on_screen(self):
-        self.show_skill_qr_on_screen("xiaomi_iot", mode_name="XIAOMI_QR")
-
-    def close_xiaomi_qr(self):
-        self.close_skill_qr()
-
-    def show_netease_qr_on_screen(self):
-        self.show_skill_qr_on_screen("netease_music", mode_name="NETEASE_QR")
-
-    def close_netease_qr(self):
-        self.close_skill_qr()
-
     def enter_easter_egg(self):
         """进入关于本项目(PIG)自白彩蛋模式"""
         with self._lock:

@@ -133,7 +133,7 @@ def run(question="请仔细观察这张照片，告诉我你看到了什么？",
 
     # 将本次送检大模型的抓拍瞬间同步持久化至快照文件，供前端对话视窗查看
     try:
-        with open("/tmp/pig_visual_qa_snapshot.jpg", "wb") as f:
+        with open("/tmp/pig_latest_snapshot.jpg", "wb") as f:
             f.write(img_bytes)
     except Exception:
         pass

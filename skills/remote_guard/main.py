@@ -293,7 +293,7 @@ def run(direction="center", question="巡视当前环境并汇报状态", **kwar
 
     # 仅写入独立的远程安防快照文件，绝不写回 /tmp/pig_latest_frame.jpg 污染输入源！
     try:
-        with open("/tmp/pig_remote_guard_snapshot.jpg", "wb") as f:
+        with open("/tmp/pig_latest_snapshot.jpg", "wb") as f:
             f.write(img_bytes)
     except Exception:
         pass

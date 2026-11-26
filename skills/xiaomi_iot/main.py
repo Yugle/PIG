@@ -80,7 +80,7 @@ def run(device="台灯", action="打开", value=""):
 
         try:
             from core.menu_fsm import menu_fsm
-            menu_fsm.show_xiaomi_qr_on_screen()
+            menu_fsm.show_skill_qr_on_screen("xiaomi_iot", mode_name="XIAOMI_QR")
         except Exception:
             pass
         return "好嘞！已在我的屏幕上弹出米家授权二维码啦，请打开手机【米家 App】扫码授权，完成后我将自动同步你的所有智能设备！"
@@ -353,7 +353,7 @@ def handle_http(method: str, path: str, handler, ctx: dict) -> bool:
 
     if method == "POST" and req_path == "/api/xiaomi/qr_start_screen":
         if menu_fsm:
-            menu_fsm.show_xiaomi_qr_on_screen()
+            menu_fsm.show_skill_qr_on_screen("xiaomi_iot", mode_name="XIAOMI_QR")
         handler.send_response(200)
         handler.send_header("Content-Type", "application/json; charset=utf-8")
         handler.send_header("Access-Control-Allow-Origin", "*")
@@ -368,7 +368,7 @@ def handle_http(method: str, path: str, handler, ctx: dict) -> bool:
 
     if method == "POST" and req_path == "/api/xiaomi/qr_dismiss_screen":
         if menu_fsm:
-            menu_fsm.close_xiaomi_qr()
+            menu_fsm.close_skill_qr()
         handler.send_response(200)
         handler.send_header("Content-Type", "application/json; charset=utf-8")
         handler.send_header("Access-Control-Allow-Origin", "*")

@@ -490,7 +490,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "local_ip": state["local_ip"],
                 "cpu_temp": state["doctor"].get("cpu_temp", "45°C"),
                 "mimo_status": state["doctor"].get("mimo_status", "正常 (OK)"),
-                "feishu": cur_cfg.get("feishu", {}),
                 "ota_url": cur_cfg.get("ota_url", ""),
                 "firmware_version": getattr(menu_fsm, "version_str", "v0.1.0"),
                 "update_status": getattr(menu_fsm, "update_status", "已是最新")
@@ -565,9 +564,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
         # 视觉抓拍快照静态访问接口 (供对话框实时查看小猪眼前捕获的真实现实瞬间)
         if self.path.startswith("/api/vision/snapshot") or self.path.startswith("/api/vision/latest_snapshot"):
-            snap_path = "/tmp/pig_visual_qa_snapshot.jpg"
-            if not os.path.exists(snap_path):
-                snap_path = "/tmp/pig_remote_guard_snapshot.jpg"
+            snap_path = "/tmp/pig_latest_snapshot.jpg"
             if not os.path.exists(snap_path):
                 snap_path = "/tmp/pig_latest_frame.jpg"
             if os.path.exists(snap_path):
@@ -957,8 +954,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         cur_cfg[k] = body[k]
                 if "face_tracking" in body:
                     cur_cfg["face_tracking"] = bool(body["face_tracking"])
-                if "feishu" in body and isinstance(body["feishu"], dict):
-                    cur_cfg.setdefault("feishu", {}).update(body["feishu"])
 
                 apply_runtime_config(cur_cfg, body)
 
