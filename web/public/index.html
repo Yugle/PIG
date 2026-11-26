@@ -98,18 +98,6 @@
       line-height: 1.2; font-weight: 800; letter-spacing: -0.02em;
       margin: 0;
     }
-    .slogan-dots {
-      display: flex; gap: 6px; margin-bottom: 16px;
-    }
-    @media (max-width: 820px) { .slogan-dots { justify-content: center; } }
-    .slogan-dot {
-      width: 18px; height: 4px; border-radius: 999px;
-      background: rgba(255, 255, 255, 0.16); cursor: pointer;
-      transition: all 0.25s ease;
-    }
-    .slogan-dot.active {
-      width: 30px; background: var(--cyan);
-    }
     .grad {
       background: linear-gradient(90deg, #fff 0%, var(--cyan) 60%, #a78bfa 100%);
       -webkit-background-clip: text; color: transparent;
@@ -232,11 +220,6 @@
             <h1>有记忆、自进化，<br /><span class="grad">越相处越懂你的数字生命体</span></h1>
           </div>
         </div>
-        <div class="slogan-dots" id="sloganDots">
-          <span class="slogan-dot active" onclick="goSlogan(0)"></span>
-          <span class="slogan-dot" onclick="goSlogan(1)"></span>
-          <span class="slogan-dot" onclick="goSlogan(2)"></span>
-        </div>
         <p class="hero-desc">
           搭载 2.4 寸灵动表情屏与双轴云台，支持自然语音对话、眼神追随、音乐歌单播放与智能家居控制，还会随着相处慢慢记住你的习惯。
         </p>
@@ -315,7 +298,6 @@
 
   <script>
     const slogans = document.querySelectorAll(".hero-slogan");
-    const dots = document.querySelectorAll(".slogan-dot");
     let sloganIdx = 0;
     let sloganPaused = false;
 
@@ -325,10 +307,8 @@
       prev.classList.remove("active");
       prev.classList.add("exit");
       setTimeout(() => prev.classList.remove("exit"), 560);
-      dots[sloganIdx].classList.remove("active");
       sloganIdx = nextIdx;
       slogans[sloganIdx].classList.add("active");
-      dots[sloganIdx].classList.add("active");
     }
 
     const sloganWrap = document.getElementById("sloganWrap");
