@@ -32,7 +32,7 @@
    * 13. PIG 多模态交互主中枢 (`main_agent.py`)
    * 14. 全栈应用主入口与 3D WebGL 控制台 (`app.py` & `simulator/web_simulator.html`)
    * 15. 局域网远程代播服务 (`services/remote_server.py`)
-   * 16. OTA 自动化静默升级与 Vercel Git-Tag 云端版本服务 (`core/version.py` & `ota/`)
+   * 16. OTA 自动化静默升级与 Vercel 官网/版本服务 (`core/version.py` & `web/`)
    * 17. 飞书官方 WebSocket 双向网关与多 Session 交互 (`skills/feishu_bot/`)
    * 18. 2.4 寸屏幕端 GUI 交互系统与 4 键操作指南 (`core/menu_fsm.py`)
    * 19. 米家 IoT 智能家居直连与双模扫码授权 (`skills/xiaomi_iot/`)
@@ -646,10 +646,10 @@ PIG/
 ├── main_agent.py          # PIG 纯命令行多模态主程序 (语音唤醒/感知/决策/执行闭环)
 ├── config.json            # 核心全局配置 (大模型/ASR/TTS/OTA域名/舵机校准)
 ├── requirements.txt       # Python 依赖清单
-├── ota/                   # Vercel 无服务器 OTA 版本服务 (自动拉取 GitHub Tag/Release 与 Changelog)
+├── web/                   # PIG 官网门户与 Vercel 无服务器 OTA 接口 (自动拉取 GitHub Tag/Release)
 │   ├── vercel.json        # Vercel 路由重写 (/version.json -> /api/version) 与边缘缓存配置
 │   ├── api/version.js     # Serverless Function：直连 GitHub API 解析最新版本与更新日志
-│   └── public/index.html  # OTA 固件发布状态页面
+│   └── public/index.html  # 交互式官网首页 (大眼交互预览 + 发布时间线)
 ├── core/                  # 认知、硬件调度与全插件化内核 (100% 与具体技能解耦)
 │   ├── menu_fsm.py        # 2.4寸 LCD 屏幕 4 键多级 GUI 状态机与通用插件二维码弹窗
 │   ├── version.py         # 支持 Vercel 自定义域名与 Git Tag 双通道检查的 OTA 升级管理器
@@ -1193,12 +1193,12 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-### 16. OTA 自动化静默升级与 Vercel Git-Tag 云端版本服务 (`core/version.py` & `ota/`)
+### 16. OTA 自动化静默升级与 Vercel 官网/版本服务 (`core/version.py` & `web/`)
 
 系统引入了严格的语义化版本控制体系 (SemVer: `Major.Minor.Patch`) 与双通道 OTA 检测管线：
 
-1. **Vercel 无服务器版本中心 + Git Tag 自动同步 (`ota/api/version.js`)**:
-   * 将仓库 `ota/` 目录作为 Root Directory 部署至 Vercel 并绑定自定义域名（例如 `ota.你的域名.com`）；
+1. **Vercel 官网与 Git-Tag 版本中心 (`web/api/version.js`)**:
+   * 将仓库 `web/` 目录作为 Root Directory 部署至 Vercel 并绑定自定义域名（例如 `pig.ourdecade.cn`）；
    * 在 `/settings` 页的 **OTA 更新域名** 或 `config.json` 中配置 `"ota_url": "ota.你的域名.com"`（无需手动补全 `https://` 或 `/version.json`）；
    * 当 GitHub 仓库打 Tag 或发布 Release 后，Vercel Serverless Function 自动拉取最新 Tag/Release 与 Changelog（带 60s 边缘缓存），设备毫秒级检测新版本；
    * 若未配置自定义域名或域名不可达，自动回退至 `git ls-remote --tags`（`origin` Gitee → `github` GitHub）探测远端真实标签，并比对本地版本（Git Tag / Commit Hash）。

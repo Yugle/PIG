@@ -162,7 +162,7 @@ PIG/
 │   ├── pomodoro/                # 番茄钟专注陪伴
 │   └── dice_roll/               # 娱乐互动小插件
 │
-├── ota/                         # 【OTA 云端发布】Vercel Serverless Git-Tag 版本接口
+├── web/                         # 【官网与 OTA 云端服务】Vercel 门户 + Serverless Git-Tag 版本接口
 │   ├── vercel.json              # /version.json -> /api/version 重写与边缘缓存
 │   └── api/version.js           # 直连 GitHub Release/Tag 获取最新固件与 Changelog
 │
