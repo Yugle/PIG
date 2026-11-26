@@ -692,11 +692,9 @@ PIG/
 │   ├── robot.urdf         # URDF 运动学拓扑模型
 │   └── scene.xml          # MuJoCo 仿真物理场景
 ├── services/              # 辅助守护服务
-│   ├── remote_server.py   # 局域网 HTTP API 交互与远程控制服务
-│   └── ota_updater.py     # Git 静默 OTA 自动更新
+│   └── remote_server.py   # 局域网 HTTP API 交互与远程控制服务
 └── scripts/               # 运维与诊断脚本
     ├── setup_raspberry_pi.sh # 树莓派一键全自动装机脚本 (兼容 Debian Trixie + 清华源 + pigpio 编译)
-    ├── release_ota.py     # 一键更新本地 VERSION 工具
     ├── test_hardware.py   # 硬件链路 10 秒全功能自动体检工具
     ├── test_face.py       # 表情离线渲染测试
     └── test_hal.py        # 硬件抽象层离线测试
@@ -1206,30 +1204,8 @@ if __name__ == "__main__":
    * 当 GitHub 仓库打 Tag 或发布 Release 后，Vercel Serverless Function 自动拉取最新 Tag/Release 与 Changelog（带 60s 边缘缓存），设备毫秒级检测新版本；
    * 若未配置自定义域名或域名不可达，自动回退至 `git ls-remote --tags`（`origin` Gitee → `github` GitHub）探测远端真实标签，并比对本地版本（Git Tag / `VERSION` / Commit Hash）。
 
-2. **静默拉取与服务平滑自愈 (`services/ota_updater.py`)**:
-   ```python
-   # services/ota_updater.py 核心升级逻辑
-   import os, subprocess
-
-   def auto_upgrade(repo_dir="/home/pi/desktop_robot"):
-       os.chdir(repo_dir)
-       print("📡 检查远端代码仓库更新...")
-       subprocess.run(["git", "fetch", "origin", "main"], check=True)
-
-       loc = subprocess.check_output(["git", "rev-parse", "HEAD"]).strip()
-       rem = subprocess.check_output(["git", "rev-parse", "origin/main"]).strip()
-
-       if loc != rem:
-           print("📦 发现新版本代码，执行拉取...")
-           subprocess.run(["git", "pull", "origin", "main"], check=True)
-           if os.path.exists("requirements.txt"):
-               subprocess.run(["pip3", "install", "-r", "requirements.txt", "--quiet"])
-
-           print("🔁 重启 systemd 主服务...")
-           subprocess.run(["sudo", "systemctl", "restart", "robot.service"])
-           return True
-       return False
-   ```
+2. **一键增量升级 (`core/version.py`)**:
+   * 在 `/settings` 页或屏幕系统菜单点击升级，后台调用 `perform_ota_update()` 优先向 `origin`（Gitee）拉取最新 Tag 并切换版本（失败自动回退 `github`），无需重新下载完整压缩包。
 
 ---
 
