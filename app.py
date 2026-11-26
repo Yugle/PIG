@@ -370,7 +370,7 @@ if hardware_agent and hardware_agent.hal:
                         emo = getattr(hardware_agent, "current_emotion", "NORMAL") or "NORMAL"
                         frame = renderer.render_eyes(emotion=emo)
                     else:
-                        frame = Image.new("RGB", (240, 320), (10, 12, 16))
+                        frame = Image.new("RGB", (240, 320), (0, 0, 0))
                     frame = menu_fsm.render_pil_overlay(frame)
                     frame_bytes = frame.tobytes()
                     if frame_bytes != last_frame_bytes:

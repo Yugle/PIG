@@ -34,219 +34,244 @@ def get_local_ip() -> str:
 
 
 # ========================================================
-# Material Design 3 (Material You) 多主题配色方案
+# Material Design 3 (Pure-Black OLED 高对比多主题配色方案)
 # ========================================================
 THEMES = {
     "mint": {
         "name": "薄荷绿",
-        "primary": (123, 208, 193),       # #7bd0c1 Pixel Mint
-        "on_primary": (0, 55, 49),        # #003731
-        "on_primary_sub": (14, 82, 73),   # #0e5249
-        "surface": (18, 20, 20),          # #121414
-        "surface_container": (29, 36, 36),# #1d2424
-        "surface_high": (38, 48, 47),     # #26302f
-        "outline": (55, 68, 66),          # #374442
-        "badge_bg": (40, 59, 56),         # #283b38
-        "icon_bg_sel": (0, 72, 64),       # #004840
+        "primary": (64, 232, 208),        # #40e8d0 Vivid Mint Cyan
+        "on_primary": (0, 42, 38),        # #002a26
+        "on_primary_sub": (10, 72, 65),   # #0a4841
+        "surface": (0, 0, 0),             # #000000 Pure OLED Black
+        "surface_container": (18, 25, 27),# #12191b
+        "surface_high": (30, 42, 45),     # #1e2a2d
+        "outline": (46, 66, 68),          # #2e4244
+        "badge_bg": (22, 44, 42),         # #162c2a
+        "icon_bg_sel": (0, 78, 70),       # #004e46
     },
     "orange": {
         "name": "暖阳橙",
-        "primary": (255, 171, 64),        # #ffab40 Pixel Warm Amber
-        "on_primary": (74, 38, 0),        # #4a2600
-        "on_primary_sub": (102, 53, 0),   # #663500
-        "surface": (22, 19, 17),          # #161311
-        "surface_container": (38, 31, 26),# #261f1a
-        "surface_high": (52, 42, 35),     # #342a23
-        "outline": (76, 62, 52),          # #4c3e34
-        "badge_bg": (56, 44, 36),         # #382c24
-        "icon_bg_sel": (94, 49, 0),       # #5e3100
+        "primary": (255, 168, 48),        # #ffa830 Vivid Amber
+        "on_primary": (58, 28, 0),        # #3a1c00
+        "on_primary_sub": (96, 48, 0),    # #603000
+        "surface": (0, 0, 0),             # #000000 Pure OLED Black
+        "surface_container": (26, 20, 16),# #1a1410
+        "surface_high": (44, 34, 26),     # #2c221a
+        "outline": (72, 54, 40),          # #483628
+        "badge_bg": (46, 34, 24),         # #2e2218
+        "icon_bg_sel": (102, 50, 0),      # #663200
     },
     "blue": {
         "name": "海天蓝",
-        "primary": (130, 177, 255),      # #82b1ff Pixel Sky Blue
-        "on_primary": (0, 44, 94),        # #002c5e
-        "on_primary_sub": (0, 64, 136),   # #004088
-        "surface": (16, 19, 24),          # #101318
-        "surface_container": (26, 32, 42),# #1a202a
-        "surface_high": (36, 44, 58),     # #242c3a
-        "outline": (52, 64, 84),          # #344054
-        "badge_bg": (32, 44, 62),         # #202c3e
-        "icon_bg_sel": (0, 60, 128),      # #003c80
+        "primary": (110, 178, 255),      # #6eb2ff Vivid Sky Blue
+        "on_primary": (0, 38, 86),        # #002656
+        "on_primary_sub": (0, 62, 134),   # #003e86
+        "surface": (0, 0, 0),             # #000000 Pure OLED Black
+        "surface_container": (16, 22, 32),# #101620
+        "surface_high": (28, 38, 56),     # #1c2638
+        "outline": (48, 64, 92),          # #30405c
+        "badge_bg": (24, 38, 60),         # #18263c
+        "icon_bg_sel": (0, 62, 134),      # #003e86
     },
     "purple": {
         "name": "薰衣紫",
-        "primary": (208, 188, 255),      # #d0bcff Pixel Lavender
-        "on_primary": (56, 30, 114),      # #381e72
-        "on_primary_sub": (79, 44, 150),  # #4f2c96
-        "surface": (20, 18, 24),          # #141218
-        "surface_container": (33, 29, 40),# #211d28
-        "surface_high": (46, 41, 56),     # #2e2938
-        "outline": (68, 60, 82),          # #443c52
-        "badge_bg": (48, 40, 62),         # #30283e
-        "icon_bg_sel": (79, 44, 150),     # #4f2c96
+        "primary": (198, 170, 255),      # #c6aaff Vivid Lavender
+        "on_primary": (46, 22, 98),       # #2e1662
+        "on_primary_sub": (78, 42, 148),  # #4e2a94
+        "surface": (0, 0, 0),             # #000000 Pure OLED Black
+        "surface_container": (20, 17, 28),# #14111c
+        "surface_high": (36, 30, 50),     # #241e32
+        "outline": (62, 52, 84),          # #3e3454
+        "badge_bg": (38, 30, 58),         # #261e3a
+        "icon_bg_sel": (78, 42, 148),     # #4e2a94
     },
     "mono": {
         "name": "极简白",
-        "primary": (240, 240, 240),      # #f0f0f0 Bauhaus Minimalist
-        "on_primary": (18, 18, 18),       # #121212
-        "on_primary_sub": (50, 50, 50),   # #323232
-        "surface": (18, 18, 18),          # #121212
-        "surface_container": (32, 32, 32),# #202020
-        "surface_high": (46, 46, 46),     # #2e2e2e
-        "outline": (64, 64, 64),          # #404040
-        "badge_bg": (44, 44, 44),         # #2c2c2c
-        "icon_bg_sel": (200, 200, 200),   # #c8c8c8
+        "primary": (242, 246, 252),      # #f2f6fc Crisp Ice White
+        "on_primary": (10, 12, 16),       # #0a0c10
+        "on_primary_sub": (42, 48, 58),   # #2a303a
+        "surface": (0, 0, 0),             # #000000 Pure OLED Black
+        "surface_container": (20, 23, 28),# #14171c
+        "surface_high": (36, 42, 52),     # #242a34
+        "outline": (60, 68, 82),          # #3c4452
+        "badge_bg": (30, 35, 44),         # #1e232c
+        "icon_bg_sel": (210, 218, 230),   # #d2dae6
     }
 }
 THEME_KEYS = ["mint", "orange", "blue", "purple", "mono"]
 
-def _draw_vector_icon(draw, icon_name: str, cx: int, cy: int, color):
+def _draw_vector_icon(draw, icon_name: str, cx: int, cy: int, color, bg_color=(20, 24, 28), scale: int = 2):
     """
-    在指定中心点 (cx, cy) 绘制 18x18px 矢量微图标
+    在指定中心点 (cx, cy) 按给定倍率 scale 绘制矢量微图标（默认 2x 超采样抗锯齿）
     """
+    s = scale
+    w2 = max(2, 2 * s)
+    w1 = max(1, s)
+
     if icon_name == "wifi":
-        draw.arc([cx - 8, cy - 7, cx + 8, cy + 9], 200, 340, fill=color, width=2)
-        draw.arc([cx - 5, cy - 3, cx + 5, cy + 7], 200, 340, fill=color, width=2)
-        draw.ellipse([cx - 2, cy + 4, cx + 2, cy + 8], fill=color)
+        draw.arc([cx - 8*s, cy - 7*s, cx + 8*s, cy + 9*s], 200, 340, fill=color, width=w2)
+        draw.arc([cx - 5*s, cy - 3*s, cx + 5*s, cy + 7*s], 200, 340, fill=color, width=w2)
+        draw.ellipse([cx - 2*s, cy + 4*s, cx + 2*s, cy + 8*s], fill=color)
 
     elif icon_name == "doctor":
-        draw.line([(cx - 8, cy + 1), (cx - 4, cy + 1)], fill=color, width=2)
-        draw.line([(cx - 4, cy + 1), (cx - 2, cy - 6)], fill=color, width=2)
-        draw.line([(cx - 2, cy - 6), (cx + 1, cy + 7)], fill=color, width=2)
-        draw.line([(cx + 1, cy + 7), (cx + 3, cy - 2)], fill=color, width=2)
-        draw.line([(cx + 3, cy - 2), (cx + 5, cy + 1)], fill=color, width=2)
-        draw.line([(cx + 5, cy + 1), (cx + 8, cy + 1)], fill=color, width=2)
+        pts = [
+            (cx - 8*s, cy + s), (cx - 4*s, cy + s), (cx - 2*s, cy - 6*s),
+            (cx + s, cy + 7*s), (cx + 3*s, cy - 2*s), (cx + 5*s, cy + s), (cx + 8*s, cy + s)
+        ]
+        draw.line(pts, fill=color, width=w2, joint="curve")
 
     elif icon_name == "hardware":
-        draw.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], outline=color, width=2)
-        draw.ellipse([cx - 2, cy - 2, cx + 2, cy + 2], fill=color)
-        draw.line([(cx, cy - 9), (cx, cy - 6)], fill=color, width=2)
-        draw.line([(cx, cy + 6), (cx, cy + 9)], fill=color, width=2)
-        draw.line([(cx - 9, cy), (cx - 6, cy)], fill=color, width=2)
-        draw.line([(cx + 6, cy), (cx + 9, cy)], fill=color, width=2)
+        draw.ellipse([cx - 6*s, cy - 6*s, cx + 6*s, cy + 6*s], outline=color, width=w2)
+        draw.ellipse([cx - 2*s, cy - 2*s, cx + 2*s, cy + 2*s], fill=color)
+        draw.line([(cx, cy - 9*s), (cx, cy - 6*s)], fill=color, width=w2)
+        draw.line([(cx, cy + 6*s), (cx, cy + 9*s)], fill=color, width=w2)
+        draw.line([(cx - 9*s, cy), (cx - 6*s, cy)], fill=color, width=w2)
+        draw.line([(cx + 6*s, cy), (cx + 9*s, cy)], fill=color, width=w2)
 
     elif icon_name in ["settings", "theme", "palette"]:
-        # 调色盘 / 主题风格 / 设置
         if icon_name in ["theme", "palette"]:
-            draw.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], outline=color, width=2)
-            draw.ellipse([cx - 3, cy - 4, cx - 1, cy - 2], fill=color)
-            draw.ellipse([cx + 2, cy - 3, cx + 4, cy - 1], fill=color)
-            draw.ellipse([cx - 4, cy + 1, cx - 2, cy + 3], fill=color)
+            draw.ellipse([cx - 7*s, cy - 7*s, cx + 7*s, cy + 7*s], outline=color, width=w2)
+            draw.ellipse([cx - 3*s, cy - 4*s, cx - s, cy - 2*s], fill=color)
+            draw.ellipse([cx + 2*s, cy - 3*s, cx + 4*s, cy - s], fill=color)
+            draw.ellipse([cx - 4*s, cy + s, cx - 2*s, cy + 3*s], fill=color)
         else:
-            draw.line([(cx - 7, cy - 4), (cx + 7, cy - 4)], fill=color, width=2)
-            draw.ellipse([cx - 3, cy - 6, cx + 1, cy - 2], fill=color)
-            draw.line([(cx - 7, cy + 4), (cx + 7, cy + 4)], fill=color, width=2)
-            draw.ellipse([cx + 1, cy + 2, cx + 5, cy + 6], fill=color)
+            draw.line([(cx - 7*s, cy - 4*s), (cx + 7*s, cy - 4*s)], fill=color, width=w2)
+            draw.ellipse([cx - 3*s, cy - 6*s, cx + s, cy - 2*s], fill=color)
+            draw.line([(cx - 7*s, cy + 4*s), (cx + 7*s, cy + 4*s)], fill=color, width=w2)
+            draw.ellipse([cx + s, cy + 2*s, cx + 5*s, cy + 6*s], fill=color)
 
     elif icon_name == "servo":
-        draw.arc([cx - 6, cy - 6, cx + 6, cy + 6], 45, 315, fill=color, width=2)
-        draw.polygon([(cx + 4, cy - 7), (cx + 7, cy - 2), (cx + 1, cy - 4)], fill=color)
-        draw.ellipse([cx - 2, cy - 2, cx + 2, cy + 2], fill=color)
+        draw.arc([cx - 6*s, cy - 6*s, cx + 6*s, cy + 6*s], 45, 315, fill=color, width=w2)
+        draw.polygon([(cx + 4*s, cy - 7*s), (cx + 7*s, cy - 2*s), (cx + s, cy - 4*s)], fill=color)
+        draw.ellipse([cx - 2*s, cy - 2*s, cx + 2*s, cy + 2*s], fill=color)
 
     elif icon_name == "spark":
-        draw.polygon([(cx, cy - 8), (cx + 2, cy - 2), (cx + 8, cy), (cx + 2, cy + 2), (cx, cy + 8), (cx - 2, cy + 2), (cx - 8, cy), (cx - 2, cy - 2)], fill=color)
+        draw.polygon([
+            (cx, cy - 8*s), (cx + 2*s, cy - 2*s), (cx + 8*s, cy), (cx + 2*s, cy + 2*s),
+            (cx, cy + 8*s), (cx - 2*s, cy + 2*s), (cx - 8*s, cy), (cx - 2*s, cy - 2*s)
+        ], fill=color)
 
     elif icon_name == "lock":
-        draw.rounded_rectangle([cx - 6, cy - 2, cx + 6, cy + 7], radius=2, fill=color)
-        draw.arc([cx - 4, cy - 7, cx + 4, cy + 1], 180, 360, fill=color, width=2)
+        draw.rounded_rectangle([cx - 6*s, cy - 2*s, cx + 6*s, cy + 7*s], radius=2*s, fill=color)
+        draw.arc([cx - 4*s, cy - 7*s, cx + 4*s, cy + s], 180, 360, fill=color, width=w2)
 
     elif icon_name == "mic":
-        draw.rounded_rectangle([cx - 3, cy - 7, cx + 3, cy + 1], radius=3, fill=color)
-        draw.arc([cx - 6, cy - 4, cx + 6, cy + 4], 0, 180, fill=color, width=2)
-        draw.line([(cx, cy + 4), (cx, cy + 7)], fill=color, width=2)
-        draw.line([(cx - 4, cy + 7), (cx + 4, cy + 7)], fill=color, width=2)
+        draw.rounded_rectangle([cx - 3*s, cy - 7*s, cx + 3*s, cy + s], radius=3*s, fill=color)
+        draw.arc([cx - 6*s, cy - 4*s, cx + 6*s, cy + 4*s], 0, 180, fill=color, width=w2)
+        draw.line([(cx, cy + 4*s), (cx, cy + 7*s)], fill=color, width=w2)
+        draw.line([(cx - 4*s, cy + 7*s), (cx + 4*s, cy + 7*s)], fill=color, width=w2)
 
     elif icon_name == "eye":
-        draw.arc([cx - 8, cy - 7, cx + 8, cy + 7], 15, 165, fill=color, width=2)
-        draw.arc([cx - 8, cy - 7, cx + 8, cy + 7], 195, 345, fill=color, width=2)
-        draw.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=color)
+        draw.arc([cx - 8*s, cy - 7*s, cx + 8*s, cy + 7*s], 15, 165, fill=color, width=w2)
+        draw.arc([cx - 8*s, cy - 7*s, cx + 8*s, cy + 7*s], 195, 345, fill=color, width=w2)
+        draw.ellipse([cx - 3*s, cy - 3*s, cx + 3*s, cy + 3*s], fill=color)
 
     elif icon_name == "grid":
         for gx in [-5, 0, 5]:
             for gy in [-5, 0, 5]:
-                draw.ellipse([cx + gx - 1, cy + gy - 1, cx + gx + 1, cy + gy + 1], fill=color)
+                draw.ellipse([cx + (gx - 1)*s, cy + (gy - 1)*s, cx + (gx + 1)*s, cy + (gy + 1)*s], fill=color)
 
     elif icon_name == "chat":
-        draw.rounded_rectangle([cx - 7, cy - 6, cx + 7, cy + 3], radius=4, fill=color)
-        draw.polygon([(cx - 3, cy + 3), (cx - 5, cy + 7), (cx + 1, cy + 3)], fill=color)
+        draw.rounded_rectangle([cx - 7*s, cy - 6*s, cx + 7*s, cy + 3*s], radius=4*s, fill=color)
+        draw.polygon([(cx - 3*s, cy + 3*s), (cx - 5*s, cy + 7*s), (cx + s, cy + 3*s)], fill=color)
 
     elif icon_name == "sfx":
-        draw.ellipse([cx - 6, cy + 1, cx - 1, cy + 6], fill=color)
-        draw.ellipse([cx + 2, cy - 2, cx + 7, cy + 3], fill=color)
-        draw.line([(cx - 1, cy + 3), (cx - 1, cy - 5)], fill=color, width=2)
-        draw.line([(cx + 7, cy), (cx + 7, cy - 8)], fill=color, width=2)
-        draw.line([(cx - 1, cy - 5), (cx + 7, cy - 8)], fill=color, width=2)
+        draw.ellipse([cx - 6*s, cy + s, cx - s, cy + 6*s], fill=color)
+        draw.ellipse([cx + 2*s, cy - 2*s, cx + 7*s, cy + 3*s], fill=color)
+        draw.line([(cx - s, cy + 3*s), (cx - s, cy - 5*s)], fill=color, width=w2)
+        draw.line([(cx + 7*s, cy), (cx + 7*s, cy - 8*s)], fill=color, width=w2)
+        draw.line([(cx - s, cy - 5*s), (cx + 7*s, cy - 8*s)], fill=color, width=w2)
 
     elif icon_name == "face":
-        draw.rounded_rectangle([cx - 7, cy - 7, cx + 7, cy + 7], radius=3, outline=color, width=2)
-        draw.ellipse([cx - 4, cy - 3, cx - 2, cy - 1], fill=color)
-        draw.ellipse([cx + 2, cy - 3, cx + 4, cy - 1], fill=color)
-        draw.arc([cx - 4, cy - 1, cx + 4, cy + 4], 20, 160, fill=color, width=2)
+        draw.rounded_rectangle([cx - 7*s, cy - 7*s, cx + 7*s, cy + 7*s], radius=3*s, outline=color, width=w2)
+        draw.ellipse([cx - 4*s, cy - 3*s, cx - 2*s, cy - s], fill=color)
+        draw.ellipse([cx + 2*s, cy - 3*s, cx + 4*s, cy - s], fill=color)
+        draw.arc([cx - 4*s, cy - s, cx + 4*s, cy + 4*s], 20, 160, fill=color, width=w2)
 
     elif icon_name == "trash":
-        draw.line([(cx - 6, cy - 5), (cx + 6, cy - 5)], fill=color, width=2)
-        draw.line([(cx - 2, cy - 7), (cx + 2, cy - 7)], fill=color, width=2)
-        draw.rounded_rectangle([cx - 5, cy - 4, cx + 5, cy + 7], radius=1, outline=color, width=2)
-        draw.line([(cx - 2, cy - 2), (cx - 2, cy + 5)], fill=color, width=1)
-        draw.line([(cx + 2, cy - 2), (cx + 2, cy + 5)], fill=color, width=1)
+        draw.line([(cx - 6*s, cy - 5*s), (cx + 6*s, cy - 5*s)], fill=color, width=w2)
+        draw.line([(cx - 2*s, cy - 7*s), (cx + 2*s, cy - 7*s)], fill=color, width=w2)
+        draw.rounded_rectangle([cx - 5*s, cy - 4*s, cx + 5*s, cy + 7*s], radius=s, outline=color, width=w2)
+        draw.line([(cx - 2*s, cy - 2*s), (cx - 2*s, cy + 5*s)], fill=color, width=w1)
+        draw.line([(cx + 2*s, cy - 2*s), (cx + 2*s, cy + 5*s)], fill=color, width=w1)
 
     elif icon_name == "home":
-        draw.polygon([(cx, cy - 8), (cx + 8, cy - 1), (cx - 8, cy - 1)], fill=color)
-        draw.rounded_rectangle([cx - 6, cy - 1, cx + 6, cy + 7], radius=1, fill=color)
-        draw.rectangle([cx - 2, cy + 2, cx + 2, cy + 7], fill=(18, 20, 20))
+        draw.polygon([(cx, cy - 8*s), (cx + 8*s, cy - s), (cx - 8*s, cy - s)], fill=color)
+        draw.rounded_rectangle([cx - 6*s, cy - s, cx + 6*s, cy + 7*s], radius=s, fill=color)
+        draw.rectangle([cx - 2*s, cy + 2*s, cx + 2*s, cy + 7*s], fill=bg_color)
 
     elif icon_name == "voice":
-        draw.line([(cx - 6, cy - 3), (cx - 6, cy + 3)], fill=color, width=2)
-        draw.line([(cx - 2, cy - 6), (cx - 2, cy + 6)], fill=color, width=2)
-        draw.line([(cx + 2, cy - 8), (cx + 2, cy + 8)], fill=color, width=2)
-        draw.line([(cx + 6, cy - 4), (cx + 6, cy + 4)], fill=color, width=2)
+        draw.line([(cx - 6*s, cy - 3*s), (cx - 6*s, cy + 3*s)], fill=color, width=w2)
+        draw.line([(cx - 2*s, cy - 6*s), (cx - 2*s, cy + 6*s)], fill=color, width=w2)
+        draw.line([(cx + 2*s, cy - 8*s), (cx + 2*s, cy + 8*s)], fill=color, width=w2)
+        draw.line([(cx + 6*s, cy - 4*s), (cx + 6*s, cy + 4*s)], fill=color, width=w2)
 
     elif icon_name == "volume":
-        draw.polygon([(cx - 6, cy - 3), (cx - 3, cy - 3), (cx + 1, cy - 6), (cx + 1, cy + 6), (cx - 3, cy + 3), (cx - 6, cy + 3)], fill=color)
-        draw.arc([cx - 1, cy - 5, cx + 7, cy + 5], 300, 60, fill=color, width=2)
+        draw.polygon([(cx - 6*s, cy - 3*s), (cx - 3*s, cy - 3*s), (cx + s, cy - 6*s), (cx + s, cy + 6*s), (cx - 3*s, cy + 3*s), (cx - 6*s, cy + 3*s)], fill=color)
+        draw.arc([cx - s, cy - 5*s, cx + 7*s, cy + 5*s], 300, 60, fill=color, width=w2)
 
     elif icon_name == "clock":
-        draw.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], outline=color, width=2)
-        draw.line([(cx, cy - 5), (cx, cy)], fill=color, width=2)
-        draw.line([(cx, cy), (cx + 4, cy)], fill=color, width=2)
+        draw.ellipse([cx - 7*s, cy - 7*s, cx + 7*s, cy + 7*s], outline=color, width=w2)
+        draw.line([(cx, cy - 5*s), (cx, cy)], fill=color, width=w2)
+        draw.line([(cx, cy), (cx + 4*s, cy)], fill=color, width=w2)
 
     elif icon_name == "chip":
-        draw.rectangle([cx - 5, cy - 5, cx + 5, cy + 5], outline=color, width=2)
-        draw.rectangle([cx - 2, cy - 2, cx + 2, cy + 2], fill=color)
+        draw.rounded_rectangle([cx - 5*s, cy - 5*s, cx + 5*s, cy + 5*s], radius=s, outline=color, width=w2)
+        draw.rectangle([cx - 2*s, cy - 2*s, cx + 2*s, cy + 2*s], fill=color)
         for d in [-3, 3]:
-            draw.line([(cx + d, cy - 8), (cx + d, cy - 5)], fill=color, width=1)
-            draw.line([(cx + d, cy + 5), (cx + d, cy + 8)], fill=color, width=1)
-            draw.line([(cx - 8, cy + d), (cx - 5, cy + d)], fill=color, width=1)
-            draw.line([(cx + 5, cy + d), (cx + 8, cy + d)], fill=color, width=1)
+            draw.line([(cx + d*s, cy - 8*s), (cx + d*s, cy - 5*s)], fill=color, width=w1)
+            draw.line([(cx + d*s, cy + 5*s), (cx + d*s, cy + 8*s)], fill=color, width=w1)
+            draw.line([(cx - 8*s, cy + d*s), (cx - 5*s, cy + d*s)], fill=color, width=w1)
+            draw.line([(cx + 5*s, cy + d*s), (cx + 8*s, cy + d*s)], fill=color, width=w1)
 
     elif icon_name == "cloud":
-        draw.ellipse([cx - 4, cy - 6, cx + 4, cy + 2], fill=color)
-        draw.ellipse([cx - 7, cy - 2, cx - 1, cy + 4], fill=color)
-        draw.ellipse([cx + 1, cy - 2, cx + 7, cy + 4], fill=color)
-        draw.rectangle([cx - 5, cy, cx + 5, cy + 4], fill=color)
-        draw.line([(cx, cy - 1), (cx, cy + 7)], fill=(18, 20, 20), width=2)
+        draw.ellipse([cx - 4*s, cy - 6*s, cx + 4*s, cy + 2*s], fill=color)
+        draw.ellipse([cx - 7*s, cy - 2*s, cx - s, cy + 4*s], fill=color)
+        draw.ellipse([cx + s, cy - 2*s, cx + 7*s, cy + 4*s], fill=color)
+        draw.rectangle([cx - 5*s, cy, cx + 5*s, cy + 4*s], fill=color)
+        draw.line([(cx, cy - s), (cx, cy + 7*s)], fill=bg_color, width=w2)
 
     elif icon_name == "restart":
-        draw.arc([cx - 6, cy - 6, cx + 6, cy + 6], 45, 315, fill=color, width=2)
-        draw.polygon([(cx + 4, cy - 7), (cx + 7, cy - 2), (cx + 1, cy - 4)], fill=color)
+        draw.arc([cx - 6*s, cy - 6*s, cx + 6*s, cy + 6*s], 45, 315, fill=color, width=w2)
+        draw.polygon([(cx + 4*s, cy - 7*s), (cx + 7*s, cy - 2*s), (cx + s, cy - 4*s)], fill=color)
 
     elif icon_name == "power":
-        draw.arc([cx - 6, cy - 6, cx + 6, cy + 6], 135, 405, fill=color, width=2)
-        draw.line([(cx, cy - 8), (cx, cy - 1)], fill=color, width=2)
+        draw.arc([cx - 6*s, cy - 6*s, cx + 6*s, cy + 6*s], 135, 405, fill=color, width=w2)
+        draw.line([(cx, cy - 8*s), (cx, cy - s)], fill=color, width=w2)
 
     elif icon_name == "camera":
-        draw.rounded_rectangle([cx - 7, cy - 4, cx + 7, cy + 6], radius=2, outline=color, width=2)
-        draw.rectangle([cx - 3, cy - 7, cx + 3, cy - 4], fill=color)
-        draw.ellipse([cx - 3, cy - 1, cx + 3, cy + 5], fill=color)
+        draw.rounded_rectangle([cx - 7*s, cy - 4*s, cx + 7*s, cy + 6*s], radius=2*s, outline=color, width=w2)
+        draw.rectangle([cx - 3*s, cy - 7*s, cx + 3*s, cy - 4*s], fill=color)
+        draw.ellipse([cx - 3*s, cy - s, cx + 3*s, cy + 5*s], fill=color)
 
     elif icon_name == "skills":
-        draw.rounded_rectangle([cx - 7, cy - 7, cx - 1, cy - 1], radius=2, fill=color)
-        draw.rounded_rectangle([cx + 1, cy - 7, cx + 7, cy - 1], radius=2, fill=color)
-        draw.rounded_rectangle([cx - 7, cy + 1, cx - 1, cy + 7], radius=2, fill=color)
-        draw.rounded_rectangle([cx + 1, cy + 1, cx + 7, cy + 7], radius=2, outline=color, width=2)
+        draw.rounded_rectangle([cx - 7*s, cy - 7*s, cx - s, cy - s], radius=2*s, fill=color)
+        draw.rounded_rectangle([cx + s, cy - 7*s, cx + 7*s, cy - s], radius=2*s, fill=color)
+        draw.rounded_rectangle([cx - 7*s, cy + s, cx - s, cy + 7*s], radius=2*s, fill=color)
+        draw.rounded_rectangle([cx + s, cy + s, cx + 7*s, cy + 7*s], radius=2*s, outline=color, width=w2)
 
     else:
-        draw.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=color)
+        draw.ellipse([cx - 3*s, cy - 3*s, cx + 3*s, cy + 3*s], fill=color)
+
+
+def _draw_text_vcenter(draw, x: int, cy: int, text: str, font, fill, h_align: str = "l"):
+    """按字体真实 bbox 精准垂直居中绘制文本，避免各字号基线偏移。"""
+    s = str(text or "")
+    if not s:
+        return
+    try:
+        bx0, by0, bx1, by1 = draw.textbbox((0, 0), s, font=font)
+        tw = bx1 - bx0
+        th = by1 - by0
+        tx = x - bx0
+        if h_align == "c":
+            tx = x - tw // 2 - bx0
+        elif h_align == "r":
+            tx = x - tw - bx0
+        ty = cy - th // 2 - by0
+        draw.text((tx, ty), s, fill=fill, font=font)
+    except Exception:
+        draw.text((x, cy - 8), s, fill=fill, font=font)
 
 
 def _fit_pil_text(draw, text: str, font, max_w: float) -> str:
@@ -270,11 +295,45 @@ def _fit_pil_text(draw, text: str, font, max_w: float) -> str:
     return s[:lo] + ell
 
 
-def _draw_modern_tile(draw, x: int, y: int, w: int, h: int, icon: str, title: str, right_type: str, right_val: Any, is_selected: bool, font_bold, font_small, theme: dict):
+def _draw_menu_header(draw, title: str, badge_text: str, font_title, font_small, theme: dict, show_back: bool = True, badge_color=None, badge_fill=None):
+    """在 480x640 (2x) 画布绘制顶部纯黑极简导航栏与状态胶囊"""
+    p_col = theme["primary"]
+    on_surf = (244, 247, 250)
+    surf_high = theme["surface_high"]
+    outline = theme["outline"]
+
+    draw.rectangle([0, 0, 480, 84], fill=(0, 0, 0))
+    draw.line([(20, 82), (460, 82)], fill=(36, 42, 48), width=2)
+
+    if show_back:
+        draw.line([(34, 30), (22, 42)], fill=p_col, width=4)
+        draw.line([(22, 42), (34, 54)], fill=p_col, width=4)
+        title_x = 50
+    else:
+        draw.ellipse([22, 34, 36, 48], fill=p_col)
+        title_x = 48
+
+    _draw_text_vcenter(draw, title_x, 42, title, font_title, on_surf, "l")
+
+    if badge_text:
+        b_col = badge_color or p_col
+        b_bg = badge_fill or theme.get("badge_bg", surf_high)
+        tw = draw.textlength(badge_text, font=font_small)
+        bw = int(max(72, tw + 26))
+        bx2 = 460
+        bx1 = bx2 - bw
+        by1, by2 = 22, 62
+        draw.rounded_rectangle([bx1, by1, bx2, by2], radius=20, fill=b_bg, outline=outline, width=2)
+        _draw_text_vcenter(draw, (bx1 + bx2) // 2, (by1 + by2) // 2, badge_text, font_small, b_col, "c")
+
+
+def _draw_modern_tile(draw, x: int, y: int, w: int, h: int, icon: str, title: str, right_type: str, right_val: Any, is_selected: bool, font_bold, font_small, theme: dict, scale: int = 2, badge_style=None):
     """
-    绘制 Material Design 3 极简单行卡片 (左图标底座 + 纯净单行居中标题 + 右侧控件，自动防重叠裁剪)
+    绘制 2x SSAA 抗锯齿 OLED 高对比卡片 (左图标底座 + 垂直居中标题 + 右侧控件)
+    所有坐标按调用方坐标系传入（在 render_pil_overlay 中为 480x640 的 2x 坐标）。
     """
-    r = 16
+    s = scale
+    r = 15 * s
     p_col = theme["primary"]
     on_p = theme["on_primary"]
     surf_cont = theme["surface_container"]
@@ -282,91 +341,97 @@ def _draw_modern_tile(draw, x: int, y: int, w: int, h: int, icon: str, title: st
     outline = theme["outline"]
     icon_sel_bg = theme["icon_bg_sel"]
     badge_bg = theme["badge_bg"]
+    is_mono = (theme.get("name") == "极简白")
 
     if is_selected:
         draw.rounded_rectangle([x, y, x + w, y + h], radius=r, fill=p_col)
         icon_bg = icon_sel_bg
-        icon_col = (255, 255, 255) if theme.get("name") != "极简白" else (18, 18, 18)
+        icon_col = (18, 22, 28) if is_mono else (255, 255, 255)
         t_col = on_p
     else:
-        draw.rounded_rectangle([x, y, x + w, y + h], radius=r, fill=surf_cont, outline=outline, width=1)
+        draw.rounded_rectangle([x, y, x + w, y + h], radius=r, fill=surf_cont, outline=outline, width=s)
         icon_bg = surf_high
         icon_col = p_col
-        t_col = (235, 238, 238)
+        t_col = (238, 242, 246)
 
-    # 左侧圆形图标底座 (30x30px)
-    ic_cx = x + 25
+    # 左侧圆形图标底座
+    ic_cx = x + 23 * s
     ic_cy = y + h // 2
-    ic_r = 15
+    ic_r = 14 * s
     draw.ellipse([ic_cx - ic_r, ic_cy - ic_r, ic_cx + ic_r, ic_cy + ic_r], fill=icon_bg)
-    _draw_vector_icon(draw, icon, ic_cx, ic_cy, icon_col)
+    _draw_vector_icon(draw, icon, ic_cx, ic_cy, icon_col, bg_color=icon_bg, scale=s)
 
-    # 先计算右侧控件左边界，确保标题与右侧胶囊/开关/箭头绝不重叠
-    title_x = x + 48
-    avail_w = max(40.0, float(w - 58))
+    # 计算右侧控件边界
+    title_x = x + 44 * s
+    avail_w = max(40.0 * s, float(w - 52 * s))
     badge_info = None
     if right_type == "switch":
-        right_left_x = x + w - 52
+        right_left_x = x + w - 48 * s
     elif right_type == "badge":
         raw_txt = str(right_val or "")
         full_title_w = draw.textlength(str(title or ""), font=font_bold)
         full_tw = draw.textlength(raw_txt, font=font_small)
-        raw_bw = max(38.0, full_tw + 14.0)
-        min_title_w = min(full_title_w, 72.0)
-        max_bw = max(44.0, avail_w - min_title_w - 6.0)
+        raw_bw = max(38.0 * s, full_tw + 16.0 * s)
+        min_title_w = min(full_title_w, 72.0 * s)
+        max_bw = max(44.0 * s, avail_w - min_title_w - 6.0 * s)
         bw = int(min(raw_bw, max_bw))
-        bx = x + w - bw - 10
-        fitted_badge = _fit_pil_text(draw, raw_txt, font_small, max(16.0, bw - 12.0))
-        badge_tw = draw.textlength(fitted_badge, font=font_small)
-        badge_info = (bx, bw, fitted_badge, badge_tw)
+        bx = x + w - bw - 9 * s
+        fitted_badge = _fit_pil_text(draw, raw_txt, font_small, max(16.0 * s, bw - 12.0 * s))
+        badge_info = (bx, bw, fitted_badge)
         right_left_x = bx
     elif right_type == "chevron":
-        right_left_x = x + w - 22
+        right_left_x = x + w - 20 * s
     else:
-        right_left_x = x + w - 10
+        right_left_x = x + w - 10 * s
 
-    max_title_w = max(32.0, float(right_left_x - title_x - 6))
+    max_title_w = max(32.0 * s, float(right_left_x - title_x - 5 * s))
     fitted_title = _fit_pil_text(draw, title, font_bold, max_title_w)
-    draw.text((title_x, y + (h - 17) // 2), fitted_title, fill=t_col, font=font_bold)
+    _draw_text_vcenter(draw, title_x, y + h // 2, fitted_title, font_bold, t_col, "l")
 
     # 右侧控件
     if right_type == "switch":
-        sw_w, sw_h = 42, 24
-        sw_x = x + w - sw_w - 10
+        sw_w, sw_h = 38 * s, 22 * s
+        sw_x = x + w - sw_w - 9 * s
         sw_y = y + (h - sw_h) // 2
         is_on = bool(right_val)
+        knob_pad = 3 * s
+        knob_d = sw_h - 2 * knob_pad
         if is_selected:
             if is_on:
-                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=12, fill=icon_sel_bg)
-                draw.ellipse([sw_x + sw_w - 21, sw_y + 3, sw_x + sw_w - 3, sw_y + 21], fill=(255, 255, 255))
+                track_bg = (34, 42, 54) if is_mono else icon_sel_bg
+                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=sw_h // 2, fill=track_bg)
+                draw.ellipse([sw_x + sw_w - knob_pad - knob_d, sw_y + knob_pad, sw_x + sw_w - knob_pad, sw_y + sw_h - knob_pad], fill=(255, 255, 255))
             else:
-                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=12, fill=surf_high)
-                draw.ellipse([sw_x + 6, sw_y + 6, sw_x + 18, sw_y + 18], fill=on_p)
+                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=sw_h // 2, fill=surf_high)
+                draw.ellipse([sw_x + knob_pad, sw_y + knob_pad, sw_x + knob_pad + knob_d, sw_y + sw_h - knob_pad], fill=on_p if not is_mono else (220, 226, 234))
         else:
             if is_on:
-                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=12, fill=p_col)
-                draw.ellipse([sw_x + sw_w - 21, sw_y + 3, sw_x + sw_w - 3, sw_y + 21], fill=on_p)
+                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=sw_h // 2, fill=p_col)
+                draw.ellipse([sw_x + sw_w - knob_pad - knob_d, sw_y + knob_pad, sw_x + sw_w - knob_pad, sw_y + sw_h - knob_pad], fill=on_p)
             else:
-                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=12, fill=(45, 52, 52), outline=outline, width=1)
-                draw.ellipse([sw_x + 6, sw_y + 6, sw_x + 18, sw_y + 18], fill=(145, 155, 155))
+                draw.rounded_rectangle([sw_x, sw_y, sw_x + sw_w, sw_y + sw_h], radius=sw_h // 2, fill=(38, 44, 52), outline=outline, width=s)
+                draw.ellipse([sw_x + knob_pad, sw_y + knob_pad, sw_x + knob_pad + knob_d, sw_y + sw_h - knob_pad], fill=(150, 160, 170))
 
     elif right_type == "badge" and badge_info:
-        bx, bw, fitted_badge, badge_tw = badge_info
-        bh = 22
+        bx, bw, fitted_badge = badge_info
+        bh = 22 * s
         by = y + (h - bh) // 2
         if is_selected:
-            draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=11, fill=icon_sel_bg)
-            draw.text((bx + (bw - badge_tw) // 2, by + 3), fitted_badge, fill=(255, 255, 255), font=font_small)
+            draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=bh // 2, fill=icon_sel_bg)
+            _draw_text_vcenter(draw, bx + bw // 2, by + bh // 2, fitted_badge, font_small, (18, 22, 28) if is_mono else (255, 255, 255), "c")
         else:
-            draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=11, fill=badge_bg, outline=outline, width=1)
-            draw.text((bx + (bw - badge_tw) // 2, by + 3), fitted_badge, fill=p_col, font=font_small)
+            b_fill = badge_style[0] if badge_style else badge_bg
+            b_txt = badge_style[1] if badge_style else p_col
+            b_out = badge_style[2] if badge_style else outline
+            draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=bh // 2, fill=b_fill, outline=b_out, width=s)
+            _draw_text_vcenter(draw, bx + bw // 2, by + bh // 2, fitted_badge, font_small, b_txt, "c")
 
     elif right_type == "chevron":
-        chv_x = x + w - 16
+        chv_x = x + w - 15 * s
         chv_y = y + h // 2
-        col = on_p if is_selected else (145, 158, 155)
-        draw.line([(chv_x - 4, chv_y - 5), (chv_x + 1, chv_y)], fill=col, width=2)
-        draw.line([(chv_x + 1, chv_y), (chv_x - 4, chv_y + 5)], fill=col, width=2)
+        col = on_p if is_selected else (155, 168, 175)
+        draw.line([(chv_x - 4 * s, chv_y - 5 * s), (chv_x + s, chv_y)], fill=col, width=2 * s)
+        draw.line([(chv_x + s, chv_y), (chv_x - 4 * s, chv_y + 5 * s)], fill=col, width=2 * s)
 
 
 class MenuFSM:
@@ -454,11 +519,13 @@ class MenuFSM:
         self._lock = threading.RLock()
         self.state_change_listeners: List[Callable[[Dict[str, Any]], None]] = []
         
-        # 加载中文字体
+        # 加载中文字体 (1x 与 2x 矢量抗锯齿)
         self.font_main = None
         self.font_bold = None
         self.font_small = None
         self.font_large = None
+        self._menu_cache_key = None
+        self._menu_cache_img = None
         self._init_fonts()
         
         # 人脸录入状态
@@ -921,9 +988,10 @@ class MenuFSM:
 
     def _init_fonts(self):
         font_paths = [
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
             "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
             "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         ]
         chosen_font = None
@@ -940,20 +1008,31 @@ class MenuFSM:
                 self.font_large = ImageFont.truetype(chosen_font, 20)
                 self.font_letter = ImageFont.truetype(chosen_font, 13)
                 self.font_letter_sub = ImageFont.truetype(chosen_font, 11)
+                # 2x 超采样矢量轮廓字号 (绕开 12-16px 点阵微调，边缘平滑饱满)
+                self.font_main_hi = ImageFont.truetype(chosen_font, 28)
+                self.font_bold_hi = ImageFont.truetype(chosen_font, 30)
+                self.font_title_hi = ImageFont.truetype(chosen_font, 32)
+                self.font_small_hi = ImageFont.truetype(chosen_font, 24)
+                self.font_large_hi = ImageFont.truetype(chosen_font, 56)
+                self.font_letter_hi = ImageFont.truetype(chosen_font, 26)
+                self.font_letter_sub_hi = ImageFont.truetype(chosen_font, 22)
+                return
             except Exception:
-                self.font_main = ImageFont.load_default()
-                self.font_bold = self.font_main
-                self.font_small = self.font_main
-                self.font_large = self.font_main
-                self.font_letter = self.font_main
-                self.font_letter_sub = self.font_main
-        else:
-            self.font_main = ImageFont.load_default()
-            self.font_bold = self.font_main
-            self.font_small = self.font_main
-            self.font_large = self.font_main
-            self.font_letter = self.font_main
-            self.font_letter_sub = self.font_main
+                pass
+
+        self.font_main = ImageFont.load_default()
+        self.font_bold = self.font_main
+        self.font_small = self.font_main
+        self.font_large = self.font_main
+        self.font_letter = self.font_main
+        self.font_letter_sub = self.font_main
+        self.font_main_hi = self.font_main
+        self.font_bold_hi = self.font_main
+        self.font_title_hi = self.font_main
+        self.font_small_hi = self.font_main
+        self.font_large_hi = self.font_main
+        self.font_letter_hi = self.font_main
+        self.font_letter_sub_hi = self.font_main
 
     def add_listener(self, cb: Callable[[Dict[str, Any]], None]):
         """注册状态变更回调 (通知 Web 端或真机屏)"""
@@ -1430,137 +1509,177 @@ class MenuFSM:
         return state_dict
 
     # ========================================================
-    # 树莓派真机端 PIL 绘图渲染器 (Material Design 3 现代穿戴/手环旗舰风格)
+    # 树莓派真机端 PIL 绘图渲染器 (2x SSAA + Pure-Black OLED 高对比风格)
     # ========================================================
+    def _build_menu_cache_key(self, mode: str, theme_key: str):
+        """生成轻量渲染缓存键；静态页面零重绘，动态状态变化立即失效"""
+        tick = int(time.monotonic() * 2)  # 每 0.5s 允许刷新一次网络/体检状态
+        if mode == "MENU_MAIN":
+            return (mode, theme_key, self.cursor)
+        elif mode == "TOGGLES":
+            return (mode, theme_key, self.cursor, tuple((it["name"], it.get("state"), it.get("val")) for it in self.hardware_items))
+        elif mode == "SKILLS":
+            return (mode, theme_key, self.cursor, tuple((it["name"], it.get("val")) for it in self.skill_items))
+        elif mode == "SYSTEM":
+            return (mode, theme_key, self.cursor, tuple((it["name"], it.get("val")) for it in self.system_items))
+        elif mode == "DOCTOR":
+            d = self.doctor_cache
+            return (mode, theme_key, tick, tuple(sorted(d.items())))
+        elif mode == "FACE_ENROLL":
+            return (mode, theme_key, self.face_enroll_step, self.face_enroll_msg)
+        elif mode == "EASTER_EGG":
+            return (mode, theme_key, self.easter_egg_scroll_y)
+        else:
+            return (mode, theme_key, tick, self._skill_qr_seq, self.active_qr_skill_id,
+                    self.qr_view.get("title"), self.qr_view.get("headline"),
+                    self.qr_view.get("status"), self.qr_view.get("foot_tip"))
+
     def render_pil_overlay(self, base_image: Image.Image) -> Image.Image:
         """
-        在 240x320 PIL 图像上渲染 Material Design 3 现代卡片菜单 (用于树莓派 ST7789 真机 LCD 直刷)
+        在 240x320 PIL 图像上渲染 2x SSAA Pure-Black OLED 高对比菜单
         """
-        img = base_image.copy()
-        draw = ImageDraw.Draw(img)
-
-        # 1. 灵动表情模式下：保持纯净，仅在右上角以极简微圆点标注状态
+        # 1. 灵动表情模式下：保持纯净，仅在右上角标注状态
         if self.current_mode == "FACE":
+            if not self.is_mic_muted and not self.is_servo_sleeping:
+                return base_image
+            img = base_image.copy()
+            draw = ImageDraw.Draw(img)
             if self.is_mic_muted:
                 draw.ellipse([218, 12, 228, 22], fill=(239, 68, 68))
             if self.is_servo_sleeping:
                 draw.text((200, 11), "Z", fill=(140, 140, 140), font=self.font_small)
             return img
 
-        # 获取当前激活的 M3 主题调色板
-        theme = THEMES.get(getattr(self, "theme_key", "mint"), THEMES["mint"])
+        theme_key = getattr(self, "theme_key", "mint")
+        theme = THEMES.get(theme_key, THEMES["mint"])
+        cache_key = self._build_menu_cache_key(self.current_mode, theme_key)
+        if cache_key == self._menu_cache_key and self._menu_cache_img is not None:
+            return self._menu_cache_img
+
         p_col = theme["primary"]
-        on_p = theme["on_primary"]
         surf_col = theme["surface"]
-        on_surf = (225, 227, 227)
-        on_surf_var = (151, 163, 160)
+        surf_cont = theme["surface_container"]
+        outline = theme["outline"]
+        on_surf = (242, 245, 248)
+        on_surf_var = (156, 168, 176)
 
-        # 2. 菜单背景：Material Design 3 暗色表面 (动态跟随主题基调)
-        overlay = Image.new("RGBA", (240, 320), surf_col + (250,))
-        img.paste(overlay, (0, 0), overlay)
-        draw = ImageDraw.Draw(img)
+        f_title = getattr(self, "font_title_hi", self.font_bold)
+        f_bold = getattr(self, "font_bold_hi", self.font_bold)
+        f_main = getattr(self, "font_main_hi", self.font_main)
+        f_small = getattr(self, "font_small_hi", self.font_small)
+        f_large = getattr(self, "font_large_hi", self.font_large)
 
-        # A. 主菜单界面 (M3 极简单行药丸卡片 + 矢量微图标底座)
+        # 2x 超采样纯黑画布 (480x640 -> 240x320 BILINEAR 消除全部锯齿)
+        S = 2
+        hi = Image.new("RGB", (480, 640), surf_col)
+        draw = ImageDraw.Draw(hi)
+        qr_paste = None  # 若含二维码，缩回 1x 后用 NEAREST 精确贴入保证扫码锐度
+
+        # A. 主菜单界面
         if self.current_mode == "MENU_MAIN":
-            # 顶栏：微呼吸圆点 + 标题 + 在线状态
-            draw.ellipse([14, 23, 20, 29], fill=p_col)
-            draw.text((26, 17), "控制中心", fill=on_surf, font=self.font_bold)
-            draw.text((192, 21), "在线", fill=p_col, font=self.font_small)
+            _draw_menu_header(draw, "控制中心", "在线", f_title, f_small, theme, show_back=False)
 
-            y_start = 48
-            card_h = 46
-            card_gap = 7
+            y_start = 98
+            card_h = 92
+            card_gap = 14
             for idx, item in enumerate(self.main_menu_items):
                 is_selected = (idx == self.cursor)
                 card_y = y_start + idx * (card_h + card_gap)
                 _draw_modern_tile(
-                    draw, 12, card_y, 216, card_h,
+                    draw, 22, card_y, 436, card_h,
                     item.get("icon", "settings"), item["title"],
-                    "chevron", "", is_selected, self.font_bold, self.font_small, theme
+                    "chevron", "", is_selected, f_bold, f_small, theme, scale=S
                 )
 
         # B. 扫码手机配置界面 (支持 AP 配网热点与已连接模式)
         elif self.current_mode == "QR_CODE":
             wf_st = wifi_manager.get_status()
-            # 顶栏带返回箭头
-            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
-            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), "无线配网", fill=on_surf, font=self.font_bold)
-
             if wf_st["ap_mode"]:
-                draw.text((176, 21), "热点已开启", fill=(255, 180, 0), font=self.font_small)
-
-                draw.rounded_rectangle([42, 48, 198, 204], radius=16, fill=(255, 255, 255))
-                qr_bytes = self.get_qr_png_bytes()
-                if qr_bytes:
-                    import io
-                    qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
-                    img.paste(qr_pil, (48, 54))
-
-                draw.text((24, 222), f"热点: {wf_st['ap_ssid']}", fill=on_surf, font=self.font_bold)
-                draw.text((24, 244), f"密码: {wf_st['ap_password']}  (扫码直连)", fill=on_surf_var, font=self.font_small)
-                draw.text((24, 266), f"后台: {wf_st['ap_ip']}:8090/settings", fill=p_col, font=self.font_small)
+                _draw_menu_header(
+                    draw, "无线配网", "热点开启", f_title, f_small, theme, show_back=True,
+                    badge_color=(255, 196, 64), badge_fill=(52, 38, 14)
+                )
+                line1 = f"热点: {wf_st['ap_ssid']}"
+                line2 = f"密码: {wf_st['ap_password']}  (扫码直连)"
+                line3 = f"后台: {wf_st['ap_ip']}:8090/settings"
+                l1_col = on_surf
             else:
-                draw.text((188, 21), "已联网", fill=p_col, font=self.font_small)
-
+                _draw_menu_header(draw, "无线配网", "已联网", f_title, f_small, theme, show_back=True)
                 ip = wf_st.get("ip", get_local_ip())
-                draw.rounded_rectangle([42, 48, 198, 204], radius=16, fill=(255, 255, 255))
-                qr_bytes = self.get_qr_png_bytes()
-                if qr_bytes:
-                    import io
-                    qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
-                    img.paste(qr_pil, (48, 54))
+                line1 = f"WiFi: {wf_st.get('ssid', 'WiFi')}"
+                line2 = f"地址: {ip}:8090"
+                line3 = "手机扫码进入后台进行配网"
+                l1_col = on_surf
 
-                draw.text((24, 222), f"已连: {wf_st.get('ssid', 'WiFi')}", fill=on_surf, font=self.font_bold)
-                draw.text((24, 244), f"IP: {ip}:8090", fill=on_surf_var, font=self.font_small)
-                draw.text((24, 266), "手机扫码进入后台进行配网设置", fill=p_col, font=self.font_small)
+            # 2x 平滑圆角白色二维码底座
+            draw.rounded_rectangle([84, 100, 396, 412], radius=28, fill=(255, 255, 255))
+            qr_bytes = self.get_qr_png_bytes()
+            if qr_bytes:
+                import io
+                qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
+                qr_paste = (qr_pil, (48, 56))
+            else:
+                _draw_text_vcenter(draw, 240, 256, "生成二维码中...", f_small, (40, 40, 40), "c")
 
-        # C. 一键体检诊断界面 (纯净单行无冗余副标题)
+            # 底部信息卡片
+            draw.rounded_rectangle([22, 430, 458, 616], radius=28, fill=surf_cont, outline=outline, width=2)
+            _draw_text_vcenter(draw, 44, 468, _fit_pil_text(draw, line1, f_bold, 392), f_bold, l1_col, "l")
+            _draw_text_vcenter(draw, 44, 522, _fit_pil_text(draw, line2, f_small, 392), f_small, on_surf_var, "l")
+            _draw_text_vcenter(draw, 44, 574, _fit_pil_text(draw, line3, f_small, 392), f_small, p_col, "l")
+
+        # C. 一键体检诊断界面 (语义色彩徽章)
         elif self.current_mode == "DOCTOR":
-            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
-            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), "系统体检", fill=on_surf, font=self.font_bold)
-            draw.text((188, 21), "HEALTH", fill=p_col, font=self.font_small)
+            _draw_menu_header(draw, "系统体检", "HEALTH", f_title, f_small, theme, show_back=True)
 
             d = self.doctor_cache
+            net_val = "在线" if "." in d.get("wifi_ip", "") and "--" not in d.get("wifi_ip", "") else "离线"
             items = [
-                ("wifi", "网络连接", "badge", "在线" if "." in d.get("wifi_ip", "") and "--" not in d.get("wifi_ip", "") else "离线"),
+                ("wifi", "网络连接", "badge", net_val),
                 ("doctor", "大模型接口", "badge", d.get("mimo_status", "正常")),
                 ("camera", "视觉摄像头", "badge", d.get("camera_status", "正常")),
                 ("mic", "麦克风矩阵", "badge", d.get("mic_status", "正常")),
                 ("chip", "处理器核心", "badge", d.get("cpu_temp", "45°C")),
             ]
 
-            y = 48
-            card_h = 46
-            card_gap = 7
+            y = 98
+            card_h = 92
+            card_gap = 14
             for icon, label, r_type, val in items:
+                s_val = str(val)
+                if any(k in s_val for k in ("在线", "正常", "畅通", "就绪")):
+                    b_style = ((14, 46, 36), (74, 222, 128), (34, 108, 76))
+                elif any(k in s_val for k in ("检测", "中")):
+                    b_style = ((52, 38, 14), (251, 191, 36), (112, 82, 24))
+                elif any(k in s_val for k in ("离线", "异常", "失败", "断开")):
+                    b_style = ((56, 20, 24), (248, 113, 113), (124, 44, 52))
+                else:
+                    b_style = None
+
                 _draw_modern_tile(
-                    draw, 12, y, 216, card_h,
+                    draw, 22, y, 436, card_h,
                     icon, label,
-                    r_type, val, False, self.font_bold, self.font_small, theme
+                    r_type, val, False, f_bold, f_small, theme, scale=S, badge_style=b_style
                 )
                 y += (card_h + card_gap)
 
-        # D. 硬件控制界面 (TOGGLES: 连续视口平滑渲染，无生硬跳页)
+        # D. 硬件控制界面 (TOGGLES: 连续视口平滑渲染)
         elif self.current_mode == "TOGGLES":
             total = len(self.hardware_items)
             cur_idx = max(0, min(total - 1, self.cursor))
 
-            card_w = 212
-            card_h = 50
-            card_gap = 8
-            pitch = card_h + card_gap  # 58px
+            card_w = 426
+            card_h = 98
+            card_gap = 14
+            pitch = card_h + card_gap  # 112px
 
-            viewport_h = 260
-            total_content_h = total * pitch - card_gap
-            max_scroll = max(0, total_content_h - viewport_h + 8)
+            viewport_h = 524
+            total_content_h = max(0, total * pitch - card_gap)
+            max_scroll = max(0, total_content_h - viewport_h + 16)
             scroll_y = max(0, min(max_scroll, (cur_idx - 1) * pitch))
 
-            # 绘制落入视口 44 <= y <= 312 范围内的连续卡片
             for idx, item in enumerate(self.hardware_items):
-                card_y = 48 + idx * pitch - scroll_y
-                if card_y + card_h >= 44 and card_y <= 312:
+                card_y = 98 + idx * pitch - scroll_y
+                if card_y + card_h >= 84 and card_y <= 628:
                     is_selected = (idx == cur_idx)
                     is_on = bool(item.get("state", False))
                     item_type = item.get("type", "")
@@ -1568,27 +1687,21 @@ class MenuFSM:
                     r_val = is_on if item_type == "toggle" else (str(item.get("val", "")) if item_type == "cycle" else "")
 
                     _draw_modern_tile(
-                        draw, 12, card_y, card_w, card_h,
+                        draw, 20, card_y, card_w, card_h,
                         item.get("icon", "hardware"), item["name"],
-                        r_type, r_val, is_selected, self.font_bold, self.font_small, theme
+                        r_type, r_val, is_selected, f_bold, f_small, theme, scale=S
                     )
 
-            # 顶部固定导航遮罩
-            draw.rectangle([0, 0, 240, 44], fill=surf_col)
-            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
-            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), "硬件控制", fill=on_surf, font=self.font_bold)
+            _draw_menu_header(draw, "硬件控制", f"{cur_idx + 1}/{total}" if total else "", f_title, f_small, theme, show_back=True)
+            draw.rectangle([0, 624, 480, 640], fill=surf_col)
 
-            # 底部遮罩
-            draw.rectangle([0, 312, 240, 320], fill=surf_col)
-
-            # 极简动态连续滑块
             if total > 4 and max_scroll > 0:
-                track_y1, track_y2 = 48, 302
+                track_y1, track_y2 = 98, 608
                 track_h = track_y2 - track_y1
-                thumb_h = max(24, int((viewport_h / total_content_h) * track_h))
+                draw.rounded_rectangle([460, track_y1, 466, track_y2], radius=3, fill=(28, 34, 40))
+                thumb_h = max(48, int((viewport_h / max(1, total_content_h)) * track_h))
                 thumb_y = track_y1 + int((scroll_y / max_scroll) * (track_h - thumb_h))
-                draw.rounded_rectangle([232, thumb_y, 235, thumb_y + thumb_h], radius=1, fill=p_col)
+                draw.rounded_rectangle([460, thumb_y, 466, thumb_y + thumb_h], radius=3, fill=p_col)
 
         # E. 技能服务 & 系统设置统一滚动列表绘制
         elif self.current_mode in ["SKILLS", "SYSTEM"]:
@@ -1600,22 +1713,21 @@ class MenuFSM:
                 list_items = self.system_items
 
             total = len(list_items)
-            cur_idx = max(0, min(total - 1, self.cursor))
+            cur_idx = max(0, min(total - 1, self.cursor)) if total else 0
 
-            card_w = 212
-            card_h = 50
-            card_gap = 8
-            pitch = card_h + card_gap  # 58px
+            card_w = 426
+            card_h = 98
+            card_gap = 14
+            pitch = card_h + card_gap
 
-            viewport_h = 260
+            viewport_h = 524
             total_content_h = max(0, total * pitch - card_gap)
-            max_scroll = max(0, total_content_h - viewport_h + 8)
+            max_scroll = max(0, total_content_h - viewport_h + 16)
             scroll_y = max(0, min(max_scroll, (cur_idx - 1) * pitch))
 
-            # 绘制落入视口 44 <= y <= 312 范围内的连续卡片
             for idx, item in enumerate(list_items):
-                card_y = 48 + idx * pitch - scroll_y
-                if card_y + card_h >= 44 and card_y <= 312:
+                card_y = 98 + idx * pitch - scroll_y
+                if card_y + card_h >= 84 and card_y <= 628:
                     is_selected = (idx == cur_idx)
                     item_type = item.get("type", "")
                     r_val = str(item.get("val", ""))
@@ -1623,55 +1735,40 @@ class MenuFSM:
                     r_type = "badge" if show_badge else "chevron"
 
                     _draw_modern_tile(
-                        draw, 12, card_y, card_w, card_h,
+                        draw, 20, card_y, card_w, card_h,
                         item.get("icon", "settings"), item["name"],
-                        r_type, r_val, is_selected, self.font_bold, self.font_small, theme
+                        r_type, r_val, is_selected, f_bold, f_small, theme, scale=S
                     )
 
-            # 顶部固定导航遮罩
-            draw.rectangle([0, 0, 240, 44], fill=surf_col)
-            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
-            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), page_title, fill=on_surf, font=self.font_bold)
+            _draw_menu_header(draw, page_title, f"{cur_idx + 1}/{total}" if total else "", f_title, f_small, theme, show_back=True)
+            draw.rectangle([0, 624, 480, 640], fill=surf_col)
 
-            # 底部遮罩
-            draw.rectangle([0, 312, 240, 320], fill=surf_col)
-
-            # 极简动态连续滑块
             if total > 4 and max_scroll > 0:
-                track_y1, track_y2 = 48, 302
+                track_y1, track_y2 = 98, 608
                 track_h = track_y2 - track_y1
-                thumb_h = max(24, int((viewport_h / max(1, total_content_h)) * track_h))
+                draw.rounded_rectangle([460, track_y1, 466, track_y2], radius=3, fill=(28, 34, 40))
+                thumb_h = max(48, int((viewport_h / max(1, total_content_h)) * track_h))
                 thumb_y = track_y1 + int((scroll_y / max_scroll) * (track_h - thumb_h))
-                draw.rounded_rectangle([232, thumb_y, 235, thumb_y + thumb_h], radius=1, fill=p_col)
+                draw.rounded_rectangle([460, thumb_y, 466, thumb_y + thumb_h], radius=3, fill=p_col)
 
         # F. 人脸录入倒计时/取景界面 (FACE_ENROLL)
         elif self.current_mode == "FACE_ENROLL":
-            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
-            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), "面容录入", fill=on_surf, font=self.font_bold)
+            _draw_menu_header(draw, "面容录入", "CAMERA", f_title, f_small, theme, show_back=True)
 
-            # 居中取景框 (动态主题强调色)
-            box_col = p_col if self.face_enroll_step > 0 else (34, 197, 94)
-            draw.rectangle([40, 52, 200, 212], outline=box_col, width=2)
-            cl = 14
-            draw.line([(40, 52), (40+cl, 52)], fill=(255, 255, 255), width=3)
-            draw.line([(40, 52), (40, 52+cl)], fill=(255, 255, 255), width=3)
-            draw.line([(200, 52), (200-cl, 52)], fill=(255, 255, 255), width=3)
-            draw.line([(200, 52), (200, 52+cl)], fill=(255, 255, 255), width=3)
-            draw.line([(40, 212), (40+cl, 212)], fill=(255, 255, 255), width=3)
-            draw.line([(40, 212), (40, 212-cl)], fill=(255, 255, 255), width=3)
-            draw.line([(200, 212), (200-cl, 212)], fill=(255, 255, 255), width=3)
-            draw.line([(200, 212), (200, 212-cl)], fill=(255, 255, 255), width=3)
+            box_col = p_col if self.face_enroll_step > 0 else (74, 222, 128)
+            draw.rounded_rectangle([80, 108, 400, 428], radius=24, fill=surf_cont, outline=box_col, width=4)
+            cl = 28
+            for (x1, y1, dx, dy) in [(80, 108, 1, 1), (400, 108, -1, 1), (80, 428, 1, -1), (400, 428, -1, -1)]:
+                draw.line([(x1, y1), (x1 + dx * cl, y1)], fill=(255, 255, 255), width=6)
+                draw.line([(x1, y1), (x1, y1 + dy * cl)], fill=(255, 255, 255), width=6)
 
-            # 倒计时显示
             if self.face_enroll_step > 0:
-                draw.text((112, 115), str(self.face_enroll_step), fill=p_col, font=self.font_bold)
+                _draw_text_vcenter(draw, 240, 268, str(self.face_enroll_step), f_large, p_col, "c")
 
-            # 状态文案
-            draw.text((28, 230), self.face_enroll_msg, fill=on_surf, font=self.font_bold)
+            draw.rounded_rectangle([22, 456, 458, 560], radius=26, fill=surf_cont, outline=outline, width=2)
+            _draw_text_vcenter(draw, 240, 508, _fit_pil_text(draw, self.face_enroll_msg, f_bold, 404), f_bold, on_surf, "c")
 
-        # G. 通用技能服务二维码弹窗 (SKILLS_QR 与所有注册 screen_qr 的插件统一渲染)
+        # G. 通用技能服务二维码弹窗
         elif self.current_mode == "SKILLS_QR" or (self.active_qr_skill_id and self.current_mode not in ("FACE", "MENU_MAIN", "QR_CODE", "DOCTOR", "TOGGLES", "SKILLS", "SYSTEM", "FACE_ENROLL", "EASTER_EGG")):
             if self.current_mode == "SKILLS_QR":
                 ip = get_local_ip()
@@ -1685,38 +1782,33 @@ class MenuFSM:
                 st_line = self.qr_view.get("status") or "等待扫码中..."
                 foot_tip = self.qr_view.get("foot_tip") or ""
 
-            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
-            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), header_title, fill=on_surf, font=self.font_bold)
-            draw.text((188, 21), "BINDING", fill=on_surf_var, font=self.font_small)
+            _draw_menu_header(
+                draw, header_title, "BINDING", f_title, f_small, theme, show_back=True,
+                badge_color=on_surf_var
+            )
 
-            draw.rounded_rectangle([42, 48, 198, 204], radius=16, fill=(255, 255, 255))
+            draw.rounded_rectangle([84, 100, 396, 412], radius=28, fill=(255, 255, 255))
             try:
                 qr_bytes = self.get_qr_png_bytes()
                 if qr_bytes:
                     import io
                     qr_pil = Image.open(io.BytesIO(qr_bytes)).convert("RGB").resize((144, 144), Image.Resampling.NEAREST)
-                    img.paste(qr_pil, (48, 54))
+                    qr_paste = (qr_pil, (48, 56))
                 else:
-                    draw.text((56, 114), "获取二维码中...", fill=(0, 0, 0), font=self.font_small)
+                    _draw_text_vcenter(draw, 240, 256, "获取二维码中...", f_small, (40, 40, 40), "c")
             except Exception as e:
-                draw.text((50, 110), f"Error: {e}", fill=(0, 0, 0), font=self.font_small)
+                _draw_text_vcenter(draw, 240, 256, _fit_pil_text(draw, f"Error: {e}", f_small, 280), f_small, (40, 40, 40), "c")
 
-            draw.text((24, 226), _fit_pil_text(draw, sub_headline, self.font_bold, 200), fill=on_surf, font=self.font_bold)
-            draw.text((24, 248), _fit_pil_text(draw, st_line, self.font_small, 200), fill=p_col if "成功" in st_line else (255, 180, 0), font=self.font_small)
-            draw.text((24, 270), _fit_pil_text(draw, foot_tip, self.font_small, 200), fill=on_surf_var, font=self.font_small)
+            draw.rounded_rectangle([22, 430, 458, 616], radius=28, fill=surf_cont, outline=outline, width=2)
+            _draw_text_vcenter(draw, 44, 468, _fit_pil_text(draw, sub_headline, f_bold, 392), f_bold, on_surf, "l")
+            _draw_text_vcenter(draw, 44, 522, _fit_pil_text(draw, st_line, f_small, 392), f_small, p_col if "成功" in st_line else (255, 196, 64), "l")
+            _draw_text_vcenter(draw, 44, 574, _fit_pil_text(draw, foot_tip, f_small, 392), f_small, on_surf_var, "l")
 
-        # H. 彩蛋模式 (EASTER_EGG: 关于 PIG 的自述与介绍，全常规字体，无粗体，无底部翻页提示)
+        # H. 彩蛋模式 (EASTER_EGG)
         elif self.current_mode == "EASTER_EGG":
-            font_title = getattr(self, "font_main", self.font_main)
-            font_body = getattr(self, "font_letter", self.font_main)
-            font_sub = getattr(self, "font_letter_sub", self.font_small)
+            font_body = getattr(self, "font_letter_hi", f_main)
 
-            card_bg = theme.get("surface_container", (26, 32, 32))
-            card_outline = theme.get("outline", (55, 68, 66))
-
-            # 1. 绘制正文卡片底框 (扩展到底部，取消多余提示栏，纯净极简)
-            draw.rounded_rectangle([10, 42, 222, 308], radius=10, fill=card_bg, outline=card_outline, width=1)
+            draw.rounded_rectangle([20, 94, 444, 616], radius=24, fill=surf_cont, outline=outline, width=2)
 
             letter_items = [
                 ("text", "本项目只是一名老程序员"),
@@ -1748,36 +1840,33 @@ class MenuFSM:
                 ("space", 16)
             ]
 
-            # 2. 绘制滚动正文内容 (只在卡片视口内 44 <= y <= 300 绘制可见行，全部常规字重，统一主文本色，无任何加粗或高亮色)
-            cur_y = 56 - self.easter_egg_scroll_y
+            cur_y = 116 - self.easter_egg_scroll_y * S
             for it_type, val in letter_items:
                 if it_type == "space":
-                    cur_y += val
+                    cur_y += val * S
                     continue
+                if 88 <= cur_y <= 596:
+                    _draw_text_vcenter(draw, 40, cur_y + 14, val, font_body, on_surf, "l")
+                cur_y += 38
 
-                if 44 <= cur_y <= 300:
-                    draw.text((20, cur_y), val, fill=on_surf, font=font_body)
-                cur_y += 19
+            _draw_menu_header(draw, "关于 PIG", "ABOUT", f_title, f_small, theme, show_back=True, badge_color=on_surf_var)
+            draw.rectangle([0, 620, 480, 640], fill=surf_col)
 
-            # 3. 绘制顶部遮罩与顶栏 (纯净系统风格：左箭头 + "关于 PIG" + "ABOUT"，常规字重)
-            draw.rectangle([0, 0, 240, 42], fill=surf_col)
-            draw.line([(18, 22), (13, 27)], fill=p_col, width=2)
-            draw.line([(13, 27), (18, 32)], fill=p_col, width=2)
-            draw.text((26, 17), "关于 PIG", fill=on_surf, font=font_title)
-            draw.text((184, 21), "ABOUT", fill=on_surf_var, font=font_sub)
-
-            # 4. 底部微遮罩 (保证视口底部纯净，绝无任何“翻页/返回”文字提示)
-            draw.rectangle([0, 310, 240, 320], fill=surf_col)
-
-            # 5. 绘制右侧滚动条
-            total_h = cur_y + self.easter_egg_scroll_y - 56
+            total_h = cur_y + self.easter_egg_scroll_y * S - 116
             max_s = max(1, self.easter_egg_max_scroll)
-            track_y1, track_y2 = 48, 302
+            track_y1, track_y2 = 98, 608
             track_h = track_y2 - track_y1
-            thumb_h = max(24, int((240 / max(1, total_h)) * track_h))
+            draw.rounded_rectangle([458, track_y1, 464, track_y2], radius=3, fill=(28, 34, 40))
+            thumb_h = max(48, int((480 / max(1, total_h)) * track_h))
             thumb_y = track_y1 + int((self.easter_egg_scroll_y / max_s) * (track_h - thumb_h))
-            draw.rounded_rectangle([228, thumb_y, 231, thumb_y + thumb_h], radius=1, fill=p_col)
+            draw.rounded_rectangle([458, thumb_y, 464, thumb_y + thumb_h], radius=3, fill=p_col)
 
+        img = hi.resize((240, 320), Image.Resampling.BILINEAR)
+        if qr_paste is not None:
+            img.paste(qr_paste[0], qr_paste[1])
+
+        self._menu_cache_key = cache_key
+        self._menu_cache_img = img
         return img
 
 
