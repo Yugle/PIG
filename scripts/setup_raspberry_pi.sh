@@ -215,7 +215,7 @@ Wants=network-online.target pigpiod.service
 Type=simple
 User=${TARGET_USER}
 WorkingDirectory=${PROJECT_DIR}
-ExecStart=${PYTHON_BIN} ${PROJECT_DIR}/web_sim_server.py
+ExecStart=${PYTHON_BIN} ${PROJECT_DIR}/app.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

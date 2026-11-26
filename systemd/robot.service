@@ -7,7 +7,7 @@ Wants=pigpiod.service
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/PIG
-ExecStart=/usr/bin/python3 /home/pi/PIG/web_sim_server.py
+ExecStart=/usr/bin/python3 /home/pi/PIG/app.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
