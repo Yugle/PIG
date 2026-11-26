@@ -3416,28 +3416,27 @@
         clearTimeout(afterglowTimer);
         afterglowTimer = null;
       }
+      if (thinkingInterval) {
+        clearInterval(thinkingInterval);
+        thinkingInterval = null;
+      }
       recordUserAction();
       isThinking = true;
       playChirp("thinking_hum");
       document.getElementById("overlay-action").innerText = "🤔 动脑推演思考中...";
-      updateAngles(84, 76);
+      updateAngles(86, 80);
       setEmotion("THINKING");
-      lookOffset.x = 10;
-      lookOffset.y = -14;
-      drawEyes("THINKING");
-
-      let phase = 0;
-      if (thinkingInterval) clearInterval(thinkingInterval);
-      thinkingInterval = setInterval(() => {
-        if (!isThinking) return;
-        phase += 0.35;
-        updateAngles(84 + Math.sin(phase) * 1.5, 76 + Math.cos(phase) * 1.0);
-      }, 100);
+      drawEyes("THINKING", 8, -10);
     }
 
     function stopThinkingCadence() {
       isThinking = false;
-      if (thinkingInterval) clearInterval(thinkingInterval);
+      if (thinkingInterval) {
+        clearInterval(thinkingInterval);
+        thinkingInterval = null;
+      }
+      targetLookOffset.x = 0;
+      targetLookOffset.y = 0;
       lookOffset.x = 0;
       lookOffset.y = 0;
     }
@@ -4541,7 +4540,6 @@
             }
 
             if (ev.type === "thought") {
-              stopThinkingCadence();
               if (!window._accumulatedThought) window._accumulatedThought = "";
               window._accumulatedThought += ev.text;
               const thoughtBox = `<div style="font-size:0.7rem; color:var(--text-sub); margin-bottom:4px; font-style:italic; background:rgba(255,255,255,0.03); padding:3px 8px; border-radius:4px; border-left:2px solid var(--cyan);">💭 深度思考: ${window._accumulatedThought.slice(-80)}...</div>`;
@@ -5134,11 +5132,11 @@
       }
 
       if (ev.type === "gaze_track") {
-        if (!isSpeaking && !isThinking) {
+        if (!isSpeaking && !isThinking && !isActionRunning) {
           if (ev.look_x !== undefined && ev.look_y !== undefined) {
-            lookOffset.x = ev.look_x;
-            lookOffset.y = ev.look_y;
-            drawEyes(currentEmotion);
+            targetLookOffset.x = ev.look_x;
+            targetLookOffset.y = ev.look_y;
+            drawEyes(currentEmotion, ev.look_x, ev.look_y);
           }
           if (ev.target_pan !== undefined && ev.target_tilt !== undefined) {
             targetPan = ev.target_pan;
