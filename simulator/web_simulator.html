@@ -1820,23 +1820,6 @@
         eyeCtx.ellipse(rx + 24, cy + 30, 12, 6, 0, 0, Math.PI * 2);
         eyeCtx.fill();
       }
-
-      // 说话时在面部下方绘制动态三段声波唇动条，彻底告别静帧感
-      if (typeof isSpeaking !== "undefined" && isSpeaking && !["SLEEPY", "BLINK", "DIZZY"].includes(emo)) {
-        const mouthY = 238 + lookOffset.y * 0.4;
-        const mouthCx = 120 + lookOffset.x * 0.5;
-        const mCol = (emo === "LOVE" || emo === "SHY") ? "#ff9ec4" : eyeColor;
-        eyeCtx.fillStyle = mCol;
-        const amps = [
-          0.5 + 0.5 * Math.abs(Math.sin(now / 78)),
-          0.5 + 0.5 * Math.abs(Math.sin(now / 58 + 1.2)),
-          0.5 + 0.5 * Math.abs(Math.sin(now / 68 + 2.4))
-        ];
-        [-16, 0, 16].forEach((dx, i) => {
-          const bh = 5 + 11 * amps[i];
-          roundRect(eyeCtx, mouthCx + dx - 5, mouthY - bh, 10, bh * 2, 5, true);
-        });
-      }
       eyeCtx.restore();
 
       // 叠加 4-Key 菜单与二维码浮层 (与树莓派 ST7789 真机同构)
@@ -4408,25 +4391,7 @@
 
     const streamingPlayer = new StreamingAudioPlayer();
 
-    function inferSentenceEmotion(text, seq = 1) {
-      const t = String(text || "").toLowerCase();
-      if (/哈哈|笑死|搞笑|幽默|段子|嘿嘿|嘻嘻|🤣|😆|😄|笑话/.test(t)) return "LAUGH";
-      if (/爱你|喜欢|抱抱|晚安|想你|心疼|贴心|么么|❤️|🥰|😘|甜蜜/.test(t)) return "LOVE";
-      if (/害羞|不好意思|脸红|讨厌|哎呀|撒娇|人家/.test(t)) return "SHY";
-      if (/太棒|搞定|完成|成功|厉害|牛|冲呀|出发|🎉|✨|恭喜|耶/.test(t)) return "EXCITED";
-      if (/包在我身上|当然|小菜一碟|拿捏|轻松|自信|酷|😎/.test(t)) return "PROUD";
-      if (/竟然|居然|天哪|哇|真的吗|震撼|没想到|omg|吓/.test(t)) return "SURPRISED";
-      if (/难过|委屈|抱歉|对不起|辛苦|心累|生病|疼|呜|可惜|未能/.test(t)) return "SAD";
-      if (/警告|不行|生气|愤怒|危险|过分|哼/.test(t)) return "ANGRY";
-      if (/难道|为什么|怎么|好奇|是不是|猜猜|？|\?/.test(t)) return (seq % 2 === 0) ? "CURIOUS" : "CONFUSED";
-      if (/悄悄|秘密|提示|建议|其实|😉/.test(t)) return "WINK";
-      if (/惬意|舒服|晒太阳|慢慢|安静|治愈|温柔|放松/.test(t)) return "COZY";
-      if (/困|睡觉|早点休息|打盹/.test(t)) return "SLEEPY";
-      const palette = ["CURIOUS", "HAPPY", "WINK", "PROUD", "NORMAL", "COZY"];
-      return palette[Math.abs(seq || 0) % palette.length];
-    }
-
-    function startChunkSpeakingChoreography(chunkText, durationMs, behaviors, seq = 1, hintEmotion = "") {
+    function startChunkSpeakingChoreography(chunkText, durationMs, behaviors, seq = 1) {
       if (speechTimer) clearTimeout(speechTimer);
       if (afterglowTimer) {
         clearTimeout(afterglowTimer);
@@ -4436,31 +4401,29 @@
       document.getElementById("overlay-action").innerText = "🗣️ 语音流式播报中...";
 
       const idx = Math.max(0, (seq || 1) - 1);
-      let b = null;
-      if (behaviors && behaviors.length > 0) {
-        b = behaviors[idx % behaviors.length];
-      }
-      const inferred = hintEmotion || inferSentenceEmotion(chunkText, seq);
-      // 若 behaviors 仅有兜底的单个 HAPPY，则优先采用单句语义微表情，防止整段对话永远冻在 HAPPY
-      const emo = (b && b.emotion && !(behaviors.length === 1 && b.emotion === "HAPPY" && inferred !== "HAPPY"))
-        ? b.emotion
-        : inferred;
+      const b = (behaviors && behaviors.length > 0)
+        ? behaviors[idx % behaviors.length]
+        : { emotion: "NORMAL", action: "NOD", pan: 90, tilt: 85 };
+      const emo = b.emotion || "NORMAL";
       setEmotion(emo);
 
-      const headPose = [
-        { pan: 90, tilt: 84 },
-        { pan: 78, tilt: 88 },
-        { pan: 102, tilt: 85 },
-        { pan: 90, tilt: 80 }
-      ][idx % 4];
-      const pan = (b && b.pan !== undefined) ? b.pan : headPose.pan;
-      const tilt = (b && b.tilt !== undefined) ? b.tilt : headPose.tilt;
+      const pan = b.pan !== undefined ? b.pan : 90;
+      const tilt = b.tilt !== undefined ? b.tilt : 85;
+      const act = (b.action || "NOD").toUpperCase();
 
-      actionSequence = [
-        { pan: pan, tilt: Math.max(70, tilt - 6), emotion: emo, delay: 180 },
-        { pan: Math.min(115, Math.max(65, pan + (idx % 2 === 0 ? 6 : -6))), tilt: Math.min(105, tilt + 5), emotion: emo, delay: 190 },
-        { pan: pan, tilt: tilt, emotion: emo, delay: Math.max(200, durationMs - 370) }
-      ];
+      if (act === "SHAKE") {
+        actionSequence = [
+          { pan: Math.max(50, pan - 16), tilt: tilt, emotion: emo, delay: 180 },
+          { pan: Math.min(130, pan + 16), tilt: tilt, emotion: emo, delay: 180 },
+          { pan: pan, tilt: tilt, emotion: emo, delay: Math.max(200, durationMs - 360) }
+        ];
+      } else {
+        actionSequence = [
+          { pan: pan, tilt: Math.max(70, tilt - 5), emotion: emo, delay: 180 },
+          { pan: pan, tilt: Math.min(105, tilt + 5), emotion: emo, delay: 180 },
+          { pan: pan, tilt: tilt, emotion: emo, delay: Math.max(200, durationMs - 360) }
+        ];
+      }
       runActionSequence();
     }
 
@@ -4510,13 +4473,12 @@
       let accumulatedReply = "";
       let toolStepsHtml = "";
       let finalBehaviors = [];
-      const chunkEmotions = {};
       let hasReceivedAudio = false;
       window._accumulatedThought = "";
 
       streamingPlayer.onChunkStart = (chunkText, durationMs, seq) => {
         stopThinkingCadence();
-        startChunkSpeakingChoreography(chunkText, durationMs, finalBehaviors, seq, chunkEmotions[seq] || "");
+        startChunkSpeakingChoreography(chunkText, durationMs, finalBehaviors, seq);
       };
 
       streamingPlayer.onAllFinished = () => {
@@ -4588,11 +4550,14 @@
                 botDiv.innerHTML = `${toolStepsHtml}`;
               }
               chatLogs.scrollTop = chatLogs.scrollHeight;
+            } else if (ev.type === "behaviors") {
+              if (ev.behaviors && ev.behaviors.length > 0) {
+                finalBehaviors = ev.behaviors;
+                stopThinkingCadence();
+                setEmotion(finalBehaviors[0].emotion || "NORMAL");
+              }
             } else if (ev.type === "chunk") {
               stopThinkingCadence();
-              if (ev.seq && ev.emotion) {
-                chunkEmotions[ev.seq] = ev.emotion;
-              }
               accumulatedReply += ev.text;
               botDiv.innerHTML = `${toolStepsHtml}<div>${formatMarkdown(accumulatedReply)}<span class="cursor-blink" style="display:inline-block; width:6px; height:12px; background:var(--cyan); margin-left:3px; vertical-align:middle;"></span></div>`;
               chatLogs.scrollTop = chatLogs.scrollHeight;

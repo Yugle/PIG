@@ -122,7 +122,7 @@ class EyeRenderer:
 
     def render_eyes(self, emotion: str = "NORMAL", look_x: float = 0, look_y: float = 0, now: float = None, is_speaking: bool = False) -> Image.Image:
         """
-        单帧灵动面部渲染（18 种微表情 + 说话动态声波嘴型 + 2x 超采样抗锯齿 + 霓虹光晕）。
+        单帧灵动面部渲染（18 种微表情 + 2x 超采样抗锯齿 + 轻量霓虹光晕 + 纯黑高对比背景）。
         """
         if now is None:
             now = time.time()
@@ -356,26 +356,7 @@ class EyeRenderer:
             draw.ellipse([rx + 14 * S, cy + 24 * S, rx + 36 * S, cy + 36 * S], fill=pink)
 
         else:
-            return self.render_eyes("NORMAL", look_x, look_y, now, is_speaking=is_speaking)
-
-        # 说话中：在面部下方绘制动态声波唇动条，增强“开口说话”生命感
-        if is_speaking and emo not in ("SLEEPY", "BLINK", "DIZZY"):
-            mouth_y = int((self.height // 2 + 78 + eff_y * 0.4) * S)
-            mouth_cx = int((self.width // 2 + eff_x * 0.5) * S)
-            bars = [
-                (-16 * S, 0.55 + 0.45 * abs(math.sin(now * 13.0))),
-                (0, 0.55 + 0.45 * abs(math.sin(now * 17.0 + 1.2))),
-                (16 * S, 0.55 + 0.45 * abs(math.sin(now * 14.5 + 2.4))),
-            ]
-            mouth_col = (255, 190, 215) if emo in ("LOVE", "SHY") else (0, 229, 255)
-            for dx, amp in bars:
-                bh = int((5 + 11 * amp) * S)
-                bw = 6 * S
-                draw.rounded_rectangle(
-                    [mouth_cx + dx - bw, mouth_y - bh, mouth_cx + dx + bw, mouth_y + bh],
-                    radius=bw,
-                    fill=mouth_col,
-                )
+            return self.render_eyes("NORMAL", look_x, look_y, now)
 
         # 2x -> 1x 抗锯齿前景 + 极低成本霓虹外发光层 (缩放到 1/4 做微模糊再拉回合成)
         fg = img_hi.resize((self.width, self.height), Image.Resampling.BILINEAR)

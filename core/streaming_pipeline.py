@@ -47,12 +47,14 @@ class StreamingJsonReplyExtractor:
         self.escape_next = False
         self.is_tool_step = False
 
-        # 思考内容增量提取器
+        # 思考内容与前置 behaviors 增量提取器
         self.in_thought = False
         self.thought_buffer = ""
         self.thought_delta = ""
         self.thought_done = False
         self.escape_thought = False
+        self.behaviors_done = False
+        self.behaviors_emitted: Optional[List[Dict[str, Any]]] = None
 
     def _proc_thought_char(self, ch: str):
         if self.escape_thought:
@@ -76,6 +78,55 @@ class StreamingJsonReplyExtractor:
         d = self.thought_delta
         self.thought_delta = ""
         return d
+
+    def _try_extract_behaviors(self):
+        """在流式正文开口之前，优先提取大模型前置输出好的 behaviors 数组"""
+        if self.behaviors_done:
+            return
+        idx = self.full_raw_text.find('"behaviors"')
+        if idx == -1:
+            return
+        after = self.full_raw_text[idx + 11:]
+        colon = after.find(":")
+        if colon == -1:
+            return
+        arr_start = after.find("[", colon + 1)
+        if arr_start == -1:
+            return
+        depth = 0
+        in_str = False
+        esc = False
+        for pos, ch in enumerate(after[arr_start:], start=arr_start):
+            if esc:
+                esc = False
+                continue
+            if ch == "\\" and in_str:
+                esc = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+                continue
+            if not in_str:
+                if ch == "[":
+                    depth += 1
+                elif ch == "]":
+                    depth -= 1
+                    if depth == 0:
+                        raw_arr = after[arr_start:pos + 1]
+                        self.behaviors_done = True
+                        try:
+                            parsed = json.loads(raw_arr)
+                            if isinstance(parsed, list) and parsed:
+                                self.behaviors_emitted = parsed
+                        except Exception:
+                            pass
+                        return
+
+    def pop_behaviors(self) -> Optional[List[Dict[str, Any]]]:
+        """弹出尚未发出的前置大模型 behaviors 列表"""
+        b = self.behaviors_emitted
+        self.behaviors_emitted = None
+        return b
 
     def _has_active_skill_before(self, reply_idx: int) -> bool:
         before_reply = self.full_raw_text[:reply_idx]
@@ -113,6 +164,7 @@ class StreamingJsonReplyExtractor:
                                 self.in_thought = True
 
             if self.state == self.STATE_BEFORE_REPLY:
+                self._try_extract_behaviors()
                 # 兜底：如果模型未按要求输出 JSON (不以 { 开头)，自动平滑切换为纯文本流式输出
                 trimmed = self.full_raw_text.lstrip()
                 if trimmed and not trimmed.startswith("{") and len(trimmed) >= 8:

@@ -65,69 +65,6 @@ class PromptBuilder:
 """
 
     @staticmethod
-    def infer_emotion_for_text(text: str, seq: int = 0) -> str:
-        """
-        根据单句语义与句序自动匹配生动微表情（避免说话时永远僵硬在单一 HAPPY）
-        """
-        t = str(text or "")
-        tl = t.lower()
-        if any(k in tl for k in ["哈哈", "笑死", "搞笑", "幽默", "段子", "嘿嘿", "嘻嘻", "🤣", "😆", "😄", "笑话"]):
-            return "LAUGH"
-        if any(k in tl for k in ["爱你", "喜欢", "抱抱", "晚安", "想你", "心疼", "贴心", "么么", "❤️", "🥰", "😘", "甜蜜"]):
-            return "LOVE"
-        if any(k in tl for k in ["害羞", "不好意思", "脸红", "讨厌", "哎呀", "撒娇", "人家"]):
-            return "SHY"
-        if any(k in tl for k in ["太棒", "搞定", "完成", "成功", "厉害", "牛", "冲呀", "出发", "🎉", "✨", "恭喜", "耶"]):
-            return "EXCITED"
-        if any(k in tl for k in ["包在我身上", "当然", "小菜一碟", "拿捏", "轻松", "自信", "酷", "😎"]):
-            return "PROUD"
-        if any(k in tl for k in ["竟然", "居然", "天哪", "哇", "真的吗", "震撼", "没想到", "omg", "吓"]):
-            return "SURPRISED"
-        if any(k in tl for k in ["难过", "委屈", "抱歉", "对不起", "辛苦", "心累", "生病", "疼", "呜", "可惜", "未能"]):
-            return "SAD"
-        if any(k in tl for k in ["警告", "不行", "生气", "愤怒", "危险", "过分", "哼"]):
-            return "ANGRY"
-        if any(k in tl for k in ["难道", "为什么", "怎么", "好奇", "是不是", "猜猜", "？", "?"]):
-            return "CURIOUS" if (seq % 2 == 0) else "CONFUSED"
-        if any(k in tl for k in ["悄悄", "秘密", "提示", "建议", "其实", "😉"]):
-            return "WINK"
-        if any(k in tl for k in ["惬意", "舒服", "晒太阳", "慢慢", "安静", "治愈", "温柔", "放松"]):
-            return "COZY"
-        if any(k in tl for k in ["困", "睡觉", "早点休息", "打盹", "晚安啦"]):
-            return "SLEEPY"
-        if any(k in tl for k in ["晕", "头疼", "迷糊", "转圈"]):
-            return "DIZZY"
-
-        # 常规叙述句：按句序在灵动表情间自然轮换，告别面瘫
-        palette = ["CURIOUS", "HAPPY", "WINK", "PROUD", "NORMAL", "COZY"]
-        return palette[max(0, seq) % len(palette)]
-
-    @classmethod
-    def infer_behaviors_for_reply(cls, reply_text: str) -> List[Dict[str, Any]]:
-        """当大模型未给出丰富关键帧时，按回复句意自动拆解 2~3 段表情与动作节拍"""
-        import re
-        raw = str(reply_text or "").strip()
-        if not raw:
-            return [{"emotion": "NORMAL", "action": "NOD", "pan": 90, "tilt": 88, "delay": 700}]
-        parts = [p.strip() for p in re.split(r"[。！？!?；;\n]+", raw) if p.strip()]
-        if not parts:
-            parts = [raw]
-        actions = ["NOD", "TILT_LEFT", "TILT_RIGHT", "NOD"]
-        keyframes = []
-        for idx, part in enumerate(parts[:4]):
-            emo = cls.infer_emotion_for_text(part, idx + 1)
-            pan = 90 if idx % 3 == 0 else (78 if idx % 2 == 1 else 102)
-            tilt = 82 if idx % 2 == 0 else 92
-            keyframes.append({
-                "emotion": emo,
-                "action": actions[idx % len(actions)],
-                "pan": pan,
-                "tilt": tilt,
-                "delay": 850
-            })
-        return keyframes
-
-    @staticmethod
     def get_react_guidelines_prompt() -> str:
         """
         获取 ReAct 自主执行与单轮极速响应铁律
@@ -151,16 +88,17 @@ class PromptBuilder:
    - 严禁在没有调用实际技能的情况下，口头敷衍说“我这就去查”、“我查查后台记录/日志”、“稍后告诉你”、“等我处理好回复你”等虚假承诺！
    - 因为当前对话为单轮即时回复闭环，一旦回复后本次对话就已结束，不会再有第二条消息发出；口头托词会导致主人误以为你正在后台排查并一直在原地苦等！
    - 若主人对之前的消息或系统行为产生疑问（如问“刚才为啥发过来了”、“怎么突然推送了”），必须在当轮直接坦诚说明原因（例如：“哥，刚才那条是我后台的定时成长日记/测试自检误触了推送，吓到你了吧～”），当场闭环讲清楚，绝不留悬念！
-6. 严格输出标准 JSON 格式 (必须按以下字段顺序输出，reply 紧随 thought 后以便流式即刻发声)：
-   `behaviors` 须根据每句话的情绪起伏输出 2~3 个不同表情与动作关键帧（严禁每次都只写 HAPPY），可用表情包括：
-   NORMAL, HAPPY, LAUGH, LOVE, EXCITED, WINK, SHY, PROUD, CURIOUS, CONFUSED, THINKING, SURPRISED, COZY, SLEEPY, DIZZY, SAD, ANGRY。
+6. 严格输出标准 JSON 格式 (必须严格按 `thought` -> `behaviors` -> `reply` -> `skill` 顺序输出！这样在流式开口说话前就能先匹配你的语义表情与动作)：
+   `behaviors` 由你根据接下来要说的话的真实语气与语义自主决定（严禁千篇一律全写 HAPPY），长回复可给 2~3 个随语境变化的关键帧。
+   可用表情 `emotion`：NORMAL(常规)、HAPPY(开心)、LAUGH(爆笑)、LOVE(爱意/温柔)、EXCITED(兴奋/星星眼)、WINK(俏皮眨眼)、SHY(害羞)、PROUD(得意/傲娇)、CURIOUS(好奇)、CONFUSED(困惑)、THINKING(思考)、SURPRISED(吃惊)、COZY(惬意)、SLEEPY(困倦)、DIZZY(眩晕)、SAD(委屈/安慰)、ANGRY(生气/提醒)、BLINK(闭目)。
+   可用动作 `action`：NOD(点头)、SHAKE(摇头)、LOOK_UP(抬头看)、SURPRISE(后仰惊讶)、NONE(保持)。
 {
   "thought": "极简决策思路 (10字以内快速直奔核心决策)",
-  "reply": "面向主人的口头话语 (操作类给出口语确认，查询类给出口头垫话，笑话/故事/科普等内容类自适应展开生动叙述)",
-  "skill": { "name": "工具名称", "args": { "参数名": "参数值" } } 或 null,
   "behaviors": [
-    { "emotion": "CURIOUS", "action": "NOD", "pan": 84, "tilt": 84, "delay": 650 },
-    { "emotion": "EXCITED", "action": "NOD", "pan": 96, "tilt": 90, "delay": 750 }
-  ]
+    { "emotion": "CURIOUS", "action": "NOD", "pan": 86, "tilt": 85, "delay": 700 },
+    { "emotion": "EXCITED", "action": "NOD", "pan": 94, "tilt": 88, "delay": 800 }
+  ],
+  "reply": "面向主人的口头话语 (操作类给出口语确认，查询类给出口头垫话，笑话/故事/科普等内容类自适应展开生动叙述)",
+  "skill": { "name": "工具名称", "args": { "参数名": "参数值" } } 或 null
 }
 """

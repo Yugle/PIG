@@ -370,9 +370,7 @@ if hardware_agent and hardware_agent.hal:
                     last_black = False
                     if getattr(menu_fsm, "current_mode", "FACE") == "FACE":
                         emo = getattr(hardware_agent, "current_emotion", "NORMAL") or "NORMAL"
-                        tts_eng = getattr(hardware_agent, "tts_engine", None)
-                        speaking_now = bool(tts_eng and tts_eng.is_playing()) or bool(getattr(hardware_agent, "is_speaking", False))
-                        frame = renderer.render_eyes(emotion=emo, is_speaking=speaking_now)
+                        frame = renderer.render_eyes(emotion=emo)
                     else:
                         frame = Image.new("RGB", (240, 320), (0, 0, 0))
                     frame = menu_fsm.render_pil_overlay(frame)
@@ -1744,21 +1742,22 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 ):
                     ev_type = event.get("type")
                     print(f"👉 [Stream Ev] {ev_type}", flush=True)
-                    if ev_type == "sentence":
+                    if ev_type == "behaviors":
+                        _sync_hardware_behaviors(event.get("behaviors"), default_emotion="NORMAL", hold_sec=10.0)
+                        msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                        self.wfile.write(msg.encode("utf-8"))
+                        self.wfile.flush()
+                        _drain_ready_audio(force_all=False)
+                    elif ev_type == "sentence":
                         sentence_text = event.get("text", "").strip()
                         if sentence_text:
                             seq += 1
                             stream_reply_len += len(sentence_text)
-                            sentence_emo = PromptBuilder.infer_emotion_for_text(sentence_text, seq)
-                            if hardware_agent is not None:
-                                _sync_behavior_seq += 1
-                                hardware_agent.current_emotion = sentence_emo
-                            # 1. 立即将文本切片与本句微表情推至前端渲染（零延时上屏）
+                            # 1. 立即将文本切片推至前端渲染（零延时上屏）
                             payload = {
                                 "type": "chunk",
                                 "seq": seq,
                                 "text": sentence_text,
-                                "emotion": sentence_emo,
                                 "audio": ""
                             }
                             msg = f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
