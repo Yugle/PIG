@@ -1732,6 +1732,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 _sync_behavior_seq += 1
                 hardware_agent.current_emotion = "THINKING"
             stream_reply_len = 0
+            synced_behaviors = None
             try:
                 for event in reasoner.run_react_loop_stream(
                     user_text=user_text,
@@ -1743,7 +1744,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     ev_type = event.get("type")
                     print(f"👉 [Stream Ev] {ev_type}", flush=True)
                     if ev_type == "behaviors":
-                        _sync_hardware_behaviors(event.get("behaviors"), default_emotion="NORMAL", hold_sec=10.0)
+                        synced_behaviors = event.get("behaviors")
+                        _sync_hardware_behaviors(synced_behaviors, default_emotion="NORMAL", hold_sec=12.0)
                         msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
                         self.wfile.write(msg.encode("utf-8"))
                         self.wfile.flush()
@@ -1779,9 +1781,11 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         _drain_ready_audio(force_all=False)
 
                     elif ev_type == "done":
-                        # 同步真机屏幕表情与舵机动作（按回复长度保持表情时长）
-                        hold_s = max(6.0, min(stream_reply_len * 0.25, 12.0))
-                        _sync_hardware_behaviors(event.get("behaviors"), default_emotion="HAPPY", hold_sec=hold_s)
+                        # 同步真机屏幕表情与舵机动作（若流中未前置播放或工具覆盖了新动作，再触发）
+                        done_bh = event.get("behaviors")
+                        if done_bh != synced_behaviors:
+                            hold_s = max(6.0, min(stream_reply_len * 0.25, 12.0))
+                            _sync_hardware_behaviors(done_bh, default_emotion="NORMAL", hold_sec=hold_s)
                         # 在发送 done 前排空并送达所有已合成的音频切片
                         _drain_ready_audio(force_all=True)
                         msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"

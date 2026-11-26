@@ -4391,7 +4391,7 @@
 
     const streamingPlayer = new StreamingAudioPlayer();
 
-    function startChunkSpeakingChoreography(chunkText, durationMs, behaviors, seq = 1) {
+    function startChunkSpeakingChoreography(chunkText, durationMs, behaviors, seq = 1, totalChunks = 0) {
       if (speechTimer) clearTimeout(speechTimer);
       if (afterglowTimer) {
         clearTimeout(afterglowTimer);
@@ -4401,29 +4401,47 @@
       document.getElementById("overlay-action").innerText = "🗣️ 语音流式播报中...";
 
       const idx = Math.max(0, (seq || 1) - 1);
-      const b = (behaviors && behaviors.length > 0)
-        ? behaviors[idx % behaviors.length]
-        : { emotion: "NORMAL", action: "NOD", pan: 90, tilt: 85 };
-      const emo = b.emotion || "NORMAL";
-      setEmotion(emo);
-
-      const pan = b.pan !== undefined ? b.pan : 90;
-      const tilt = b.tilt !== undefined ? b.tilt : 85;
-      const act = (b.action || "NOD").toUpperCase();
-
-      if (act === "SHAKE") {
-        actionSequence = [
-          { pan: Math.max(50, pan - 16), tilt: tilt, emotion: emo, delay: 180 },
-          { pan: Math.min(130, pan + 16), tilt: tilt, emotion: emo, delay: 180 },
-          { pan: pan, tilt: tilt, emotion: emo, delay: Math.max(200, durationMs - 360) }
-        ];
+      let chunkBehaviors = [];
+      if (behaviors && behaviors.length > 0) {
+        if (streamingPlayer.streamEnded && totalChunks > 0) {
+          if (behaviors.length <= totalChunks) {
+            const bi = Math.min(behaviors.length - 1, Math.floor((idx * behaviors.length) / totalChunks));
+            chunkBehaviors = [behaviors[bi]];
+          } else {
+            const s = Math.floor((idx * behaviors.length) / totalChunks);
+            const e = Math.max(s + 1, Math.floor(((idx + 1) * behaviors.length) / totalChunks));
+            chunkBehaviors = behaviors.slice(s, e);
+          }
+        } else {
+          chunkBehaviors = [behaviors[idx % behaviors.length]];
+        }
       } else {
-        actionSequence = [
-          { pan: pan, tilt: Math.max(70, tilt - 5), emotion: emo, delay: 180 },
-          { pan: pan, tilt: Math.min(105, tilt + 5), emotion: emo, delay: 180 },
-          { pan: pan, tilt: tilt, emotion: emo, delay: Math.max(200, durationMs - 360) }
-        ];
+        chunkBehaviors = [{ emotion: "NORMAL", action: "NOD", pan: 90, tilt: 85 }];
       }
+
+      const stageMs = Math.max(400, durationMs / chunkBehaviors.length);
+      actionSequence = [];
+      chunkBehaviors.forEach((b) => {
+        const emo = b.emotion || "NORMAL";
+        const pan = b.pan !== undefined ? b.pan : 90;
+        const tilt = b.tilt !== undefined ? b.tilt : 85;
+        const act = (b.action || "NOD").toUpperCase();
+        if (act === "SHAKE") {
+          actionSequence.push({ pan: Math.max(50, pan - 16), tilt: tilt, emotion: emo, delay: 180 });
+          actionSequence.push({ pan: Math.min(130, pan + 16), tilt: tilt, emotion: emo, delay: 180 });
+          actionSequence.push({ pan: pan, tilt: tilt, emotion: emo, delay: Math.max(180, stageMs - 360) });
+        } else if (act === "LOOK_UP" || act === "SURPRISE") {
+          actionSequence.push({ pan: pan, tilt: Math.min(tilt, 68), emotion: emo, delay: stageMs });
+        } else if (act === "NONE") {
+          actionSequence.push({ pan: pan, tilt: tilt, emotion: emo, delay: stageMs });
+        } else {
+          actionSequence.push({ pan: pan, tilt: Math.max(70, tilt - 5), emotion: emo, delay: 180 });
+          actionSequence.push({ pan: pan, tilt: Math.min(105, tilt + 5), emotion: emo, delay: 180 });
+          actionSequence.push({ pan: pan, tilt: tilt, emotion: emo, delay: Math.max(180, stageMs - 360) });
+        }
+      });
+
+      setEmotion(chunkBehaviors[0].emotion || "NORMAL");
       runActionSequence();
     }
 
@@ -4473,12 +4491,13 @@
       let accumulatedReply = "";
       let toolStepsHtml = "";
       let finalBehaviors = [];
+      let totalChunksReceived = 0;
       let hasReceivedAudio = false;
       window._accumulatedThought = "";
 
       streamingPlayer.onChunkStart = (chunkText, durationMs, seq) => {
         stopThinkingCadence();
-        startChunkSpeakingChoreography(chunkText, durationMs, finalBehaviors, seq);
+        startChunkSpeakingChoreography(chunkText, durationMs, finalBehaviors, seq, totalChunksReceived);
       };
 
       streamingPlayer.onAllFinished = () => {
@@ -4558,6 +4577,7 @@
               }
             } else if (ev.type === "chunk") {
               stopThinkingCadence();
+              totalChunksReceived = Math.max(totalChunksReceived, Number(ev.seq || 0) || (totalChunksReceived + 1));
               accumulatedReply += ev.text;
               botDiv.innerHTML = `${toolStepsHtml}<div>${formatMarkdown(accumulatedReply)}<span class="cursor-blink" style="display:inline-block; width:6px; height:12px; background:var(--cyan); margin-left:3px; vertical-align:middle;"></span></div>`;
               chatLogs.scrollTop = chatLogs.scrollHeight;
