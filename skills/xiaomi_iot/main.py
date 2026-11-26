@@ -319,3 +319,61 @@ def get_screen_state(active_mode: str = "", active_qr_skill: str = "", qr_status
             "device_count": len(getattr(mgr, "synced_devices", []) or []),
         }
     }
+
+
+def handle_http(method: str, path: str, handler, ctx: dict) -> bool:
+    req_path = path.split("?", 1)[0]
+    menu_fsm = ctx.get("menu_fsm")
+    mgr = _get_qr_auth_manager()
+
+    if method == "GET" and req_path == "/api/xiaomi/qr_status":
+        handler._send_json({
+            "status": mgr.status,
+            "qr_url": mgr.qr_url,
+            "login_url": mgr.login_url,
+            "device_count": len(mgr.synced_devices),
+            "devices": mgr.synced_devices,
+            "error": mgr.error_msg,
+        })
+        return True
+
+    if method == "POST" and req_path == "/api/xiaomi/qr_start":
+        mgr.start_qr_session()
+        qr_b64 = mgr.get_qr_base64()
+        if not qr_b64:
+            handler._send_json({"status": "error", "message": mgr.error_msg or "生成米家二维码失败"})
+        else:
+            handler._send_json({
+                "status": "ok",
+                "qr_base64": qr_b64,
+                "qr_url": mgr.qr_url,
+                "login_url": mgr.login_url,
+            })
+        return True
+
+    if method == "POST" and req_path == "/api/xiaomi/qr_start_screen":
+        if menu_fsm:
+            menu_fsm.show_xiaomi_qr_on_screen()
+        handler.send_response(200)
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
+        handler.send_header("Access-Control-Allow-Origin", "*")
+        handler.end_headers()
+        import json as _json
+        handler.wfile.write(_json.dumps({
+            "status": "waiting",
+            "action": "displayed_on_robot_screen",
+            "message": "已在小猪屏幕上显示米家授权二维码",
+        }, ensure_ascii=False).encode("utf-8"))
+        return True
+
+    if method == "POST" and req_path == "/api/xiaomi/qr_dismiss_screen":
+        if menu_fsm:
+            menu_fsm.close_xiaomi_qr()
+        handler.send_response(200)
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
+        handler.send_header("Access-Control-Allow-Origin", "*")
+        handler.end_headers()
+        handler.wfile.write(b'{"status": "ok"}')
+        return True
+
+    return False

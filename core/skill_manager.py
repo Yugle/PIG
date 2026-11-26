@@ -297,6 +297,35 @@ class SkillManager:
                 print(f"⚠️ [SkillHook] 插件 [{skill_id}].{hook_name} 异常: {e}")
         return None
 
+    def dispatch_http(self, method: str, path: str, handler: Any, ctx: Optional[Dict[str, Any]] = None) -> bool:
+        """按插件声明的 http_prefixes 分发 HTTP 请求到对应插件的 handle_http 钩子"""
+        req_path = (path or "").split("?", 1)[0]
+        with self.lock:
+            plugins_snapshot = list(self.installed_plugins.items())
+        for sid, obj in plugins_snapshot:
+            meta = obj.get("meta") or {}
+            prefixes = meta.get("http_prefixes") or ([] if not meta.get("http_prefix") else [meta["http_prefix"]])
+            matched = any(
+                req_path == p or req_path.startswith(p.rstrip("/") + "/")
+                for p in prefixes if isinstance(p, str) and p
+            )
+            if not matched:
+                continue
+            fn = getattr(obj.get("module"), "handle_http", None)
+            if callable(fn):
+                try:
+                    handled = fn(method=method, path=path, handler=handler, ctx=ctx or {})
+                    if handled:
+                        return True
+                except Exception as e:
+                    print(f"⚠️ [SkillHTTP] 插件 [{sid}] 处理 {method} {req_path} 异常: {e}")
+                    try:
+                        handler.send_error(500, str(e))
+                    except Exception:
+                        pass
+                    return True
+        return False
+
     def collect_status_payload(self) -> Dict[str, Any]:
         """聚合所有插件通过 get_status_payload() 上报的运行状态字段"""
         merged: Dict[str, Any] = {}

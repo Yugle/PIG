@@ -173,11 +173,10 @@ def apply_runtime_config(cur_cfg: dict, updates: dict):
 
     if hardware_agent:
         hardware_agent.emit_event("config_updated", {"updates": list(updates.keys())})
+    if skill_mgr:
+        skill_mgr.emit_hook("on_config_update", cfg=cur_cfg, updates=updates, ctx=_get_app_ctx())
 
 server_cfg = load_config()
-from skills.feishu_bot.feishu_client import feishu_client
-if "feishu" in server_cfg:
-    feishu_client.update_config(server_cfg["feishu"])
 
 proactive_care = ProactiveCareManager(
     storage_dir=DATA_DIR,
@@ -197,175 +196,6 @@ def on_alarm_triggered(rem):
     print(f"🔔 [WebSim] 收到闹钟事件已推入前端队列: {rem.get('content')}")
 
 skill_mgr.register_trigger_callback(on_alarm_triggered)
-
-# ========================================================
-# 飞书双向消息处理通道 (统一供 WebSocket 长连接与 Webhook 调用)
-# ========================================================
-def handle_feishu_incoming_message(clean_text: str, open_id: str, chat_id: str, msg_id: str = ""):
-    """统一处理飞书传入消息 (无论是 WebSocket 长连接还是 HTTP Webhook 回调)"""
-    def _worker():
-        try:
-            target_id = chat_id if chat_id else open_id
-            id_type = "chat_id" if chat_id else "open_id"
-
-            # 1. 优先精准识别远程看家 / 拍照巡检意图 (秒级抓拍直出，杜绝废话)
-            text_lower = clean_text.strip().lower()
-            snapshot_triggers = ["看看家", "拍照", "拍张照", "拍个照", "看下家", "监控", "看一眼", "巡视", "巡检", "安防", "家里安全", "看看客厅", "看看周围", "拍张照片", "照一张", "拍一下", "看看现场", "抓拍", "拍一张"]
-            if any(k in text_lower for k in snapshot_triggers):
-                print(f"📷 [Feishu Bot] 命中远程看家与监控抓拍意图: '{clean_text}'")
-                dir_val = "center"
-                if any(w in text_lower for w in ["向左", "往左", "左边", "左侧", "左看"]):
-                    dir_val = "left"
-                elif any(w in text_lower for w in ["向右", "往右", "右边", "右侧", "右看"]):
-                    dir_val = "right"
-                elif any(w in text_lower for w in ["抬头", "向上", "天花板", "高处", "上看"]):
-                    dir_val = "up"
-                elif any(w in text_lower for w in ["低头", "向下", "地面", "桌面", "低处", "下看"]):
-                    dir_val = "down"
-
-                from skills.remote_guard.main import run as run_remote_guard
-                report = run_remote_guard(direction=dir_val, question=clean_text, target_id=target_id, id_type=id_type)
-                # run_remote_guard 内部已直接通过 send_camera_snapshot_card 成功发送富文本卡片 (含抓拍图像与诊断)
-                # 绝不在此处重复发送一条冗余的纯文本气泡，保证聊天界面只有一张完整优雅的交互卡片！
-                return
-
-            # 2. 常规对话：进入 ReAct 认知推演链路 (支持飞书卡片原地流式状态动态推送，实时展示调用了哪个技能)
-            from core.agent_reasoner import AgentReasoner
-            from core.prompt_builder import PromptBuilder
-
-            c_cfg = load_config()
-            reasoner = AgentReasoner(
-                api_key=c_cfg.get("api_key") or c_cfg.get("mimo_api_key") or "",
-                base_url=c_cfg.get("base_url") or "https://api.xiaomimimo.com/v1",
-                model=c_cfg.get("llm_model") or "mimo-v2.6-flash",
-                max_steps=4,
-                enable_thinking=c_cfg.get("llm_thinking", False)
-            )
-            sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=300, skill_manager=skill_mgr)
-            sid = f"feishu_{chat_id or open_id}"
-
-            # 技能中文友好展示名称
-            SKILL_LABELS = {
-                "xiaomi_iot": "📱 米家智能家居",
-                "weather": "🌤️ 天气查询",
-                "reminder": "⏰ 闹钟与日程",
-                "remote_guard": "📷 远程安防与现场巡检",
-                "visual_qa": "👁️ 多模态视觉之眼",
-                "pet_tamagotchi": "🐾 萌宠互动",
-                "dice_roll": "🎲 趣味掷骰子",
-                "pig_fortune": "🔮 今日运势占卜",
-                "news_briefing": "📰 新闻早报",
-                "system_config": "⚙️ 系统设置",
-                "network_diagnostics": "🌐 网络诊断",
-                "pomodoro": "🍅 番茄专注钟",
-                "crypto_price": "📈 加密行情",
-                "bilibili_follower": "📺 B站数据"
-            }
-
-            # 🚀 步骤 1：0.2 秒极速首屏占位卡片，杜绝用户干等！
-            init_card = {
-                "config": {"wide_screen_mode": True, "update_multi": True},
-                "header": {
-                    "title": {"tag": "plain_text", "content": "🤖 PIG 正在处理..."},
-                    "template": "blue"
-                },
-                "elements": [
-                    {
-                        "tag": "div",
-                        "text": {
-                            "tag": "lark_md",
-                            "content": "⏳ **正在分析意图并规划任务链路...**"
-                        }
-                    }
-                ]
-            }
-
-            msg_res = feishu_client.send_im_message(target_id, "interactive", init_card, receive_id_type=id_type)
-            msg_id = msg_res.get("data", {}).get("message_id") if msg_res.get("code") == 0 else None
-
-            start_t = time.time()
-            skills_used = []
-
-            # 步骤 2：流式步骤回调函数 (每当判定需要调用工具，立即原地刷新卡片！)
-            def _on_feishu_step(ev: dict):
-                if not msg_id:
-                    return
-                stage = ev.get("stage")
-                if stage == "tool_calling":
-                    t_name = ev.get("tool_name", "")
-                    s_label = SKILL_LABELS.get(t_name, f"🛠️ {t_name}")
-                    skills_used.append(s_label)
-                    thought_text = str(ev.get("thought") or "").strip()
-                    thought_line = f"💭 **决策思考**：{thought_text}\n" if thought_text else ""
-                    step_num = ev.get("step", 1)
-
-                    call_elements = [
-                        {
-                            "tag": "div",
-                            "text": {
-                                "tag": "lark_md",
-                                "content": f"{thought_line}⚙️ **正在调用技能 (第 {step_num} 步)**：`{s_label}`\n⏳ **执行状态**：正在与后端服务交互，请稍候片刻..."
-                            }
-                        }
-                    ]
-                    feishu_client.update_im_card(msg_id, "⚙️ PIG 正在执行任务...", call_elements, template="turquoise")
-
-            print(f"🤖 [Feishu Bot] 正在为会话 {sid} 进行思考推演 (动态流式卡片模式): '{clean_text}'...")
-            res = reasoner.run_react_loop(
-                user_text=clean_text,
-                base_sys_prompt=sys_prompt,
-                memory_manager=mem,
-                skill_manager=skill_mgr,
-                evolution_engine=evolution_engine,
-                session_id=sid,
-                silent=True,  # 远程静默执行，绝不触发本地舵机转动与大声发音！
-                on_step_callback=_on_feishu_step
-            )
-            reply_text = res.get("reply", "小猪收到啦！")
-            elapsed = round(time.time() - start_t, 1)
-
-            # 🚀 步骤 3：任务全部完成，原地定稿最终卡片！
-            if msg_id:
-                final_elements = [
-                    {
-                        "tag": "div",
-                        "text": {
-                            "tag": "lark_md",
-                            "content": reply_text
-                        }
-                    }
-                ]
-                if skills_used:
-                    chain_str = " ➔ ".join(skills_used)
-                    final_elements.append({"tag": "hr"})
-                    final_elements.append({
-                        "tag": "note",
-                        "elements": [
-                            {
-                                "tag": "plain_text",
-                                "content": f"⚡ 技能链路：{chain_str} · 总耗时 {elapsed}s · PIG Robot OS"
-                            }
-                        ]
-                    })
-                card_title = "💬 PIG 回复" if not skills_used else "✅ PIG 执行完毕"
-                update_res = feishu_client.update_im_card(msg_id, card_title, final_elements, template="blue")
-                if update_res.get("code") == 0:
-                    print(f"📤 [Feishu Bot] 已原地动态更新卡片至飞书 {msg_id} (耗时 {elapsed}s)")
-                    return
-
-            # 若未拿到 msg_id 或更新失败，兜底以普通消息发送
-            send_res = feishu_client.send_im_message(target_id, "text", {"text": reply_text}, receive_id_type=id_type)
-            print(f"📤 [Feishu Bot] 已回复消息至飞书 {target_id}: '{reply_text[:50]}...' -> {send_res.get('code', send_res.get('status'))}")
-        except Exception as e:
-            print(f"❌ [Feishu Bot] 处理消息失败: {e}")
-
-    threading.Thread(target=_worker, daemon=True, name="FeishuMsgWorker").start()
-
-# 启动飞书官方 WebSocket 长连接守护线程 (零公网 IP / 零域名直连)
-if "feishu" in server_cfg:
-    feishu_client.update_config(server_cfg["feishu"])
-    if feishu_client.app_id and feishu_client.app_secret:
-        feishu_client.start_ws_service(handle_feishu_incoming_message)
 
 # 初始化真机硬件与数字孪生工作中枢
 hardware_agent = HardwareAgent(
@@ -460,6 +290,21 @@ def _sync_hardware_behaviors(behaviors, default_emotion="HAPPY", hold_sec=6.0):
 from core.menu_fsm import menu_fsm
 menu_fsm.hal = hardware_agent.hal
 menu_fsm.agent = hardware_agent
+
+def _get_app_ctx():
+    return {
+        "load_config": load_config,
+        "apply_runtime_config": apply_runtime_config,
+        "skill_manager": skill_mgr,
+        "memory_manager": mem,
+        "evolution_engine": evolution_engine,
+        "hardware_agent": hardware_agent,
+        "menu_fsm": menu_fsm,
+        "data_dir": DATA_DIR,
+    }
+
+if skill_mgr:
+    skill_mgr.emit_hook("on_startup", ctx=_get_app_ctx())
 
 def _sim_register_master_face():
     global _latest_webcam_frame
@@ -614,6 +459,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(404, f"{page_name} not found")
                 return
 
+        if skill_mgr and skill_mgr.dispatch_http("GET", self.path, self, _get_app_ctx()):
+            return
+
         # 获取配置及状态 API
         if self.path == "/api/settings":
             cfg_file = os.path.join(DIRECTORY, "config.json")
@@ -651,38 +499,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps(response_data, ensure_ascii=False).encode("utf-8"))
-            return
-
-        # 飞书机器人状态与多 Session 活跃列表 API
-        if self.path == "/api/feishu/status":
-            from skills.feishu_bot.feishu_client import feishu_client
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(json.dumps({
-                "configured": feishu_client.is_configured,
-                "has_webhook": bool(feishu_client.webhook_url and "demo" not in feishu_client.webhook_url),
-                "has_app": bool(feishu_client.app_id and feishu_client.app_secret),
-                "ws_connected": feishu_client.ws_connected,
-                "last_open_id": feishu_client.last_user_open_id,
-                "active_sessions": mem.list_active_sessions() if mem else {}
-            }, ensure_ascii=False).encode("utf-8"))
-            return
-
-        # 📷 飞书远程安防抓拍现场测试 API (GET 支持)
-        if self.path == "/api/feishu/test_snapshot":
-            try:
-                from skills.remote_guard.main import run as run_remote_guard
-                report = run_remote_guard(direction="center", question="前端设置页一键远程巡检抓拍测试")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "ok", "message": "现场抓拍与安防卡片已成功触发并推向飞书！", "report": report}, ensure_ascii=False).encode("utf-8"))
-            except Exception as e:
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False).encode("utf-8"))
             return
 
         # 五维性格与亲密度状态查询 API
@@ -895,83 +711,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "ok", "action": "touch_triggered"}, ensure_ascii=False).encode("utf-8"))
             return
 
-        # 网易云音乐状态、扫码轮询与音频流代理 API
-        if self.path == "/api/netease/status":
-            from skills.netease_music.netease_client import netease_client
-            from skills.netease_music.player import music_player
-            self._send_json({
-                "status": "ok",
-                "auth": netease_client.get_auth_status(),
-                "music": music_player.get_state(),
-            })
-            return
-
-        if self.path.startswith("/api/netease/playlists"):
-            from urllib.parse import urlparse, parse_qs
-            from skills.netease_music.netease_client import netease_client
-            from skills.netease_music.player import music_player
-            q_params = parse_qs(urlparse(self.path).query)
-            q_kw = (q_params.get("q") or [""])[0].strip()
-            user_pls = netease_client.get_user_playlists(limit=30) if netease_client.logged_in else []
-            search_pls = netease_client.search_playlists(q_kw, limit=8) if q_kw else []
-            self._send_json({
-                "status": "ok",
-                "logged_in": netease_client.logged_in,
-                "nickname": netease_client.nickname,
-                "user_playlists": user_pls,
-                "search_playlists": search_pls,
-                "queue": music_player.get_queue(),
-                "music": music_player.get_state(),
-            })
-            return
-
-        if self.path == "/api/netease/qr_status":
-            from skills.netease_music.netease_client import netease_client
-            st = netease_client.check_qr_status()
-            if st.get("code") == 803 or st.get("logged_in"):
-                menu_fsm._sync_skill_items()
-                menu_fsm._notify_listeners()
-            self._send_json(st)
-            return
-
-        if self.path.startswith("/api/netease/audio"):
-            from skills.netease_music.player import music_player
-            from skills.netease_music.netease_client import netease_client
-            tr = music_player.current_track()
-            target_url = tr.get("url", "") if tr else ""
-            if not target_url and "id=" in self.path:
-                try:
-                    sid = int(self.path.split("id=")[-1].split("&")[0])
-                    target_url = netease_client._resolve_track_url(sid) or ""
-                except Exception:
-                    target_url = ""
-            if not target_url:
-                self.send_error(404, "No playable track URL")
-                return
-            try:
-                import requests as req_lib
-                fwd_headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://music.163.com/"}
-                if "Range" in self.headers:
-                    fwd_headers["Range"] = self.headers["Range"]
-                upstream = req_lib.get(target_url, headers=fwd_headers, stream=True, timeout=10)
-                self.send_response(upstream.status_code)
-                self.send_header("Content-Type", upstream.headers.get("Content-Type", "audio/mpeg"))
-                if "Content-Length" in upstream.headers:
-                    self.send_header("Content-Length", upstream.headers["Content-Length"])
-                if "Content-Range" in upstream.headers:
-                    self.send_header("Content-Range", upstream.headers["Content-Range"])
-                self.send_header("Accept-Ranges", "bytes")
-                self.end_headers()
-                for chunk in upstream.iter_content(chunk_size=32768):
-                    if chunk:
-                        self.wfile.write(chunk)
-            except Exception as e:
-                try:
-                    self.send_error(502, str(e))
-                except Exception:
-                    pass
-            return
-
         # 获取毫米波雷达状态 (HLK-LD2402 24GHz FMCW)
         if self.path in ["/api/radar", "/api/radar/status"]:
             is_detected = True
@@ -1003,26 +742,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "action": "barge_in_triggered"}, ensure_ascii=False).encode("utf-8"))
-            return
-
-        # 小米米家扫码绑定状态查询
-        if self.path == "/api/xiaomi/qr_status":
-            try:
-                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.end_headers()
-                data = {
-                    "status": qr_auth_manager.status,
-                    "qr_url": qr_auth_manager.qr_url,
-                    "login_url": qr_auth_manager.login_url,
-                    "device_count": len(qr_auth_manager.synced_devices),
-                    "devices": qr_auth_manager.synced_devices,
-                    "error": qr_auth_manager.error_msg
-                }
-                self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
-            except Exception as e:
-                self.send_error(500, str(e))
             return
 
         # 获取活跃日程与闹钟列表
@@ -1206,6 +925,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         global _latest_webcam_frame, _latest_webcam_frame_ts, _sync_behavior_seq
 
+        if skill_mgr and skill_mgr.dispatch_http("POST", self.path, self, _get_app_ctx()):
+            return
+
         # 网页直接同步真机屏幕表情
         if self.path == "/api/hardware/emotion":
             content_length = int(self.headers.get("Content-Length", 0))
@@ -1237,10 +959,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     cur_cfg["face_tracking"] = bool(body["face_tracking"])
                 if "feishu" in body and isinstance(body["feishu"], dict):
                     cur_cfg.setdefault("feishu", {}).update(body["feishu"])
-                    from skills.feishu_bot.feishu_client import feishu_client
-                    feishu_client.update_config(cur_cfg["feishu"])
-                    if feishu_client.app_id and feishu_client.app_secret:
-                        feishu_client.start_ws_service(handle_feishu_incoming_message)
 
                 apply_runtime_config(cur_cfg, body)
 
@@ -1250,107 +968,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"status": "ok", "state": menu_fsm.get_state()}).encode("utf-8"))
             except Exception as e:
                 self.send_error(500, str(e))
-            return
-
-        # 飞书事件回调 Webhook (URL 校验 + 消息接收与多 Session 隔离闭环)
-        if self.path == "/api/feishu/webhook":
-            content_length = int(self.headers.get("Content-Length", 0))
-            post_data = self.rfile.read(content_length)
-            try:
-                body = json.loads(post_data.decode("utf-8")) if post_data else {}
-
-                # 1. 飞书开放平台 URL 校验 (Challenge Verification)
-                if body.get("type") == "url_verification":
-                    challenge = body.get("challenge", "")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"challenge": challenge}).encode("utf-8"))
-                    return
-
-                # 2. 飞书事件消息推送 (im.message.receive_v1)
-                event = body.get("event", {})
-                if event:
-                    msg = event.get("message", {})
-                    msg_type = msg.get("message_type")
-                    if msg_type == "text":
-                        content_json = json.loads(msg.get("content", "{}"))
-                        user_raw_text = content_json.get("text", "")
-                        import re
-                        clean_text = re.sub(r"@_user_\d+\s*", "", user_raw_text).strip()
-                        sender = event.get("sender", {}).get("sender_id", {})
-                        open_id = sender.get("open_id", "")
-                        chat_id = msg.get("chat_id", "")
-
-                        if clean_text:
-                            handle_feishu_incoming_message(clean_text, open_id, chat_id, msg.get("message_id", ""))
-
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
-            except Exception as e:
-                self.send_error(500, str(e))
-            return
-
-        # 发送测试飞书告警/日记卡片 API
-        if self.path == "/api/feishu/test_notify":
-            try:
-                content_length = int(self.headers.get("Content-Length", 0))
-                post_data = self.rfile.read(content_length) if content_length > 0 else b"{}"
-                body = json.loads(post_data.decode("utf-8")) if post_data else {}
-                msg_type = body.get("type", "alert")
-                title = body.get("title", "PIG 机器人测试告警")
-                content = body.get("content", "这是一条来自树莓派 PIG 的测试推送！飞书告警与通知通道已打通。")
-
-                from skills.feishu_bot.feishu_client import feishu_client
-                if msg_type == "diary":
-                    p_data = evolution_engine.get_personality() if evolution_engine else {}
-                    radar = p_data.get("radar", {})
-                    lvl = p_data.get("intimacy_level", 2)
-                    tag = p_data.get("persona_tag", "元气治愈系桌宠")
-                    res = feishu_client.send_evolution_card(
-                        diary_text=content,
-                        radar_dict=radar,
-                        intimacy_level=lvl,
-                        persona_tag=tag
-                    )
-                else:
-                    res = feishu_client.send_alert_card(title, content, detail="硬件健康正常 | 多 Session 架构就绪")
-                if isinstance(res, dict) and res.get("status") == "error":
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "error", "message": res.get("message", "推送失败"), "result": res}, ensure_ascii=False).encode("utf-8"))
-                    return
-                if isinstance(res, dict) and res.get("code", 0) != 0 and "msg" in res:
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "error", "message": f"飞书返回错误码 {res.get('code')}: {res.get('msg')}", "result": res}, ensure_ascii=False).encode("utf-8"))
-                    return
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "ok", "result": res}, ensure_ascii=False).encode("utf-8"))
-            except Exception as e:
-                self.send_error(500, str(e))
-            return
-
-        # 📷 飞书远程安防抓拍现场测试 API
-        if self.path == "/api/feishu/test_snapshot":
-            try:
-                from skills.remote_guard.main import run as run_remote_guard
-                report = run_remote_guard(direction="center", question="前端设置页一键远程巡检抓拍测试")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "ok", "message": "现场抓拍与安防卡片已成功触发并推向飞书！", "report": report}, ensure_ascii=False).encode("utf-8"))
-            except Exception as e:
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False).encode("utf-8"))
             return
 
         # 4按键实体/虚拟事件分发 API (K1~K4)
@@ -1570,58 +1187,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(500, str(e))
             return
 
-        # 小米米家网页端直接生成扫码二维码
-        if self.path == "/api/xiaomi/qr_start":
-            try:
-                from skills.xiaomi_iot.xiaomi_qr_auth import qr_auth_manager
-                qr_auth_manager.start_qr_session()
-                qr_b64 = qr_auth_manager.get_qr_base64()
-                if not qr_b64:
-                    self._send_json({
-                        "status": "error",
-                        "message": qr_auth_manager.error_msg or "生成米家二维码失败"
-                    })
-                else:
-                    self._send_json({
-                        "status": "ok",
-                        "qr_base64": qr_b64,
-                        "qr_url": qr_auth_manager.qr_url,
-                        "login_url": qr_auth_manager.login_url,
-                    })
-            except Exception as e:
-                self.send_error(500, str(e))
-            return
-
-        # 小米米家在屏幕弹窗显示绑定二维码
-        if self.path == "/api/xiaomi/qr_start_screen":
-            try:
-                menu_fsm.show_xiaomi_qr_on_screen()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(json.dumps({
-                    "status": "waiting",
-                    "action": "displayed_on_robot_screen",
-                    "message": "已在小猪屏幕上显示米家授权二维码"
-                }, ensure_ascii=False).encode("utf-8"))
-            except Exception as e:
-                self.send_error(500, str(e))
-            return
-
-        # 关闭屏幕上的米家弹窗
-        if self.path == "/api/xiaomi/qr_dismiss_screen":
-            try:
-                menu_fsm.close_xiaomi_qr()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "ok"}, ensure_ascii=False).encode("utf-8"))
-            except Exception as e:
-                self.send_error(500, str(e))
-            return
-
         # 直接在屏幕展开关于 PIG 介绍彩蛋 (前后端全同步)
         if self.path in ["/api/menu/easter_egg", "/api/menu/enter_easter_egg"]:
             try:
@@ -1682,92 +1247,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "action": "barge_in_triggered"}, ensure_ascii=False).encode("utf-8"))
-            return
-
-        # 网易云音乐扫码登录、投屏扫码与播放控制 API
-        if self.path == "/api/netease/qr_start":
-            from skills.netease_music.netease_client import netease_client
-            self._send_json(netease_client.start_qr_login())
-            return
-
-        if self.path == "/api/netease/qr_start_screen":
-            try:
-                menu_fsm.show_netease_qr_on_screen()
-                self._send_json({
-                    "status": "waiting",
-                    "action": "displayed_on_robot_screen",
-                    "message": "已在小猪屏幕上显示网易云登录二维码",
-                })
-            except Exception as e:
-                self.send_error(500, str(e))
-            return
-
-        if self.path == "/api/netease/qr_dismiss_screen":
-            menu_fsm.close_netease_qr()
-            self._send_json({"status": "ok"})
-            return
-
-        if self.path == "/api/netease/logout":
-            from skills.netease_music.netease_client import netease_client
-            netease_client.logout()
-            menu_fsm._sync_skill_items()
-            menu_fsm._notify_listeners()
-            self._send_json({"status": "ok", "auth": netease_client.get_auth_status()})
-            return
-
-        if self.path == "/api/netease/cookie_login":
-            from skills.netease_music.netease_client import netease_client
-            length = int(self.headers.get("Content-Length", 0))
-            body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
-            res = netease_client.login_with_cookie(body.get("cookie", ""))
-            if res.get("status") == "ok":
-                menu_fsm._sync_skill_items()
-                menu_fsm._notify_listeners()
-            self._send_json(res)
-            return
-
-        if self.path == "/api/netease/control":
-            from skills.netease_music.main import run as netease_run
-            from skills.netease_music.player import music_player
-            body = self._read_json_body()
-            act = body.get("action", "play")
-            q = body.get("query", "")
-            val = str(body.get("value", ""))
-            msg = netease_run(action=act, query=q, value=val)
-            self._send_json({
-                "status": "ok",
-                "message": msg,
-                "music": music_player.get_state(),
-                "queue": music_player.get_queue(),
-            })
-            return
-
-        if self.path == "/api/netease/play_playlist":
-            from skills.netease_music.netease_client import netease_client
-            from skills.netease_music.player import music_player
-            body = self._read_json_body()
-            if body.get("daily"):
-                tracks = netease_client.get_recommended_tracks(limit=20)
-                pl_name = "每日推荐" if netease_client.logged_in else "热歌推荐"
-            elif body.get("liked"):
-                res = netease_client.get_liked_tracks(limit=20)
-                tracks = res.get("tracks") or []
-                pl_name = res.get("name") or "我喜欢的音乐"
-            else:
-                pid = int(body.get("playlist_id") or 0)
-                res = netease_client.get_playlist_tracks(pid, limit=20) if pid else {"name": "", "tracks": []}
-                tracks = res.get("tracks") or []
-                pl_name = body.get("name") or res.get("name") or "网易云歌单"
-            if not tracks:
-                self._send_json({"status": "error", "message": "该歌单暂时没有可播放的曲目"})
-                return
-            tr = music_player.play_tracks(tracks, playlist_name=pl_name)
-            self._send_json({
-                "status": "ok",
-                "track": tr,
-                "music": music_player.get_state(),
-                "queue": music_player.get_queue(),
-            })
             return
 
         # 人脸视觉注视追踪开关切换
@@ -2134,15 +1613,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"status": "error", "message": "缺少 skill_id"}, status_code=400)
                 return
 
-            if sid == "netease_music" and values.get("music_u"):
-                from skills.netease_music.netease_client import netease_client
-                login_res = netease_client.login_with_cookie(values.get("music_u", ""))
-                if login_res.get("status") != "ok":
-                    self._send_json(login_res)
-                    return
-                menu_fsm._sync_skill_items()
-                menu_fsm._notify_listeners()
-                self._send_json({"status": "ok", "skill_id": sid, "auth": login_res, "state": menu_fsm.get_state()})
+            hook_res = skill_mgr.invoke_plugin_hook(sid, "on_config_save", values=values, ctx=_get_app_ctx()) if skill_mgr else None
+            if isinstance(hook_res, dict):
+                self._send_json(hook_res)
                 return
 
             cur_cfg = load_config()
@@ -2162,12 +1635,6 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 cur_cfg.setdefault(section, {}).update(values)
                 updates = {section: cur_cfg[section]}
-
-            if section == "feishu":
-                from skills.feishu_bot.feishu_client import feishu_client
-                feishu_client.update_config(cur_cfg["feishu"])
-                if feishu_client.app_id and feishu_client.app_secret:
-                    feishu_client.start_ws_service(handle_feishu_incoming_message)
 
             apply_runtime_config(cur_cfg, updates)
             self._send_json({"status": "ok", "skill_id": sid, "state": menu_fsm.get_state()})

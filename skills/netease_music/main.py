@@ -299,3 +299,164 @@ def get_screen_state(active_mode: str = "", active_qr_skill: str = "", qr_status
             "nickname": netease_client.nickname or "",
         }
     }
+
+
+def on_config_save(values: dict, ctx: dict):
+    """处理 /skills 页面保存网易云 MUSIC_U Cookie"""
+    if not isinstance(values, dict) or not values.get("music_u"):
+        return None
+    menu_fsm = ctx.get("menu_fsm")
+    login_res = netease_client.login_with_cookie(values.get("music_u", ""))
+    if login_res.get("status") != "ok":
+        return login_res
+    if menu_fsm:
+        menu_fsm._sync_skill_items()
+        menu_fsm._notify_listeners()
+    return {"status": "ok", "skill_id": "netease_music", "auth": login_res, "state": menu_fsm.get_state() if menu_fsm else {}}
+
+
+def handle_http(method: str, path: str, handler, ctx: dict) -> bool:
+    from urllib.parse import urlparse, parse_qs
+    req_path = path.split("?", 1)[0]
+    menu_fsm = ctx.get("menu_fsm")
+
+    if method == "GET" and req_path == "/api/netease/status":
+        handler._send_json({
+            "status": "ok",
+            "auth": netease_client.get_auth_status(),
+            "music": music_player.get_state(),
+        })
+        return True
+
+    if method == "GET" and req_path == "/api/netease/playlists":
+        q_params = parse_qs(urlparse(path).query)
+        q_kw = (q_params.get("q") or [""])[0].strip()
+        user_pls = netease_client.get_user_playlists(limit=30) if netease_client.logged_in else []
+        search_pls = netease_client.search_playlists(q_kw, limit=8) if q_kw else []
+        handler._send_json({
+            "status": "ok",
+            "logged_in": netease_client.logged_in,
+            "nickname": netease_client.nickname,
+            "user_playlists": user_pls,
+            "search_playlists": search_pls,
+            "queue": music_player.get_queue(),
+            "music": music_player.get_state(),
+        })
+        return True
+
+    if method == "GET" and req_path == "/api/netease/qr_status":
+        st = netease_client.check_qr_status()
+        if (st.get("code") == 803 or st.get("logged_in")) and menu_fsm:
+            menu_fsm._sync_skill_items()
+            menu_fsm._notify_listeners()
+        handler._send_json(st)
+        return True
+
+    if method == "GET" and req_path == "/api/netease/audio":
+        tr = music_player.current_track()
+        target_url = tr.get("url", "") if tr else ""
+        if not target_url and "id=" in path:
+            try:
+                sid = int(path.split("id=")[-1].split("&")[0])
+                target_url = netease_client._resolve_track_url(sid) or ""
+            except Exception:
+                target_url = ""
+        if not target_url:
+            handler.send_error(404, "No playable track URL")
+            return True
+        try:
+            import requests as req_lib
+            fwd_headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://music.163.com/"}
+            if "Range" in handler.headers:
+                fwd_headers["Range"] = handler.headers["Range"]
+            upstream = req_lib.get(target_url, headers=fwd_headers, stream=True, timeout=10)
+            handler.send_response(upstream.status_code)
+            handler.send_header("Content-Type", upstream.headers.get("Content-Type", "audio/mpeg"))
+            if "Content-Length" in upstream.headers:
+                handler.send_header("Content-Length", upstream.headers["Content-Length"])
+            if "Content-Range" in upstream.headers:
+                handler.send_header("Content-Range", upstream.headers["Content-Range"])
+            handler.send_header("Accept-Ranges", "bytes")
+            handler.end_headers()
+            for chunk in upstream.iter_content(chunk_size=32768):
+                if chunk:
+                    handler.wfile.write(chunk)
+        except Exception:
+            pass
+        return True
+
+    if method == "POST" and req_path == "/api/netease/qr_start":
+        handler._send_json(netease_client.start_qr_login())
+        return True
+
+    if method == "POST" and req_path == "/api/netease/qr_start_screen":
+        if menu_fsm:
+            menu_fsm.show_netease_qr_on_screen()
+        handler._send_json({
+            "status": "waiting",
+            "action": "displayed_on_robot_screen",
+            "message": "已在小猪屏幕上显示网易云登录二维码",
+        })
+        return True
+
+    if method == "POST" and req_path == "/api/netease/qr_dismiss_screen":
+        if menu_fsm:
+            menu_fsm.close_netease_qr()
+        handler._send_json({"status": "ok"})
+        return True
+
+    if method == "POST" and req_path == "/api/netease/logout":
+        netease_client.logout()
+        if menu_fsm:
+            menu_fsm._sync_skill_items()
+            menu_fsm._notify_listeners()
+        handler._send_json({"status": "ok", "auth": netease_client.get_auth_status()})
+        return True
+
+    if method == "POST" and req_path == "/api/netease/cookie_login":
+        body = handler._read_json_body()
+        res = netease_client.login_with_cookie(body.get("cookie", ""))
+        if res.get("status") == "ok" and menu_fsm:
+            menu_fsm._sync_skill_items()
+            menu_fsm._notify_listeners()
+        handler._send_json(res)
+        return True
+
+    if method == "POST" and req_path == "/api/netease/control":
+        body = handler._read_json_body()
+        msg = run(action=body.get("action", "play"), query=body.get("query", ""), value=str(body.get("value", "")))
+        handler._send_json({
+            "status": "ok",
+            "message": msg,
+            "music": music_player.get_state(),
+            "queue": music_player.get_queue(),
+        })
+        return True
+
+    if method == "POST" and req_path == "/api/netease/play_playlist":
+        body = handler._read_json_body()
+        if body.get("daily"):
+            tracks = netease_client.get_recommended_tracks(limit=20)
+            pl_name = "每日推荐" if netease_client.logged_in else "热歌推荐"
+        elif body.get("liked"):
+            res = netease_client.get_liked_tracks(limit=20)
+            tracks = res.get("tracks") or []
+            pl_name = res.get("name") or "我喜欢的音乐"
+        else:
+            pid = int(body.get("playlist_id") or 0)
+            res = netease_client.get_playlist_tracks(pid, limit=20) if pid else {"name": "", "tracks": []}
+            tracks = res.get("tracks") or []
+            pl_name = body.get("name") or res.get("name") or "网易云歌单"
+        if not tracks:
+            handler._send_json({"status": "error", "message": "该歌单暂时没有可播放的曲目"})
+            return True
+        tr = music_player.play_tracks(tracks, playlist_name=pl_name)
+        handler._send_json({
+            "status": "ok",
+            "track": tr,
+            "music": music_player.get_state(),
+            "queue": music_player.get_queue(),
+        })
+        return True
+
+    return False

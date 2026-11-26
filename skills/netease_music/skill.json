@@ -2,6 +2,7 @@
   "id": "netease_music",
   "name": "网易云音乐点歌台",
   "version": "1.0.0",
+  "http_prefixes": ["/api/netease"],
   "author": "PIG Music Lab",
   "category": "娱乐互动",
   "description": "网易云音乐点歌台与歌单控制。支持搜歌播放、查看我的歌单、播放我喜欢的音乐、搜索全网歌单（如'放个深夜学习歌单'）、每日推荐、暂停、继续、切歌、切换随机/顺序播放、调音量与停止播放（'停止播放'/'别放了'/'停下'务必传 action='stop'）。",

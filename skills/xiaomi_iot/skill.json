@@ -2,6 +2,7 @@
   "id": "xiaomi_iot",
   "name": "小米米家生态直控",
   "version": "1.2.0",
+  "http_prefixes": ["/api/xiaomi"],
   "author": "Mijia Eco Team",
   "category": "智能物联",
   "description": "查询与控制米家生态智能设备（台灯、水壶、摄像机、饮水机、电视盒子等）或扫码绑定。当主人询问'家里有什么设备'、'我米家都有什么设备'、'查一下米家设备'时必须调用此技能（参数: device='all', action='查询设备列表'）；亦支持开关、调节与扫码绑定。",
