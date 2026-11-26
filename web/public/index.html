@@ -25,7 +25,7 @@
       min-height: 100vh;
     }
     a { color: inherit; text-decoration: none; }
-    .container { max-width: 1120px; margin: 0 auto; padding: 24px 20px 64px; }
+    .container { max-width: 1040px; margin: 0 auto; padding: 24px 20px 64px; }
 
     .nav {
       display: flex;
@@ -64,7 +64,7 @@
 
     .hero {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1.2fr 0.8fr;
       gap: 36px;
       align-items: center;
       margin-bottom: 64px;
@@ -98,29 +98,29 @@
     .btn-ghost:hover { border-color: var(--cyan); color: var(--cyan); }
 
     .device-card {
+      width: 100%;
+      max-width: 368px;
+      justify-self: center;
       background: linear-gradient(160deg, #161b2c, #0c101b);
       border: 1px solid rgba(0, 229, 255, 0.25);
-      border-radius: 26px; padding: 26px 24px;
+      border-radius: 26px; padding: 22px 20px;
       box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
       display: flex; flex-direction: column; align-items: center;
     }
     .bezel {
-      width: 268px; padding: 12px; border-radius: 20px;
+      width: 264px; padding: 12px; border-radius: 20px;
       background: #05070c; border: 2px solid #262e45;
       box-shadow: 0 0 26px rgba(0, 229, 255, 0.12);
     }
     canvas#eyeCanvas {
-      width: 240px; height: 240px; display: block; border-radius: 10px; background: #04060b;
+      width: 236px; height: 236px; display: block; border-radius: 10px; background: #04060b;
     }
     .emo-bar {
       width: 100%;
       display: grid;
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 8px;
-      margin-top: 18px;
-    }
-    @media (max-width: 540px) {
-      .emo-bar { grid-template-columns: repeat(3, 1fr); }
+      margin-top: 16px;
     }
     .emo-btn {
       border: 1px solid var(--border); background: rgba(255,255,255,0.04); color: var(--muted);
@@ -207,6 +207,8 @@
           <button class="emo-btn" onclick="setEmo('WINK', this)">😉 眨眼</button>
           <button class="emo-btn" onclick="setEmo('SURPRISED', this)">😳 吃惊</button>
           <button class="emo-btn" onclick="setEmo('THINKING', this)">🧐 思考</button>
+          <button class="emo-btn" onclick="setEmo('SLEEPY', this)">😴 困倦</button>
+          <button class="emo-btn" onclick="setEmo('ANGRY', this)">😡 愤怒</button>
         </div>
       </div>
     </section>
@@ -350,7 +352,7 @@
       const cy = 120 + lookY;
 
       ctx.shadowBlur = 16;
-      ctx.shadowColor = emo === "LOVE" ? "#ff4d8d" : "#00e5ff";
+      ctx.shadowColor = emo === "LOVE" ? "#ff4d8d" : (emo === "ANGRY" ? "#ff4757" : "#00e5ff");
 
       if (blinking) {
         drawRoundRect(leftCx - 28, cy - 3, 56, 6, 3, "#00e5ff");
@@ -380,6 +382,17 @@
       } else if (emo === "THINKING") {
         drawRoundRect(leftCx - 26, cy - 20, 52, 42, 16, "#00e5ff");
         drawRoundRect(rightCx - 26, cy - 36, 52, 62, 20, "#00e5ff");
+      } else if (emo === "SLEEPY") {
+        drawRoundRect(leftCx - 26, cy + 2, 52, 14, 7, "#00e5ff");
+        drawRoundRect(rightCx - 26, cy + 2, 52, 14, 7, "#00e5ff");
+      } else if (emo === "ANGRY") {
+        ctx.fillStyle = "#ff4757";
+        ctx.beginPath();
+        ctx.moveTo(leftCx - 28, cy - 28); ctx.lineTo(leftCx + 24, cy - 10);
+        ctx.lineTo(leftCx + 24, cy + 22); ctx.lineTo(leftCx - 28, cy + 22); ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(rightCx + 28, cy - 28); ctx.lineTo(rightCx - 24, cy - 10);
+        ctx.lineTo(rightCx - 24, cy + 22); ctx.lineTo(rightCx + 28, cy + 22); ctx.closePath(); ctx.fill();
       } else {
         drawRoundRect(leftCx - 26, cy - 34, 52, 68, 22, "#00e5ff");
         drawRoundRect(rightCx - 26, cy - 34, 52, 68, 22, "#00e5ff");
