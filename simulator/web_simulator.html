@@ -2110,7 +2110,10 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ enable: !curAp })
           }).then(r => r.json()).then(d => {
-            if (menuState.wifi) menuState.wifi.ap_mode = !curAp;
+            menuState.wifi = d;
+            if (d && d.status === "error") {
+              showToast(`⚠️ 开启 AP 热点失败: ${d.message || d.ap_error || "请检查 nmcli / dnsmasq"}`);
+            }
             preloadQrCode();
           }).catch(() => {});
         } else if (button === "K4") {
@@ -2769,6 +2772,7 @@
       } else if (menuState.mode === "QR_CODE") {
         const wf = menuState.wifi || {};
         const isAp = Boolean(wf.ap_mode);
+        const isConn = Boolean(wf.connected);
         const ip = wf.ip || menuState.local_ip || location.hostname;
 
         // 顶栏返回箭头
@@ -2778,9 +2782,9 @@
         ctx.fillStyle = MD3.onSurface;
         ctx.font = "bold 15px sans-serif";
         ctx.fillText("无线配网", 26, 31);
-        ctx.fillStyle = isAp ? "#f59e0b" : MD3.primary;
+        ctx.fillStyle = isAp ? "#f59e0b" : (isConn ? MD3.primary : "#f87171");
         ctx.font = "bold 11px sans-serif";
-        ctx.fillText(isAp ? "热点已开启" : "已联网", 176, 30);
+        ctx.fillText(isAp ? "热点已开启" : (isConn ? "已联网" : "未联网"), 176, 30);
 
         // 居中 M3 白底卡片 (16px 圆角)
         ctx.fillStyle = "#ffffff";
@@ -2817,7 +2821,7 @@
           ctx.fillStyle = MD3.onSurfaceVariant;
           ctx.font = "11px sans-serif";
           ctx.fillText(`后台: ${wf.ap_ip || '192.168.4.1'}:8090/settings`, 24, 272);
-        } else {
+        } else if (isConn) {
           ctx.fillStyle = "#ffffff";
           ctx.font = "bold 13px sans-serif";
           ctx.fillText(`已连接: ${wf.ssid || 'WiFi 网络'}`, 24, 228);
@@ -2826,7 +2830,17 @@
           ctx.fillText(`IP: ${ip}:8090`, 24, 250);
           ctx.fillStyle = MD3.onSurfaceVariant;
           ctx.font = "11px sans-serif";
-          ctx.fillText("手机扫码进入后台进行配网设置", 24, 272);
+          ctx.fillText("手机扫码配网 | 按 OK 开 AP 热点", 24, 272);
+        } else {
+          ctx.fillStyle = "#f87171";
+          ctx.font = "bold 13px sans-serif";
+          ctx.fillText("WiFi: 未连接", 24, 228);
+          ctx.fillStyle = MD3.onSurfaceVariant;
+          ctx.font = "11px sans-serif";
+          ctx.fillText(wf.ap_error ? `失败: ${wf.ap_error}` : "当前网络已断开，暂无局域网", 24, 250);
+          ctx.fillStyle = MD3.primary;
+          ctx.font = "11px sans-serif";
+          ctx.fillText("按 OK/K3 开启 AP 配网热点", 24, 272);
         }
 
       } else if (menuState.mode === "XIAOMI_QR" || menuState.mode === "NETEASE_QR" || menuState.mode === "SKILLS_QR") {

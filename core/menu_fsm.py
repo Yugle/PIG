@@ -12,25 +12,12 @@ import socket
 import threading
 from typing import Dict, Any, Optional, Callable, List
 from PIL import Image, ImageDraw, ImageFont
-from core.wifi_manager import wifi_manager
+from core.wifi_manager import wifi_manager, get_local_ip, _is_real_lan_ip
 
 try:
     import qrcode
 except ImportError:
     qrcode = None
-
-
-def get_local_ip() -> str:
-    """获取本机局域网 IP 地址"""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(0.3)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
 
 
 # ========================================================
@@ -1150,6 +1137,7 @@ class MenuFSM:
                         # 短按确认 -> 进入选中项
                         target = self.main_menu_items[self.cursor]["id"]
                         if target == "qr":
+                            wifi_manager.get_status(force=True)
                             self.current_mode = "QR_CODE"
                         elif target == "doctor":
                             self.current_mode = "DOCTOR"
@@ -1636,7 +1624,7 @@ class MenuFSM:
                     "chevron", "", is_selected, f_bold, f_small, theme, scale=S
                 )
 
-        # B. 扫码手机配置界面 (支持 AP 配网热点与已连接模式)
+        # B. 扫码手机配置界面 (支持 AP 配网热点、已联网与未联网状态)
         elif self.current_mode == "QR_CODE":
             wf_st = wifi_manager.get_status()
             if wf_st["ap_mode"]:
@@ -1645,16 +1633,26 @@ class MenuFSM:
                     badge_color=(255, 196, 64), badge_fill=(52, 38, 14)
                 )
                 line1 = f"热点: {wf_st['ap_ssid']}"
-                line2 = f"密码: {wf_st['ap_password']}  (扫码直连)"
+                line2 = f"密码: {wf_st['ap_password']} (OK关闭)"
                 line3 = f"后台: {wf_st['ap_ip']}:8090/settings"
                 l1_col = on_surf
-            else:
+            elif wf_st.get("connected"):
                 _draw_menu_header(draw, "无线配网", "已联网", f_title, f_small, theme, show_back=True)
                 ip = wf_st.get("ip", get_local_ip())
                 line1 = f"WiFi: {wf_st.get('ssid', 'WiFi')}"
                 line2 = f"地址: {ip}:8090"
-                line3 = "手机扫码进入后台进行配网"
+                line3 = "扫码配网  |  按 OK 开热点"
                 l1_col = on_surf
+            else:
+                _draw_menu_header(
+                    draw, "无线配网", "未联网", f_title, f_small, theme, show_back=True,
+                    badge_color=(248, 113, 113), badge_fill=(68, 22, 22)
+                )
+                line1 = "WiFi: 未连接"
+                ap_err = wf_st.get("ap_error", "")
+                line2 = f"热点失败: {ap_err}" if ap_err else "网络已断开，暂无局域网"
+                line3 = "按 OK 键开启 AP 配网热点"
+                l1_col = (248, 113, 113)
 
             # 2x 平滑圆角白色二维码底座
             draw.rounded_rectangle([84, 100, 396, 412], radius=28, fill=(255, 255, 255))
@@ -1677,7 +1675,8 @@ class MenuFSM:
             _draw_menu_header(draw, "系统体检", "HEALTH", f_title, f_small, theme, show_back=True)
 
             d = self.doctor_cache
-            net_val = "在线" if "." in d.get("wifi_ip", "") and "--" not in d.get("wifi_ip", "") else "离线"
+            wf_st = wifi_manager.get_status()
+            net_val = "在线" if (wf_st.get("connected") and _is_real_lan_ip(d.get("wifi_ip", ""))) else "离线"
             items = [
                 ("wifi", "网络连接", "badge", net_val),
                 ("doctor", "大模型接口", "badge", d.get("mimo_status", "正常")),

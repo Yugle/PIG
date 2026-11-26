@@ -877,7 +877,12 @@
           body: JSON.stringify({ enable: !isAp })
         });
         if (res.ok) {
-          showToast(isAp ? "已切回常态网络" : "已开启配网热点 (PIG-Setup-8090)");
+          const d = await res.json();
+          if (d.status === "error") {
+            alert("切换热点失败: " + (d.message || d.ap_error || "请检查 nmcli / dnsmasq"));
+          } else {
+            showToast(d.ap_mode ? `已开启配网热点 (${d.ap_ssid} / ${d.ap_ip})` : "已切回常态网络");
+          }
           refreshWifiStatus();
         }
       } catch (e) {
