@@ -275,26 +275,13 @@ class AsyncMiMoTTSStreamer:
                 "Content-Type": "application/json"
             }
 
-            if self.clone_audio and os.path.exists(self.clone_audio):
-                model = "mimo-v2.5-tts-voiceclone"
-                user_prompt = "亲切、自然、真实的对话语气"
-                if self._clone_audio_b64 is None:
-                    with open(self.clone_audio, "rb") as f:
-                        ext = os.path.splitext(self.clone_audio)[1].lower().replace(".", "") or "mp3"
-                        mime = "audio/wav" if ext == "wav" else "audio/mp3"
-                        b64_str = base64.b64encode(f.read()).decode("utf-8")
-                        self._clone_audio_b64 = f"data:{mime};base64,{b64_str}"
-                audio_voice = self._clone_audio_b64
-            elif self.design_prompt:
-                model = "mimo-v2.5-tts-voicedesign"
-                user_prompt = self.design_prompt
-                audio_voice = None
-            else:
-                model = "mimo-v2.5-tts"
-                user_prompt = "自然、亲切、生动的日常对话语气"
-                # 校验发音人，无效时安全回退至官方内置标准发音人 "冰糖"
-                valid_voices = ["mimo_default", "冰糖", "茉莉"]
-                audio_voice = self.voice if self.voice in valid_voices else "冰糖"
+            from drivers.tts_engine import resolve_mimo_tts_params
+            model, user_prompt, audio_voice, self._clone_audio_b64 = resolve_mimo_tts_params(
+                voice=self.voice,
+                clone_audio=self.clone_audio,
+                design_prompt=self.design_prompt,
+                clone_b64_cache=self._clone_audio_b64,
+            )
 
 
             payload = {
@@ -346,15 +333,19 @@ class AsyncMiMoTTSStreamer:
 
 
 def get_tts_streamer(cfg: Optional[Dict[str, Any]] = None):
-    """根据系统配置工厂式分发流式 TTS 引擎 (优先支持 小米 MiMo-TTS)"""
+    """根据系统配置工厂式分发流式 TTS 引擎 (支持 小米 MiMo-TTS 预置/声线定制 与 Edge-TTS)"""
+    from drivers.tts_engine import is_edge_voice
     cfg = cfg or {}
     mode = cfg.get("tts_mode", "edge")
     mimo_key = cfg.get("mimo_api_key", "")
+    selected_voice = cfg.get("mimo_voice") or cfg.get("tts_voice") or cfg.get("edge_voice") or "冰糖"
+    if is_edge_voice(selected_voice):
+        return AsyncEdgeTTSStreamer(voice=selected_voice)
     if mode == "mimo" and mimo_key:
         clone_audio = cfg.get("mimo_clone_audio", "") if cfg.get("mimo_clone_enabled", False) else ""
         return AsyncMiMoTTSStreamer(
             api_key=mimo_key,
-            voice=cfg.get("mimo_voice", "冰糖"),
+            voice=selected_voice,
             clone_audio=clone_audio,
             design_prompt=cfg.get("mimo_design_prompt", "")
         )

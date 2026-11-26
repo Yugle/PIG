@@ -131,6 +131,8 @@ def apply_runtime_config(cur_cfg: dict, updates: dict):
     server_cfg.update(cur_cfg)
     if hardware_agent:
         hardware_agent.cfg.update(cur_cfg)
+        if getattr(hardware_agent, "tts_engine", None) and hasattr(hardware_agent.tts_engine, "update_config"):
+            hardware_agent.tts_engine.update_config(cur_cfg)
         if any(k in updates for k in ["wakeword_keywords", "wakeword_engine", "wakeword_model", "wakeword_threshold"]) and hasattr(hardware_agent, "reload_wakeword"):
             hardware_agent.reload_wakeword()
 
@@ -872,21 +874,24 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 cfg = load_config()
                 mode = cfg.get("tts_mode", "edge")
-                mimo_key = cfg.get("mimo_api_key", "")
-                mimo_voice = cfg.get("mimo_voice", "冰糖")
+                mimo_key = cfg.get("mimo_api_key", "") or cfg.get("api_key", "")
+                chosen_voice = cfg.get("mimo_voice") or cfg.get("tts_voice") or cfg.get("edge_voice") or "冰糖"
 
-                # 若启用小米 MiMo 语音模型 (支持预置、克隆、设计)
-                if mode == "mimo" and mimo_key:
+                from drivers.tts_engine import is_edge_voice
+                # 若启用小米 MiMo 语音模型且当前音色非 Edge 音色
+                if mode == "mimo" and mimo_key and not is_edge_voice(chosen_voice):
                     from drivers.tts_engine import TTSEngine
                     clone_audio = cfg.get("mimo_clone_audio", "") if cfg.get("mimo_clone_enabled", False) else ""
                     sim_tts = TTSEngine(
                         mode="mimo",
                         mimo_api_key=mimo_key,
-                        mimo_voice=mimo_voice,
+                        mimo_voice=chosen_voice,
+                        default_voice=cfg.get("edge_voice", "zh-CN-XiaoxiaoNeural"),
                         mimo_clone_audio=clone_audio,
                         mimo_design_prompt=cfg.get("mimo_design_prompt", "")
                     )
-                    out_path, _ = sim_tts.synthesize(text, out_file="/tmp/web_mimo_tts.mp3")
+                    tmp_out = f"/tmp/web_mimo_tts_{threading.get_ident()}.mp3"
+                    out_path, _ = sim_tts.synthesize(text, out_file=tmp_out)
                     if os.path.exists(out_path):
                         with open(out_path, "rb") as f:
                             audio_data = f.read()
@@ -901,9 +906,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 import asyncio
                 import edge_tts
 
+                edge_voice = chosen_voice if is_edge_voice(chosen_voice) else (cfg.get("edge_voice") or "zh-CN-XiaoxiaoNeural")
+
                 async def _gen():
-                    # 使用 Xiaoxiao 极具亲和力的甜美自然女声
-                    comm = edge_tts.Communicate(text, "zh-CN-XiaoxiaoNeural")
+                    comm = edge_tts.Communicate(text, edge_voice)
                     chunks = []
                     async for chunk in comm.stream():
                         if chunk["type"] == "audio":

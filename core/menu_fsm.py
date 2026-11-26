@@ -687,13 +687,18 @@ class MenuFSM:
         self._notify_listeners()
 
     def cycle_voice(self):
-        """循环切换发音音色"""
-        voices = ["冰糖", "小爱", "温柔男声"]
+        """循环切换发音音色并热同步到真机 TTS 引擎"""
+        voices = ["冰糖", "茉莉", "苏打", "白桦", "小爱", "温柔男声"]
         c = self._load_cfg()
         cur_v = c.get("mimo_voice", "冰糖")
         idx = voices.index(cur_v) if cur_v in voices else 0
         new_v = voices[(idx + 1) % len(voices)]
         self._save_cfg_key("mimo_voice", new_v)
+        self._save_cfg_key("tts_voice", new_v)
+        c["mimo_voice"] = new_v
+        c["tts_voice"] = new_v
+        if self.agent and getattr(self.agent, "tts_engine", None) and hasattr(self.agent.tts_engine, "update_config"):
+            self.agent.tts_engine.update_config(c)
         self._sync_system_items()
         self._notify_listeners()
 

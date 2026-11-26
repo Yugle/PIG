@@ -11,6 +11,60 @@ import shutil
 TTS_CACHE_DIR = "/tmp/pig_tts_cache"
 os.makedirs(TTS_CACHE_DIR, exist_ok=True)
 
+MIMO_PRESET_VOICES = ("mimo_default", "冰糖", "茉莉", "苏打", "白桦", "Mia", "Chloe", "Milo", "Dean")
+
+MIMO_VOICE_DESIGN_PRESETS = {
+    "小爱": "清亮甜美、活泼灵动的元气少女音，语速自然亲切",
+    "温柔男声": "温暖沉稳、温柔有磁性的年轻男声，语速自然亲切",
+}
+
+
+def is_edge_voice(voice: str) -> bool:
+    """判断是否为 Edge-TTS 神经语音音色标识（如 zh-CN-YunjianNeural）"""
+    v = str(voice or "").strip()
+    return v.endswith("Neural")
+
+
+def resolve_mimo_tts_params(
+    voice: str,
+    clone_audio: str = "",
+    design_prompt: str = "",
+    clone_b64_cache: str = None,
+) -> tuple[str, str, object, str]:
+    """
+    统一解析小米 MiMo TTS 的子模型、风格提示词与 voice 参数：
+    1. 参考音频克隆 (mimo-v2.5-tts-voiceclone)
+    2. 音色设计 (mimo-v2.5-tts-voicedesign) —— 支持自定义描述或内置“温柔男声/小爱”
+    3. 预置精品音色 (mimo-v2.5-tts) —— 冰糖/茉莉/苏打/白桦/mimo_default 等
+    """
+    clone_path = (clone_audio or "").strip()
+    if clone_path and not os.path.exists(clone_path):
+        proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        cand = os.path.join(proj_root, clone_path)
+        if os.path.exists(cand):
+            clone_path = cand
+
+    if clone_path and os.path.exists(clone_path):
+        if clone_b64_cache is None:
+            with open(clone_path, "rb") as f:
+                ext = os.path.splitext(clone_path)[1].lower().replace(".", "") or "mp3"
+                mime = "audio/wav" if ext == "wav" else "audio/mp3"
+                b64_str = base64.b64encode(f.read()).decode("utf-8")
+                clone_b64_cache = f"data:{mime};base64,{b64_str}"
+        return ("mimo-v2.5-tts-voiceclone", "亲切、自然、真实的对话语气", clone_b64_cache, clone_b64_cache)
+
+    v = (voice or "").strip() or "冰糖"
+    if design_prompt:
+        return ("mimo-v2.5-tts-voicedesign", design_prompt, None, clone_b64_cache)
+
+    if v in MIMO_VOICE_DESIGN_PRESETS:
+        return ("mimo-v2.5-tts-voicedesign", MIMO_VOICE_DESIGN_PRESETS[v], None, clone_b64_cache)
+
+    if v in MIMO_PRESET_VOICES:
+        return ("mimo-v2.5-tts", "自然、亲切、生动的日常对话语气", v, clone_b64_cache)
+
+    return ("mimo-v2.5-tts", "自然、亲切、生动的日常对话语气", "冰糖", clone_b64_cache)
+
 try:
     import pygame
 except ImportError:
@@ -64,6 +118,29 @@ class TTSEngine:
         else:
             print("ℹ️ [TTS] pygame 未安装，音频将以高精时间戳仿真模式运行")
 
+    def update_config(self, cfg: dict):
+        """热更新运行期音色与 TTS 参数，无需重启进程即可生效"""
+        if not isinstance(cfg, dict):
+            return
+        if "tts_mode" in cfg:
+            self.mode = cfg["tts_mode"] or self.mode
+        if "mimo_api_key" in cfg or "api_key" in cfg:
+            self.mimo_api_key = cfg.get("mimo_api_key") or cfg.get("api_key") or self.mimo_api_key
+        new_voice = cfg.get("mimo_voice") or cfg.get("tts_voice")
+        if new_voice:
+            self.mimo_voice = new_voice
+            if is_edge_voice(new_voice):
+                self.default_voice = new_voice
+        if "edge_voice" in cfg and cfg["edge_voice"]:
+            self.default_voice = cfg["edge_voice"]
+        if "mimo_design_prompt" in cfg:
+            self.mimo_design_prompt = cfg.get("mimo_design_prompt", "")
+        if "mimo_clone_enabled" in cfg or "mimo_clone_audio" in cfg:
+            new_clone = cfg.get("mimo_clone_audio", "") if cfg.get("mimo_clone_enabled", False) else ""
+            if new_clone != self.mimo_clone_audio:
+                self.mimo_clone_audio = new_clone
+                self._clone_audio_b64 = None
+
     def get_audio_duration(self, audio_path: str, text: str = "") -> float:
         """精确获取音频文件的播放时长 (秒)"""
         if os.path.exists(audio_path):
@@ -101,9 +178,13 @@ class TTSEngine:
         if not clean_text:
             return ("", 0.0)
 
+        chosen_voice = voice or self.mimo_voice or self.default_voice
+        edge_selected = is_edge_voice(chosen_voice)
+        eff_mode = "edge" if edge_selected else self.mode
+
         # 0. 快速匹配本地磁盘 LRU/MD5 缓存 (0ms 命中即出声)
         cache_key = hashlib.md5(
-            f"{self.mode}_{voice or self.mimo_voice}_{self.mimo_clone_audio}_{self.mimo_design_prompt}_{clean_text}".encode("utf-8")
+            f"{eff_mode}_{chosen_voice}_{self.mimo_clone_audio}_{self.mimo_design_prompt}_{clean_text}".encode("utf-8")
         ).hexdigest()
         cache_file = os.path.join(TTS_CACHE_DIR, f"{cache_key}.mp3")
         if os.path.exists(cache_file):
@@ -114,21 +195,22 @@ class TTSEngine:
             except Exception:
                 pass
 
-        # 分支 1: 小米 MiMo-V2.5-TTS
-        if self.mode == "mimo" and self.mimo_api_key:
-            success = self._mimo_tts(clean_text, out_file, voice, cache_file=cache_file)
+        # 分支 1: 显式选择了 Edge-TTS 音色 (如 zh-CN-YunjianNeural) 或处于 edge 模式
+        if edge_selected:
+            self._edge_fallback(clean_text, out_file, chosen_voice, cache_file=cache_file)
+        # 分支 2: 小米 MiMo-V2.5-TTS (包含预置音色、声音设计、声音克隆)
+        elif self.mode == "mimo" and self.mimo_api_key:
+            success = self._mimo_tts(clean_text, out_file, chosen_voice, cache_file=cache_file)
             if not success:
                 self._edge_fallback(clean_text, out_file, self.default_voice)
-        # 分支 2: 自定义克隆音色 (如 Fish Audio)
+        # 分支 3: 自定义克隆音色 (如 Fish Audio)
         elif self.mode == "custom" and self.api_key and self.custom_voice_id:
-            voice = voice or self.default_voice
             success = self._custom_tts(clean_text, out_file)
             if not success:
-                self._edge_fallback(clean_text, out_file, voice)
+                self._edge_fallback(clean_text, out_file, self.default_voice)
         else:
-            # 分支 3: Edge-TTS
-            voice = voice or self.default_voice
-            self._edge_fallback(clean_text, out_file, voice)
+            # 分支 4: 默认 Edge-TTS
+            self._edge_fallback(clean_text, out_file, self.default_voice, cache_file=cache_file)
 
         duration = self.get_audio_duration(out_file, clean_text)
         return (out_file, duration)
@@ -222,34 +304,12 @@ class TTSEngine:
                 "Content-Type": "application/json"
             }
 
-            # 判定子模型与参数
-            clone_path = self.mimo_clone_audio
-            if clone_path and not os.path.exists(clone_path):
-                proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-                cand = os.path.join(proj_root, clone_path)
-                if os.path.exists(cand):
-                    clone_path = cand
-
-            if clone_path and os.path.exists(clone_path):
-                model = "mimo-v2.5-tts-voiceclone"
-                user_prompt = "亲切、自然、真实的对话语气"
-                # 读取并缓存克隆参考音频的 base64
-                if self._clone_audio_b64 is None:
-                    with open(clone_path, "rb") as f:
-                        ext = os.path.splitext(clone_path)[1].lower().replace(".", "") or "mp3"
-                        mime = "audio/wav" if ext == "wav" else "audio/mp3"
-                        b64_str = base64.b64encode(f.read()).decode("utf-8")
-                        self._clone_audio_b64 = f"data:{mime};base64,{b64_str}"
-                audio_voice = self._clone_audio_b64
-            elif self.mimo_design_prompt:
-                model = "mimo-v2.5-tts-voicedesign"
-                user_prompt = self.mimo_design_prompt
-                audio_voice = None
-            else:
-                model = "mimo-v2.5-tts"
-                user_prompt = "自然、亲切、生动的日常对话语气"
-                v = voice or self.mimo_voice or "冰糖"
-                audio_voice = v if v in ["mimo_default", "冰糖", "茉莉"] else "冰糖"
+            model, user_prompt, audio_voice, self._clone_audio_b64 = resolve_mimo_tts_params(
+                voice=voice or self.mimo_voice or "冰糖",
+                clone_audio=self.mimo_clone_audio,
+                design_prompt=self.mimo_design_prompt,
+                clone_b64_cache=self._clone_audio_b64,
+            )
 
 
             payload = {
@@ -312,7 +372,7 @@ class TTSEngine:
         except Exception:
             return False
 
-    def _edge_fallback(self, text: str, path: str, voice: str):
+    def _edge_fallback(self, text: str, path: str, voice: str, cache_file: str = None):
         if edge_tts is None:
             return
 
@@ -320,6 +380,11 @@ class TTSEngine:
             try:
                 c = edge_tts.Communicate(text, voice)
                 await c.save(path)
+                if cache_file and os.path.exists(path):
+                    try:
+                        shutil.copyfile(path, cache_file)
+                    except Exception:
+                        pass
             except Exception as e:
                 print(f"⚠️ [TTS] Edge-TTS 合成失败: {e}")
 
