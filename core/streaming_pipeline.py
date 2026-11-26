@@ -14,6 +14,7 @@ import asyncio
 import base64
 import logging
 import hashlib
+import threading
 from typing import Dict, Any, List, Optional, Generator, AsyncGenerator
 
 logger = logging.getLogger("StreamingPipeline")
@@ -299,6 +300,7 @@ class AsyncMiMoTTSStreamer:
         self.design_prompt = design_prompt
         self._clone_audio_b64 = None
         self._fallback_edge = AsyncEdgeTTSStreamer()
+        self._thread_local = threading.local()
 
     def _sync_synthesize(self, text: str) -> bytes:
         clean_text = (text or "").strip()
@@ -350,8 +352,12 @@ class AsyncMiMoTTSStreamer:
             if audio_voice is not None:
                 payload["audio"]["voice"] = audio_voice
 
-            # 单句完整合成，避免流式分片拼接时多个 Xing/LAME 头导致的解码断流与杂音
-            res = requests.post(url, json=payload, headers=headers, timeout=12)
+            # 单句完整合成，每线程复用 Keep-Alive 连接池减少重复 TLS 握手耗时
+            sess = getattr(self._thread_local, "session", None)
+            if sess is None:
+                sess = requests.Session()
+                self._thread_local.session = sess
+            res = sess.post(url, json=payload, headers=headers, timeout=12)
             if res.status_code == 200:
                 data = res.json()
                 choices = data.get("choices", [])

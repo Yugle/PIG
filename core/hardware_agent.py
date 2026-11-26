@@ -895,12 +895,13 @@ class HardwareAgent:
                         except Exception as ex:
                             logger.warning(f"音频播放异常: {ex}")
 
-                    # 2. 物理喇叭拉起后再向 Web 孪生大屏推流，消除工作台明显抢跑感
-                    self.emit_event("robot_chunk", {
-                        "text": s_txt,
-                        "audio": b64_audio,
-                        "seq": seq_idx
-                    })
+                    # 2. 物理喇叭拉起后再向 Web 孪生大屏推音频流，文字已提前于句生成瞬间上屏
+                    if b64_audio:
+                        self.emit_event("robot_audio", {
+                            "text": s_txt,
+                            "audio": b64_audio,
+                            "seq": seq_idx
+                        })
 
                     if started_hw and self.tts_engine:
                         play_start = time.time()
@@ -941,9 +942,16 @@ class HardwareAgent:
                     s_text = ev.get("text", "").strip()
                     if s_text:
                         stream_sentences.append(s_text)
+                        seq_num = len(stream_sentences)
                         self.state = self.STATE_SPEAKING
+                        # 立即推送文字上屏（对齐网页文字链路零等待），同时后台并发合成语音
+                        self.emit_event("robot_chunk", {
+                            "text": s_text,
+                            "audio": "",
+                            "seq": seq_num
+                        })
                         fut = tts_executor.submit(_synth_task, s_text)
-                        play_queue.put((len(stream_sentences), s_text, fut))
+                        play_queue.put((seq_num, s_text, fut))
 
                 elif ev_type == "done":
                     final_reply = ev.get("reply") or "".join(stream_sentences) or "收到啦！"

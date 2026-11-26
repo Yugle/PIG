@@ -5427,6 +5427,10 @@
         if (ev.audio) {
           streamingPlayer.enqueue(ev.audio, ev.text, ev.seq);
         }
+      } else if (ev.type === "robot_audio") {
+        if (ev.audio) {
+          streamingPlayer.enqueue(ev.audio, ev.text || "", ev.seq);
+        }
       } else if (ev.type === "done") {
         stopThinkingCadence();
         if (currentTwinBotDiv) {
