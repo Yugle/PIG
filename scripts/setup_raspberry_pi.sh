@@ -71,15 +71,22 @@ else
     echo -e "${YELLOW}⚠️ 未检测到 /boot/config.txt，跳过树莓派设备树硬件配置${NC}"
 fi
 
-# 3. 更新 APT 源并安装底层音视频、摄像头与 GPIO 核心依赖
-echo -e "\n${CYAN}[2/8] 安装底层系统音视频、DMA PWM 与摄像头依赖...${NC}"
-$SUDO apt-get update -y -qq
-$SUDO apt-get install -y --no-install-recommends \
+# 3. 切换国内清华 APT/PIP 镜像并安装底层系统依赖 (兼容 Debian Trixie)
+echo -e "\n${CYAN}[2/8] 配置清华国内源并安装底层音视频、字体与编译依赖...${NC}"
+$SUDO sed -i 's|https\?://deb.debian.org/debian-security|https://mirrors.tuna.tsinghua.edu.cn/debian-security|g; s|https\?://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g; s|https\?://archive.raspberrypi.com/debian|https://mirrors.tuna.tsinghua.edu.cn/raspberrypi|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+
+$SUDO apt-get -o Acquire::ForceIPv4=true update -y -qq
+$SUDO apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends \
+    build-essential \
     python3-pip \
     python3-dev \
-    python3-setuptools \
-    pigpio \
-    python3-pigpio \
+    python3-pygame \
+    python3-pyaudio \
+    python3-numpy \
+    python3-pil \
+    python3-opencv \
+    python3-pycryptodome \
+    fonts-wqy-microhei \
     libportaudio2 \
     libasound2-dev \
     portaudio19-dev \
@@ -88,15 +95,46 @@ $SUDO apt-get install -y --no-install-recommends \
     alsa-utils \
     fswebcam \
     bzip2 \
+    curl \
     wget \
-    libatlas-base-dev \
     libjpeg-dev \
     zlib1g-dev
 
-echo -e "${GREEN}✓ 底层系统依赖安装完毕！${NC}"
+echo -e "${GREEN}✓ 底层系统依赖与中文字体安装完毕！${NC}"
 
-# 4. 激活并自启 pigpiod 硬件定时守护进程
+# 4. 安装并激活 pigpiod 硬件定时守护进程 (兼容 Debian Trixie 无 apt pigpio 包)
 echo -e "\n${CYAN}[3/8] 配置并启动 pigpiod 硬件 DMA PWM 守护服务...${NC}"
+if ! command -v pigpiod >/dev/null 2>&1; then
+    if $SUDO apt-get -o Acquire::ForceIPv4=true install -y pigpio python3-pigpio 2>/dev/null; then
+        echo -e "${GREEN}✓ 已通过 apt 安装 pigpio${NC}"
+    else
+        echo -e "${YELLOW}⚙️ 当前系统无 apt pigpio 包，正在从清华镜像下载源码编译安装 pigpiod...${NC}"
+        rm -rf /tmp/pigpio && mkdir -p /tmp/pigpio
+        curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/raspberrypi/pool/main/p/pigpio/pigpio_1.79.orig.tar.gz | tar -xz --strip-components=1 -C /tmp/pigpio
+        (cd /tmp/pigpio && make -j4 && ($SUDO make install || true))
+        $SUDO ldconfig
+        rm -rf /tmp/pigpio
+    fi
+fi
+
+if [ ! -f /etc/systemd/system/pigpiod.service ] && [ ! -f /lib/systemd/system/pigpiod.service ]; then
+    PIGPIOD_BIN="$(command -v pigpiod || echo /usr/local/bin/pigpiod)"
+    $SUDO tee /etc/systemd/system/pigpiod.service > /dev/null <<EOF
+[Unit]
+Description=Pigpio daemon
+After=network.target
+
+[Service]
+ExecStart=${PIGPIOD_BIN} -l
+ExecStop=/bin/systemctl kill pigpiod
+Type=forking
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    $SUDO systemctl daemon-reload
+fi
+
 $SUDO systemctl enable pigpiod
 $SUDO systemctl restart pigpiod
 
@@ -111,10 +149,12 @@ echo -e "\n${CYAN}[4/8] 配置外设用户组权限 (gpio, audio, spi, video, di
 $SUDO usermod -a -G gpio,audio,spi,video,dialout "$TARGET_USER" 2>/dev/null || true
 echo -e "${GREEN}✓ 用户组权限配置完成！${NC}"
 
-# 6. 安装 Python 核心生态依赖
-echo -e "\n${CYAN}[5/8] 安装 Python 核心依赖清单 (requirements.txt)...${NC}"
-pip3 install -r requirements.txt --quiet --break-system-packages 2>/dev/null || pip3 install -r requirements.txt --quiet
-echo -e "${GREEN}✓ Python 依赖库安装成功！${NC}"
+# 6. 安装 Python 核心生态依赖 (走清华源 + 兼容 PEP 668)
+echo -e "\n${CYAN}[5/8] 安装 Python 核心依赖与 ST7789 屏幕驱动...${NC}"
+python3 -m pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple >/dev/null 2>&1 || true
+python3 -m pip install pigpio luma.lcd spidev requests openai fastapi uvicorn qrcode edge-tts pypinyin websockets --quiet --break-system-packages 2>/dev/null || \
+    python3 -m pip install pigpio luma.lcd spidev requests openai fastapi uvicorn qrcode edge-tts pypinyin websockets --quiet
+echo -e "${GREEN}✓ Python 核心依赖与屏幕驱动安装成功！${NC}"
 
 # 6.5 自动下载超轻量中文离线语音唤醒模型 (sherpa-onnx 3.3M int8)
 KWS_DIR="${PROJECT_DIR}/models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
