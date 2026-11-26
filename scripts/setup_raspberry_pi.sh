@@ -91,10 +91,12 @@ $SUDO apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends \
     libasound2-dev \
     portaudio19-dev \
     ffmpeg \
+    mpg123 \
     mpv \
     alsa-utils \
     pulseaudio-utils \
     fswebcam \
+    network-manager \
     dnsmasq-base \
     bzip2 \
     curl \
@@ -147,15 +149,16 @@ else
 fi
 
 # 5. 配置外设硬件访问权限
-echo -e "\n${CYAN}[4/8] 配置外设用户组权限 (gpio, audio, spi, video, dialout)...${NC}"
-$SUDO usermod -a -G gpio,audio,spi,video,dialout "$TARGET_USER" 2>/dev/null || true
+echo -e "\n${CYAN}[4/8] 配置外设用户组权限 (gpio, audio, spi, video, dialout, netdev)...${NC}"
+$SUDO usermod -a -G gpio,audio,spi,video,dialout,netdev "$TARGET_USER" 2>/dev/null || true
 echo -e "${GREEN}✓ 用户组权限配置完成！${NC}"
 
 # 6. 安装 Python 核心生态依赖 (走清华源 + 兼容 PEP 668)
 echo -e "\n${CYAN}[5/8] 安装 Python 核心依赖与 ST7789 屏幕驱动...${NC}"
-python3 -m pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple >/dev/null 2>&1 || true
-python3 -m pip install pigpio luma.lcd spidev requests openai fastapi uvicorn qrcode edge-tts pypinyin sherpa-onnx lark-oapi websockets --quiet --break-system-packages 2>/dev/null || \
-    python3 -m pip install pigpio luma.lcd spidev requests openai fastapi uvicorn qrcode edge-tts pypinyin sherpa-onnx lark-oapi websockets --quiet
+PIP_PKGS="pigpio luma.lcd spidev requests openai fastapi uvicorn qrcode edge-tts pypinyin sherpa-onnx lark-oapi websockets"
+$SUDO env PIP_CONFIG_FILE=/dev/null python3 -m pip install $PIP_PKGS -i https://pypi.tuna.tsinghua.edu.cn/simple --resume-retries 5 --quiet --break-system-packages 2>/dev/null || \
+    $SUDO env PIP_CONFIG_FILE=/dev/null python3 -m pip install $PIP_PKGS -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com --resume-retries 5 --quiet --break-system-packages 2>/dev/null || \
+    $SUDO env PIP_CONFIG_FILE=/dev/null python3 -m pip install $PIP_PKGS -i https://pypi.tuna.tsinghua.edu.cn/simple --resume-retries 5 --quiet
 echo -e "${GREEN}✓ Python 核心依赖与屏幕驱动安装成功！${NC}"
 
 # 6.5 自动下载超轻量中文离线语音唤醒模型 (sherpa-onnx 3.3M int8)
@@ -207,6 +210,69 @@ else
             echo -e "${YELLOW}⚠️ 中文唤醒模型自动拉取失败 (可手动解压到 models/ 目录)，已回退保留英文/按键唤醒。${NC}"
         fi
     fi
+fi
+
+# 6.6 检查清理遗留 bluealsa 劫持，并按 ALSA 声卡 ID 自动绑定 USB 声卡（防重启序号漂移）
+echo -e "\n${CYAN}[5.6/8] 检查 ALSA 默认声卡配置与防漂移绑定...${NC}"
+USER_HOME="$(getent passwd "$TARGET_USER" 2>/dev/null | cut -d: -f6)"
+[ -z "$USER_HOME" ] && USER_HOME="/home/${TARGET_USER}"
+if [ -f "${USER_HOME}/.asoundrc" ] && grep -qi "bluealsa" "${USER_HOME}/.asoundrc" 2>/dev/null; then
+    $SUDO mv "${USER_HOME}/.asoundrc" "${USER_HOME}/.asoundrc.bak"
+    echo -e "${YELLOW}⚙️ 已备份并停用旧蓝牙劫持配置: ${USER_HOME}/.asoundrc -> .asoundrc.bak${NC}"
+fi
+
+NEED_ASOUND_WRITE=0
+if [ ! -f /etc/asound.conf ]; then
+    NEED_ASOUND_WRITE=1
+elif grep -qi "bluealsa" /etc/asound.conf 2>/dev/null; then
+    $SUDO cp /etc/asound.conf /etc/asound.conf.bak
+    NEED_ASOUND_WRITE=1
+fi
+
+if [ "$NEED_ASOUND_WRITE" -eq 1 ]; then
+    USB_PLAY_ID="$(aplay -l 2>/dev/null | awk -F'[: \\[]+' '/USB/ && /card /{print $3; exit}')"
+    USB_CAP_ID="$(arecord -l 2>/dev/null | awk -F'[: \\[]+' '/USB PnP Sound Device/ && /card /{print $3; exit}')"
+    if [ -z "$USB_CAP_ID" ]; then
+        USB_CAP_ID="$(arecord -l 2>/dev/null | awk -F'[: \\[]+' '/USB/ && /card /{print $3; exit}')"
+    fi
+    if [ -n "$USB_PLAY_ID" ] && [ -n "$USB_CAP_ID" ]; then
+        $SUDO tee /etc/asound.conf > /dev/null <<EOF
+pcm.pig_dmix {
+    type dmix
+    ipc_key 1024
+    ipc_perm 0666
+    slave {
+        pcm "hw:CARD=${USB_PLAY_ID},DEV=0"
+        rate 48000
+        period_time 0
+        period_size 1024
+        buffer_size 4096
+    }
+}
+
+pcm.!default {
+    type asym
+    playback.pcm {
+        type plug
+        slave.pcm "pig_dmix"
+    }
+    capture.pcm {
+        type plug
+        slave.pcm "hw:CARD=${USB_CAP_ID},DEV=0"
+    }
+}
+
+ctl.!default {
+    type hw
+    card "${USB_PLAY_ID}"
+}
+EOF
+        echo -e "${GREEN}✓ 已按声卡 ID 绑定 ALSA 默认设备 (放音=${USB_PLAY_ID}, 录音=${USB_CAP_ID})${NC}"
+    else
+        echo -e "${YELLOW}ℹ️ 未同时检测到 USB 放音/录音设备，保留系统默认 ALSA 配置 (插好 USB 声卡后可手动配置 /etc/asound.conf)${NC}"
+    fi
+else
+    echo -e "${GREEN}✓ 已保留现有 /etc/asound.conf 配置${NC}"
 fi
 
 # 7. 初始化 config.json (若不存在则从模板生成)
