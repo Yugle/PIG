@@ -30,13 +30,13 @@
    * 11. 轻量技能与动作自进化中枢 (`core/skill_manager.py`)
    * 12. 元认知自进化与海马体反思中枢 (`core/evolution_engine.py`)
    * 13. PIG 多模态交互主中枢 (`main_agent.py`)
-   * 14. 3D WebGL 浏览器仿真系统 (`simulator/web_simulator.html` & `web_sim_server.py`)
+   * 14. 全栈应用主入口与 3D WebGL 控制台 (`app.py` & `simulator/web_simulator.html`)
    * 15. 局域网远程代播服务 (`services/remote_server.py`)
-   * 16. OTA 自动化静默升级与版本管理 (`core/version.py`)
+   * 16. OTA 自动化静默升级与 Vercel Git-Tag 云端版本服务 (`core/version.py` & `ota/`)
    * 17. 飞书官方 WebSocket 双向网关与多 Session 交互 (`skills/feishu_bot/`)
    * 18. 2.4 寸屏幕端 GUI 交互系统与 4 键操作指南 (`core/menu_fsm.py`)
-   * 19. 米家 IoT 智能家居直连与屏幕二维码授权 (`skills/xiaomi_iot/`)
-   * 20. 手机无线配网门户与参数设置中心 (`simulator/settings.html`)
+   * 19. 米家 IoT 智能家居直连与双模扫码授权 (`skills/xiaomi_iot/`)
+   * 20. 手机无线配置后台 (`/settings`) 与独立技能配置中心 (`/skills`)
 9. [系统守护与保活部署 (systemd)](#九系统守护与保活部署-systemd)
 10. [核心架构设计与开发准则 (`docs/ARCHITECTURE_GUIDELINES.md`)](docs/ARCHITECTURE_GUIDELINES.md)
 11. [全景系统架构与电气连线拓扑 (`docs/SYSTEM_ARCHITECTURE.md`)](docs/SYSTEM_ARCHITECTURE.md)
@@ -642,17 +642,21 @@ ctl.!default {
 
 ```text
 PIG/
-├── main_agent.py          # PIG 多模态主程序 (语音唤醒/感知/决策/执行闭环)
-├── web_sim_server.py      # 3D 仿真 Web 服务器、无线控制台与双向网关 (端口 8090)
-├── config.json            # 核心全局配置 (大模型/ASR/TTS/飞书/舵机校准/米家)
-├── VERSION                # 语义化版本标识文件 (SemVer: v0.1.0)
+├── app.py                 # 全栈主服务端入口（真机物理屏/按键联动 + 3D 控制台 + 插件路由分发，端口 8090）
+├── main_agent.py          # PIG 纯命令行多模态主程序 (语音唤醒/感知/决策/执行闭环)
+├── config.json            # 核心全局配置 (大模型/ASR/TTS/OTA域名/舵机校准)
+├── VERSION                # 语义化版本标识文件 (SemVer: 0.1.0)
 ├── requirements.txt       # Python 依赖清单
-├── core/                  # 认知与智能决策中枢
-│   ├── menu_fsm.py        # 2.4寸 LCD 屏幕 4 键多级 GUI 状态机与硬件/系统菜单
-│   ├── version.py         # 真实 Git Tag / SemVer 版本管理与 OTA 升级检测
+├── ota/                   # Vercel 无服务器 OTA 版本服务 (自动拉取 GitHub Tag/Release 与 Changelog)
+│   ├── vercel.json        # Vercel 路由重写 (/version.json -> /api/version) 与边缘缓存配置
+│   ├── api/version.js     # Serverless Function：直连 GitHub API 解析最新版本与更新日志
+│   └── public/index.html  # OTA 固件发布状态页面
+├── core/                  # 认知、硬件调度与全插件化内核 (100% 与具体技能解耦)
+│   ├── menu_fsm.py        # 2.4寸 LCD 屏幕 4 键多级 GUI 状态机与通用插件二维码弹窗
+│   ├── version.py         # 支持 Vercel 自定义域名与 Git Tag 双通道检查的 OTA 升级管理器
 │   ├── wifi_manager.py    # 树莓派 AP 热点与 STA 无线配网管理器
 │   ├── memory_manager.py  # 双层记忆中枢 (短期上下文 + 长期持久化画像)
-│   ├── skill_manager.py   # 技能与动作进化管理器 (闹钟/倒计时/自定义动作)
+│   ├── skill_manager.py   # 技能插件生命周期总控 (dispatch_http / on_startup / on_config_update / 闹钟)
 │   ├── evolution_engine.py# 元认知进化中枢 (生物钟追踪 + 夜间反思整理 + 晨间关怀)
 │   ├── idle_fsm.py        # 自主生命体征状态机 (微动/呼吸/走神/发呆)
 │   ├── face_tracker.py    # 视觉注视追踪 (人脸检测与九宫格/连续视线跟随)
@@ -661,19 +665,16 @@ PIG/
 │   └── svg_animator.py    # 矢量 SVG 表情动态渲染引擎
 ├── drivers/               # 硬件驱动与抽象层 (HAL)
 │   ├── hal_base.py        # 统一硬件抽象基类 (动态舵机微调/反向/限位/消抖卸力)
-│   ├── hal_physical.py    # 树莓派 3B 物理机驱动 (pigpio + ST7789 SPI + OpenCV)
+│   ├── hal_physical.py    # 树莓派 3B 物理机驱动 (pigpio + ST7789/GMT024 SPI + OpenCV)
 │   ├── hal_simulation.py  # PC 端仿真驱动 (Three.js / MuJoCo 物理引擎)
 │   ├── eye_renderer.py    # 12 款拟真卡通大眼表情渲染器
 │   ├── asr_engine.py      # 百度 / MiMo 高精语音识别与能量 VAD 引擎
 │   └── tts_engine.py      # MiMo / Edge-TTS 高拟真语音合成与音画同步引擎
-├── skills/                # 模块化微技能插件系统
-│   ├── feishu_bot/        # 飞书官方 WebSocket 双向长连接网关与富文本卡片
-│   │   ├── feishu_client.py # 基于 lark-oapi 的免公网 IP 双向长连接与多会话路由
-│   │   └── main.py        # 飞书技能调度入口
-│   ├── xiaomi_iot/        # 米家 IoT 智能家居直连与屏幕二维码授权
-│   │   ├── xiaomi_qr_auth.py # 米家 App 扫码免验证码授权与局域网 Token 同步
-│   │   ├── miot_spec.py   # MIoT 标准物模型协议解析器
-│   │   └── main.py        # 智能家居控制入口 (灯具/插座/空调等)
+├── skills/                # 完全自治的微技能插件系统 (HTTP 路由 + 生命周期钩子自闭环)
+│   ├── feishu_bot/        # 飞书 WebSocket 长连接、流式卡片推理与 /api/feishu/* 路由
+│   ├── netease_music/     # 网易云点歌台、歌单播放、网页/屏幕双模扫码与 /api/netease/* 路由
+│   ├── xiaomi_iot/        # 米家 MIoT 直连、网页/屏幕双模扫码与 /api/xiaomi/* 路由
+│   ├── remote_guard/      # 远程安防巡检抓拍与多模态诊断
 │   ├── proactive_care/    # 主动关怀技能插件
 │   ├── reminder/          # 闹钟与日程备忘技能
 │   └── weather/           # 实时天气与生活指数技能
@@ -682,19 +683,20 @@ PIG/
 │   ├── reminders.json     # 定时器、闹钟与日程提醒列表
 │   ├── evolved_actions.json # 机器人自主学会的新动作序列
 │   ├── circadian_profile.json # 作息生物钟统计 (睡眠/清醒/精力低谷时段)
-│   ├── master_face.json   # 主人人脸特征向量向量库
-│   ├── xiaomi_config.json # 米家设备拓扑与局域网 Token 缓存
-│   └── miot_specs/        # 各类智能家电物模型缓存库
-├── simulator/             # 仿真、控制台与 3D 渲染资产
-│   ├── web_simulator.html # Three.js 3D 交互式模拟器 (数字孪生/眼球/舵机/对话)
-│   ├── settings.html      # 手机无线配网门户与参数设置中心 (响应式 WebGUI)
+│   ├── master_face.json   # 主人人脸特征向量库
+│   └── xiaomi_config.json # 米家设备拓扑与局域网 Token 缓存
+├── simulator/             # 控制台与 3D 渲染资产
+│   ├── web_simulator.html # Three.js 3D 交互式控制台 (数字孪生/眼球/舵机/网页对话联动真机)
+│   ├── settings.html      # 手机无线配网、核心参数与 OTA 配置后台 (/settings)
+│   ├── skills.html        # 元数据驱动的独立技能配置与扫码中心 (/skills)
 │   ├── robot.urdf         # URDF 运动学拓扑模型
 │   └── scene.xml          # MuJoCo 仿真物理场景
 ├── services/              # 辅助守护服务
 │   ├── remote_server.py   # 局域网 HTTP API 交互与远程控制服务
 │   └── ota_updater.py     # Git 静默 OTA 自动更新
 └── scripts/               # 运维与诊断脚本
-    ├── setup_raspberry_pi.sh # 树莓派一键全自动装机与外设初始化脚本
+    ├── setup_raspberry_pi.sh # 树莓派一键全自动装机脚本 (兼容 Debian Trixie + 清华源 + pigpio 编译)
+    ├── release_ota.py     # 一键更新本地 VERSION 工具
     ├── test_hardware.py   # 硬件链路 10 秒全功能自动体检工具
     ├── test_face.py       # 表情离线渲染测试
     └── test_hal.py        # 硬件抽象层离线测试
@@ -1130,12 +1132,13 @@ python3 main_agent.py
 - **高弹性 5 级 JSON 解析容错**: 彻底解决 SenseNova / DeepSeek 等大模型偶发输出 Markdown 代码块、思考推理过程或纯文本时的解析崩溃，保证 100% 稳定生成连续动作链。
 - **音视频时钟对齐**: 边讲话边根据真实音频时长自适应拉伸肢体动作与面部表情。
 
-### 14. 3D WebGL 浏览器仿真系统 (`simulator/web_simulator.html` & `web_sim_server.py`)
-无需任何物理硬件，直接在 PC 浏览器中进行全交互仿真：
-1. **启动仿真服务器**:
+### 14. 全栈应用主入口与 3D WebGL 控制台 (`app.py` & `simulator/web_simulator.html`)
+兼顾**树莓派真机运行**与 **PC 端全交互数字孪生仿真**：
+1. **启动全栈主服务端**:
    ```bash
-   python3 web_sim_server.py
+   python3 app.py
    ```
+   *(树莓派真机自动拉起物理 ST7789 屏幕渲染线程与 4 键/舵机监听，并将网页对话回复与表情同步渲染到实体屏幕；PC 端无硬件时自动进入仿真模式)*
 2. **在浏览器中打开**: `http://localhost:8090`
 3. **特性矩阵**:
    - **Three.js 3D 机器人模型**: 支持平滑转头、仰头、摇头、点头动作。
@@ -1193,14 +1196,15 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-### 16. OTA 自动化静默升级与版本管理 (`core/version.py` & `services/ota_updater.py`)
+### 16. OTA 自动化静默升级与 Vercel Git-Tag 云端版本服务 (`core/version.py` & `ota/`)
 
-系统引入了严格的语义化版本控制体系 (SemVer: `Major.Minor.Patch`) 与端到端自动化 OTA 升级管线，坚决杜绝任何虚假硬编码 mock 数据：
+系统引入了严格的语义化版本控制体系 (SemVer: `Major.Minor.Patch`) 与双通道 OTA 检测管线：
 
-1. **真实 Git Tag 语义化版本探测 (`core/version.py`)**:
-   * 优先调用 `git describe --tags --abbrev=0` 读取本地最新 Git Release Tag（如 `v0.1.0`）；
-   * 若本地未打 Tag，读取根目录 `VERSION` 文件；若均无则提取当前 Git 短提交哈希构造开发态版本（如 `dev-7e573b9`）；
-   * 后台异步通过 `git ls-remote --tags origin` 检索远端仓库最新发布标签，基于三元组版本号 `(major, minor, patch)` 进行严格比对。
+1. **Vercel 无服务器版本中心 + Git Tag 自动同步 (`ota/api/version.js`)**:
+   * 将仓库 `ota/` 目录作为 Root Directory 部署至 Vercel 并绑定自定义域名（例如 `ota.你的域名.com`）；
+   * 在 `/settings` 页的 **OTA 更新域名** 或 `config.json` 中配置 `"ota_url": "ota.你的域名.com"`（无需手动补全 `https://` 或 `/version.json`）；
+   * 当 GitHub 仓库打 Tag 或发布 Release 后，Vercel Serverless Function 自动拉取最新 Tag/Release 与 Changelog（带 60s 边缘缓存），设备毫秒级检测新版本；
+   * 若未配置自定义域名或域名不可达，自动回退至 `git ls-remote --tags`（`origin` Gitee → `github` GitHub）探测远端真实标签，并比对本地版本（Git Tag / `VERSION` / Commit Hash）。
 
 2. **静默拉取与服务平滑自愈 (`services/ota_updater.py`)**:
    ```python
@@ -1335,23 +1339,23 @@ class FeishuClient:
 
 ---
 
-### 20. 手机无线配网门户与参数设置中心 (`simulator/settings.html`)
+### 20. 手机无线配置后台 (`/settings`) 与独立技能配置中心 (`/skills`)
 
-在局域网内任意手机或电脑浏览器中访问 `http://<树莓派IP>:8090/simulator/settings.html`，即可打开美观、专业的暗黑机甲风无线配置后台：
+在局域网内任意手机或电脑浏览器中访问 `http://<树莓派IP>:8090/settings`（核心系统配置）与 `http://<树莓派IP>:8090/skills`（技能插件与扫码中心），两者采用统一的移动端居中卡片排版：
 
-1. **响应式 UI 与按键防折行排版**:
-   * 针对主流移动端竖屏与桌面宽屏自适应重排；
-   * 优化按钮文本流式布局与弹窗卡片，消灭文字折行与样式溢出。
-
-2. **八大功能分区面板**:
+1. **核心配置门户（`simulator/settings.html`，`/settings`）**：
    * `00 / WIFI PROVISIONING`: 实时扫描周围 WiFi 热点，支持一键配网；
-   * `01 / MI HOME ECOSYSTEM`: 扫码授权状态监控、拓扑设备刷新与重置；
-   * `01 / MODEL & API TOKEN`: 配置大模型 API Key、Base URL、Model 名称与语音合成发音人；
-   * `02 / PERSONA & IDENTITY`: 设定主人称谓、亲密等级与个性偏好；
-   * `03 / HARDWARE SWITCHES`: 视觉注视跟随、音效、自主闲置状态机与主动搭话总开关；
-   * `04 / SERVO CALIBRATION`: Pan / Tilt 水平与俯仰微调偏角（Trim）、轴向反转（Invert）、物理限位与防抖自动卸力延时设置；
-   * `05 / SYSTEM DIAGNOSTICS`: 物理机/仿真驱动状态、本机 IP、网络延迟、核心温度与真实 Git Tag 固件版本号查询；
-   * `06 / FEISHU BOT & REMOTE NOTIFICATIONS`: 飞书 App ID / App Secret / Webhook 地址配置、WebSocket 长连接状态实时双向绑定、多会话通道监控、一键触发测试告警卡片与深夜进化日记推送。
+   * `01 / MODEL & API TOKEN`: 配置大模型 API Key 与 Model 名称；
+   * `02 / PERSONA & IDENTITY`: 设定机器人称谓、主人称呼、发音人音色与唤醒词；
+   * `03 / HARDWARE SWITCHES`: 麦克风静音、视觉注视跟随、舵机休眠总开关；
+   * `04 / SERVO CALIBRATION`: Pan / Tilt 水平与俯仰实时调试与零点偏置（Trim）保存；
+   * `05 / SYSTEM DIAGNOSTICS`: 本机 IP、CPU 核心温度与大模型接口连通状态检测；
+   * `06 / OTA FIRMWARE UPDATE`: 展示当前固件版本与更新状态，支持直接填写 Vercel 自定义域名（自动补全 `/version.json`），一键检查更新并拉取升级（未配置或不可达时自动回退 Gitee/GitHub `git ls-remote`）。
+
+2. **独立技能配置中心（`simulator/skills.html`，`/skills`）**：
+   * 基于各插件 `skill.json` 的 `config_schema` 元数据自动生成配置表单与状态徽章；
+   * **米家 / 网易云双模扫码**：统一支持「网页直接生成扫码二维码」与「投屏到小猪 2.4 寸屏幕扫码」两种模式（网易云另支持 `MUSIC_U` Cookie 登录与歌单管理）；
+   * **飞书机器人与远程通知**：配置 `App ID` / `App Secret` / `Webhook`、实时查看 WebSocket 长连接状态，支持一键发送测试告警、进化日记与远程抓拍卡片。
 
 ---
 

@@ -94,9 +94,12 @@
      }
    }
    ```
-2. **`main.py`（执行入口）**：
-   - 必须提供且仅依赖 `def run(**kwargs)` 函数入口。
-   - 返回值必须为**人类友好的清晰描述文本**，大模型将直接基于此反馈（Observation）作为后续思考与回答依据。
+2. **`main.py`（执行入口 + 可选插件生命周期钩子）**：
+   - 必须提供 `def run(**kwargs)` 对话技能执行入口，返回人类友好的真实执行结果文本；
+   - 若插件需要提供 Web API、后台长连接或屏幕交互，可在插件内部实现标准生命周期钩子（内核通过 `SkillManager` 动态调度，**主入口 `app.py` 严禁直接 `import skills.*`**）：
+     - `http_prefixes`（在 `skill.json` 声明）+ `handle_http(method, path, handler, ctx)`：插件自行接管专属 HTTP 路由；
+     - `on_startup(ctx)` / `on_config_update(cfg, updates, ctx)` / `on_config_save(values, ctx)`：插件自管后台服务与配置热更新；
+     - `get_screen_item()` / `start_screen_qr()` / `poll_screen_qr()`：接入 2.4 寸物理屏菜单与通用扫码弹窗。
 
 ---
 
@@ -148,13 +151,20 @@ PIG/
 │   ├── skill_manager.py         # 插件生命周期加载器与低开销时钟轮询
 │   └── audio_service.py         # Edge-TTS / 离线切音音频合成
 │
-├── skills/                      # 【L2 技能插件】高度自治、热插拔
-│   ├── xiaomi_iot/              # 米家全生态通用驱动插件 (含 miot_spec.py)
+├── skills/                      # 【L2 技能插件】高度自治、热插拔 (含 HTTP 路由与钩子)
+│   ├── feishu_bot/              # 飞书 WebSocket 长连接、流式卡片与 /api/feishu/*
+│   ├── netease_music/           # 网易云曲库、歌单播放与 /api/netease/*
+│   ├── xiaomi_iot/              # 米家全生态通用驱动与 /api/xiaomi/*
+│   ├── remote_guard/            # 远程安防抓拍与 VLM 诊断
 │   ├── reminder/                # 闹钟、定时器与日程插件
 │   ├── weather/                 # 天气与穿衣温感助手
 │   ├── news_briefing/           # 早间新闻摘要
 │   ├── pomodoro/                # 番茄钟专注陪伴
 │   └── dice_roll/               # 娱乐互动小插件
+│
+├── ota/                         # 【OTA 云端发布】Vercel Serverless Git-Tag 版本接口
+│   ├── vercel.json              # /version.json -> /api/version 重写与边缘缓存
+│   └── api/version.js           # 直连 GitHub Release/Tag 获取最新固件与 Changelog
 │
 ├── data/                        # 【L3 数据存储】纯数据持久化
 │   ├── skill_store_catalog.json # 技能应用商店精选库元数据与模板
@@ -164,11 +174,12 @@ PIG/
 │   ├── miot_specs/              # 本地缓存的小米官方物模型定义文件
 │   └── xiaomi_config.json       # 米家设备局域网 Token 与云端 Auth 凭据
 │
-├── scripts/                     # 【CI 与工程脚本】自动化测试与诊断
+├── scripts/                     # 【CI 与工程脚本】装机、发版、诊断与回归测试
+│   ├── setup_raspberry_pi.sh    # 树莓派一键部署脚本 (Debian Trixie + 清华源 + pigpio)
 │   └── test_all_features.py     # 15 项端到端全功能自动化回归测试套件
 │
-├── web_sim_server.py            # Web 3D PIG 仿真调试服务
-└── main_agent.py                # 树莓派实体机主启动入口
+├── app.py                       # 全栈主服务端入口 (真机/孪生双态 + 插件路由分发，端口 8090)
+└── main_agent.py                # 树莓派纯命令行主启动入口
 ```
 
 ---

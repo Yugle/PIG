@@ -1,8 +1,8 @@
 # 🤖 PIG PIG 机器人 - 全景系统架构与电气连线拓扑
 
-> **版本**：v2.0.0 (Embodied Release)  
-> **适用平台**：树莓派 3B / 3B+ / 4B (Raspberry Pi OS 64-bit Lite) + PC WebGL 3D 数字孪生仿真平台  
-> **核心宗旨**：软硬件完全解耦、流式低延迟交互、物理隔离供电、技能高内聚热插拔。
+> **版本**：v2.1.0 (Decoupled Plugin & Physical Release)  
+> **适用平台**：树莓派 3B / 3B+ / 4B (Raspberry Pi OS Bookworm / Trixie 64-bit) + PC WebGL 3D 数字孪生仿真平台  
+> **核心宗旨**：软硬件完全解耦、内核零技能硬编码（HTTP 路由与生命周期全下沉至插件）、流式低延迟交互、物理隔离供电、Vercel Git-Tag 自动 OTA。
 
 ---
 
@@ -26,8 +26,10 @@ flowchart TD
 
     %% ======================= 第二层：技能插件生态 =======================
     subgraph Skill_Layer ["2. 动态技能生态层 (Skill Plugins Engine)"]
-        SkillMgr["🧩 统一技能调度中枢 (SkillManager)<br/>• 动态别名纠偏路由 • 闹钟/倒计时调度器 • 热加载技能商店"]
-        IoT["🏠 xiaomi_iot<br/>(米家生态：台灯/水壶/摄像机/饮水机)"]
+        SkillMgr["🧩 统一技能调度与路由中枢 (SkillManager)<br/>• dispatch_http 前缀路由分发 • on_startup / on_config 生命周期钩子<br/>• 动态别名纠偏路由 • 闹钟/倒计时调度器 • 热加载技能商店"]
+        IoT["🏠 xiaomi_iot<br/>(米家生态 + /api/xiaomi/* 双模扫码)"]
+        NeteaseSkill["🎵 netease_music<br/>(点歌/歌单 + /api/netease/* 双模扫码)"]
+        FeishuSkill["💬 feishu_bot<br/>(WebSocket 长连 + /api/feishu/*)"]
         ActionSkill["💃 evolve_action / play_action<br/>(自创动作学习 & 表演)"]
         ReminderSkill["⏰ reminder<br/>(自然语言闹钟/定时器)"]
         OtherSkills["🌦️ weather / news / pomodoro / care<br/>(天气/新闻/番茄钟/主动关怀)"]
@@ -75,6 +77,8 @@ flowchart TD
     Reasoner <--> SkillMgr
 
     SkillMgr --> IoT
+    SkillMgr --> NeteaseSkill
+    SkillMgr --> FeishuSkill
     SkillMgr --> ActionSkill
     SkillMgr --> ReminderSkill
     SkillMgr --> OtherSkills
