@@ -1189,7 +1189,7 @@
               <button class="btn" onclick="setEmotion('BLINK')">😑 闭目</button>
             </div>
             <button class="btn" style="margin-top: 8px; width: 100%; border-color: #ff007f; color: #ff4081; font-weight: bold; background: rgba(255, 64, 129, 0.08); display: flex; align-items: center; justify-content: center; gap: 6px; font-size:0.75rem;" onclick="openSvgGalleryModal()">
-              🎨 查看 / 下载 12 款动态 SVG 动图库
+              🎨 查看 / 下载 18 款动态 SVG 动图库
             </button>
           </div>
         </div>
@@ -1611,37 +1611,46 @@
       } else if (emo === "ANGRY") {
         const quiver = Math.sin(now / 35) * 2;
         [lx + quiver, rx + quiver].forEach((cx, idx) => {
-          roundRect(eyeCtx, cx - 36, cy - 45, 72, 90, 18, true);
-          eyeCtx.fillStyle = "#0a0e14";
-          eyeCtx.beginPath();
-          if (idx === 0) {
-            eyeCtx.moveTo(cx - 40, cy - 50);
-            eyeCtx.lineTo(cx + 40, cy - 25);
-            eyeCtx.lineTo(cx + 40, cy - 50);
-          } else {
-            eyeCtx.moveTo(cx - 40, cy - 25);
-            eyeCtx.lineTo(cx + 40, cy - 50);
-            eyeCtx.lineTo(cx - 40, cy - 50);
-          }
-          eyeCtx.fill();
+          const x0 = cx - 36, x1 = cx + 36;
+          const yTopL = idx === 0 ? (cy - 44) : (cy - 20);
+          const yTopR = idx === 0 ? (cy - 20) : (cy - 44);
+          const yBot = cy + 44;
+          const r = 16;
+          const slope = (yTopR - yTopL) * (r / 72);
           eyeCtx.fillStyle = eyeColor;
+          eyeCtx.beginPath();
+          eyeCtx.moveTo(x0 + r, yTopL + slope);
+          eyeCtx.lineTo(x1 - r, yTopR - slope);
+          eyeCtx.quadraticCurveTo(x1, yTopR, x1, yTopR + r);
+          eyeCtx.lineTo(x1, yBot - r);
+          eyeCtx.quadraticCurveTo(x1, yBot, x1 - r, yBot);
+          eyeCtx.lineTo(x0 + r, yBot);
+          eyeCtx.quadraticCurveTo(x0, yBot, x0, yBot - r);
+          eyeCtx.lineTo(x0, yTopL + r);
+          eyeCtx.quadraticCurveTo(x0, yTopL, x0 + r, yTopL + slope);
+          eyeCtx.closePath();
+          eyeCtx.fill();
         });
       } else if (emo === "SURPRISED") {
         const shock = 1.0 + 0.08 * Math.sin(now / 120);
         const radOuter = 46 * shock;
         [lx, rx].forEach(cx => {
+          eyeCtx.shadowBlur = 12;
+          eyeCtx.fillStyle = eyeColor;
           eyeCtx.beginPath();
           eyeCtx.ellipse(cx, cy, radOuter, radOuter, 0, 0, Math.PI * 2);
           eyeCtx.fill();
-          eyeCtx.fillStyle = "#0a0e14";
+
+          eyeCtx.shadowBlur = 0;
+          eyeCtx.fillStyle = "#000000";
           eyeCtx.beginPath();
           eyeCtx.ellipse(cx, cy, 18, 18, 0, 0, Math.PI * 2);
           eyeCtx.fill();
+
           eyeCtx.fillStyle = "#ffffff";
           eyeCtx.beginPath();
           eyeCtx.ellipse(cx - 10, cy - 10, 6, 6, 0, 0, Math.PI * 2);
           eyeCtx.fill();
-          eyeCtx.fillStyle = eyeColor;
         });
       } else if (emo === "LOVE") {
         const phase = (now % 1200) / 1200;
@@ -6213,11 +6222,17 @@
       const emotions = [
         { id: "NORMAL", name: "😊 常规仿生", desc: "呼吸律动 + 自然眨眼 + 视线微扫视" },
         { id: "HAPPY", name: "😄 欢喜笑眼", desc: "弯月微笑 + 律动微跃 + 俏皮腮红" },
+        { id: "LAUGH", name: "😆 畅快爆笑", desc: "> < 笑眼眯起 + 欢乐弹跳红晕" },
+        { id: "EXCITED", name: "🤩 兴奋星眼", desc: "闪烁金色星星眼 + 元气跳动" },
         { id: "LOVE", name: "❤️ 心动爱意", desc: "高保真 Lub-Dub 心脏搏动节律" },
         { id: "WINK", name: "😉 单眼眨眨", desc: "单侧俏皮眨眼，左笑右睁" },
-        { id: "CONFUSED", name: "🤔 好奇困惑", desc: "非对称一大一小探寻视线" },
+        { id: "SHY", name: "😳 害羞脸红", desc: "微敛弯眼 + 粉嫩羞涩红晕" },
+        { id: "PROUD", name: "😎 得意傲娇", desc: "自信半月傲娇眼 + 灵动高光" },
+        { id: "CURIOUS", name: "🤨 好奇探寻", desc: "左大右挑不对称好奇神态" },
+        { id: "CONFUSED", name: "🤔 困惑思索", desc: "大小眼微微斜倾表达疑惑" },
         { id: "THINKING", name: "🧐 深度思考", desc: "眼球向上注视 + 水平来回扫视" },
-        { id: "SURPRISED", name: "😳 震撼吃惊", desc: "瞳孔骤放缩放冲击波" },
+        { id: "SURPRISED", name: "😲 震撼吃惊", desc: "瞳孔骤放缩放冲击波" },
+        { id: "COZY", name: "😌 惬意温柔", desc: "薄荷绿放松弯眼 + 暖心治愈" },
         { id: "SLEEPY", name: "😴 困倦打盹", desc: "半闭眼皮 + 浮动上升 z Z 泡泡" },
         { id: "DIZZY", name: "🌀 眩晕蚊香", desc: "双眼同心三层反向螺旋旋转" },
         { id: "SAD", name: "🥺 委屈沮丧", desc: "眼角下垂 + 周期性滑落水滴" },
@@ -6229,7 +6244,7 @@
         const card = document.createElement("div");
         card.style.cssText = "background: rgba(13, 17, 23, 0.95); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);";
         card.innerHTML = `
-          <div style="width: 120px; height: 160px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(0, 229, 255, 0.25); background: #0a0e14; display: flex; align-items: center; justify-content: center;">
+          <div style="width: 120px; height: 160px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(0, 229, 255, 0.25); background: #000000; display: flex; align-items: center; justify-content: center;">
             <img src="/api/svg?emotion=${emo.id}" style="width: 100%; height: 100%; object-fit: contain;" alt="${emo.name}" />
           </div>
           <div style="font-weight: bold; font-size: 0.85rem; color: var(--text-main);">${emo.name}</div>
@@ -6994,7 +7009,7 @@
         <div>
           <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); display:flex; align-items:center; gap:8px;">
             <span>🎨 纯 CSS3 动力学矢量动态 SVG 表情库</span>
-            <span style="font-size:0.75rem; background:rgba(255, 64, 129, 0.2); color:#ff4081; padding:2px 8px; border-radius:12px;">12 款全套 · 零依赖 · 60 FPS</span>
+            <span style="font-size:0.75rem; background:rgba(255, 64, 129, 0.2); color:#ff4081; padding:2px 8px; border-radius:12px;">18 款全套 · 零依赖 · 60 FPS</span>
           </h3>
           <p style="margin:4px 0 0; font-size:0.78rem; color:var(--text-sub);">内置仿生呼吸微动、非线性眨眼、视线微扫视漫游与情绪专属循环动画，支持全尺寸无损缩放与右键另存。</p>
         </div>

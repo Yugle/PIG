@@ -72,7 +72,7 @@ class SVGAnimator:
         50% { transform: translate(8px, -10px); }
       }
 
-      .bg { fill: #0a0e14; }
+      .bg { fill: #000000; }
       .cyan-eye { fill: #00e5ff; }
       .pink-eye { fill: #ff4081; }
       .red-eye { fill: #ff3344; }
@@ -208,13 +208,13 @@ class SVGAnimator:
     <!-- 左斜怒眼 -->
     <g>
       <rect class="red-eye" x="24" y="115" width="72" height="90" rx="18"/>
-      <polygon points="20,110 100,140 100,110" fill="#0a0e14"/>
+      <polygon points="20,110 100,140 100,110" fill="#000000"/>
       <circle class="highlight" cx="46" cy="148" r="6" opacity="0.85"/>
     </g>
     <!-- 右斜怒眼 -->
     <g>
       <rect class="red-eye" x="144" y="115" width="72" height="90" rx="18"/>
-      <polygon points="140,140 220,110 220,140" fill="#0a0e14"/>
+      <polygon points="140,140 220,110 140,110" fill="#000000"/>
       <circle class="highlight" cx="166" cy="148" r="6" opacity="0.85"/>
     </g>
   </g>
@@ -226,11 +226,11 @@ class SVGAnimator:
     <!-- 吃惊大圆眼 -->
     <g class="blink-group">
       <circle cx="60" cy="160" r="46" fill="#00e5ff"/>
-      <circle cx="60" cy="160" r="18" fill="#0a0e14"/>
+      <circle cx="60" cy="160" r="18" fill="#000000"/>
       <circle class="highlight" cx="50" cy="148" r="6" opacity="0.95"/>
 
       <circle cx="180" cy="160" r="46" fill="#00e5ff"/>
-      <circle cx="180" cy="160" r="18" fill="#0a0e14"/>
+      <circle cx="180" cy="160" r="18" fill="#000000"/>
       <circle class="highlight" cx="170" cy="148" r="6" opacity="0.95"/>
     </g>
   </g>
@@ -304,6 +304,68 @@ class SVGAnimator:
   </g>
 """
 
+        elif emotion == "EXCITED":
+            elements = f"""
+  <g class="happy-bounce">
+    <polygon points="60,116 74,146 104,160 74,174 60,204 46,174 16,160 46,146" fill="#ffd640"/>
+    <circle cx="60" cy="160" r="9" fill="#ffffff"/>
+    <polygon points="180,116 194,146 224,160 194,174 180,204 166,174 136,160 166,146" fill="#ffd640"/>
+    <circle cx="180" cy="160" r="9" fill="#ffffff"/>
+    <ellipse cx="34" cy="198" rx="14" ry="7" fill="#ff4d8d" opacity="0.6"/>
+    <ellipse cx="206" cy="198" rx="14" ry="7" fill="#ff4d8d" opacity="0.6"/>
+  </g>
+"""
+
+        elif emotion == "LAUGH":
+            elements = f"""
+  <g class="happy-bounce">
+    <polyline points="34,136 78,160 34,184" fill="none" stroke="#00e5ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="206,136 162,160 206,184" fill="none" stroke="#00e5ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <ellipse cx="32" cy="196" rx="14" ry="8" fill="#ff4081" opacity="0.6"/>
+    <ellipse cx="208" cy="196" rx="14" ry="8" fill="#ff4081" opacity="0.6"/>
+  </g>
+"""
+
+        elif emotion == "SHY":
+            elements = f"""
+  <g class="breathe-group">
+    <path d="M 24 166 Q 60 132 94 166" fill="none" stroke="#00e5ff" stroke-width="11" stroke-linecap="round"/>
+    <path d="M 146 166 Q 180 132 216 166" fill="none" stroke="#00e5ff" stroke-width="11" stroke-linecap="round"/>
+    <ellipse cx="42" cy="190" rx="20" ry="9" fill="#ff4d94" opacity="0.65"/>
+    <ellipse cx="198" cy="190" rx="20" ry="9" fill="#ff4d94" opacity="0.65"/>
+  </g>
+"""
+
+        elif emotion == "PROUD":
+            elements = f"""
+  <g class="breathe-group">
+    <rect class="cyan-eye" x="24" y="148" width="72" height="36" rx="16"/>
+    <circle class="highlight" cx="76" cy="160" r="7"/>
+    <rect class="cyan-eye" x="144" y="142" width="72" height="38" rx="16"/>
+    <circle class="highlight" cx="196" cy="154" r="7"/>
+  </g>
+"""
+
+        elif emotion == "CURIOUS":
+            elements = f"""
+  <g class="breathe-group">
+    <rect class="cyan-eye" x="19" y="108" width="82" height="104" rx="26"/>
+    <circle class="highlight" cx="44" cy="130" r="9"/>
+    <rect class="cyan-eye" x="149" y="124" width="62" height="40" rx="14"/>
+    <circle class="highlight" cx="166" cy="136" r="5"/>
+  </g>
+"""
+
+        elif emotion == "COZY":
+            elements = f"""
+  <g class="breathe-group">
+    <path d="M 24 168 Q 60 206 96 168" fill="none" stroke="#64ffda" stroke-width="11" stroke-linecap="round"/>
+    <path d="M 144 168 Q 180 206 216 168" fill="none" stroke="#64ffda" stroke-width="11" stroke-linecap="round"/>
+    <ellipse cx="36" cy="192" rx="12" ry="6" fill="#ff6ea0" opacity="0.45"/>
+    <ellipse cx="204" cy="192" rx="12" ry="6" fill="#ff6ea0" opacity="0.45"/>
+  </g>
+"""
+
         else:
             return cls.generate_svg("NORMAL", width, height)
 
@@ -331,10 +393,11 @@ class SVGAnimator:
 
     @classmethod
     def export_all(cls, output_dir: str = "data/svg_faces"):
-        """一键导出全部 12 款动态 SVG"""
+        """一键导出全部 18 款动态 SVG"""
         emotions = [
-            "NORMAL", "HAPPY", "BLINK", "CONFUSED", "SAD", "ANGRY",
-            "SURPRISED", "LOVE", "WINK", "SLEEPY", "DIZZY", "THINKING"
+            "NORMAL", "HAPPY", "LAUGH", "EXCITED", "LOVE", "WINK",
+            "SHY", "PROUD", "CURIOUS", "CONFUSED", "THINKING", "SURPRISED",
+            "COZY", "SLEEPY", "DIZZY", "SAD", "ANGRY", "BLINK"
         ]
         exported = {}
         for emo in emotions:
