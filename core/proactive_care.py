@@ -150,12 +150,21 @@ class ProactiveCareManager:
             user_name = self.memory.long_term_data.get("user_name", "主人")
 
         if scene == "morning":
-            # 1. 尝试联动昨日记忆反思 (如胃痛、失眠、重要任务)
+            # 1. 尝试联动昨日记忆反思 (仅使用今天或昨天新鲜反思，避免翻出几周前的旧账当成“昨晚”)
             clean_care = ""
             if self.memory and getattr(self.memory, "long_term_data", None):
                 ref = self.memory.long_term_data.get("daily_reflection", {})
                 if ref and ref.get("next_day_care"):
-                    clean_care = self._clean_reflection_text(ref.get("next_day_care"))
+                    ref_date_str = ref.get("reflected_date") or str(ref.get("date", ""))[:10]
+                    is_fresh = False
+                    if ref_date_str:
+                        try:
+                            ref_d = datetime.strptime(ref_date_str[:10], "%Y-%m-%d").date()
+                            is_fresh = (datetime.now().date() - ref_d).days <= 1
+                        except Exception:
+                            is_fresh = False
+                    if is_fresh:
+                        clean_care = self._clean_reflection_text(ref.get("next_day_care"))
 
             # 2. 检查今日待办闹钟
             rem_str = ""
@@ -249,6 +258,13 @@ class ProactiveCareManager:
             self.quiet_seconds = 0
 
         self._sync_state()
+
+        # 自动巡检夜间海马体反思（即使暂时静音免打扰，也在后台静默完成记忆巩固）
+        if self.evolution and hasattr(self.evolution, "maybe_auto_nightly_reflection"):
+            try:
+                self.evolution.maybe_auto_nightly_reflection(self.config)
+            except Exception:
+                pass
 
         if not self.is_enabled() or self.is_snoozed():
             return None

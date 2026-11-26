@@ -10,7 +10,8 @@ PIG 机器人 - 元认知自进化中枢 (evolution_engine.py)
 import os
 import json
 import time
-from datetime import datetime, date
+import threading
+from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any
 import requests
 
@@ -26,6 +27,9 @@ class EvolutionEngine:
 
         self.circadian_file = os.path.join(storage_dir, "circadian_profile.json")
         self.workflows_file = os.path.join(storage_dir, "evolved_workflows.json")
+        self._reflecting = False
+        self._reflect_lock = threading.Lock()
+        self._last_auto_reflect_attempt = 0.0
 
         self.circadian_data = self._load_json(self.circadian_file, {
             "hourly_counts": [0] * 24, # 0点至23点各小时互动频次
@@ -222,11 +226,20 @@ class EvolutionEngine:
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"}
             }
+            if "mimo" in str(model).lower() or "xiaomimimo" in str(base_url):
+                payload["thinking"] = {"type": "disabled"}
+
             resp = requests.post(url, headers=headers, json=payload, timeout=40)
             if resp.status_code == 200:
                 choice = resp.json().get("choices", [{}])[0]
                 content = choice.get("message", {}).get("content", "")
-                result = json.loads(content)
+                try:
+                    result = json.loads(content)
+                except Exception:
+                    from core.agent_reasoner import parse_llm_json
+                    result = parse_llm_json(content)
+                if not isinstance(result, dict):
+                    return {"status": "error", "msg": "反思 JSON 解析失败"}
 
                 # 将新提炼的事实融入 memory.json
                 new_facts = result.get("new_facts", [])
@@ -239,6 +252,7 @@ class EvolutionEngine:
                 # 记录沉淀的反思摘要
                 self.memory.long_term_data["daily_reflection"] = {
                     "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "reflected_date": datetime.now().strftime("%Y-%m-%d"),
                     "summary": result.get("reflection_summary", ""),
                     "next_day_care": result.get("next_day_care", ""),
                     "persona_adaptation": result.get("persona_adaptation", "")
@@ -264,6 +278,59 @@ class EvolutionEngine:
         except Exception as e:
             print(f"⚠️ [EvolutionEngine] 反思执行异常: {e}")
             return {"status": "error", "msg": str(e)}
+
+    def maybe_auto_nightly_reflection(self, cfg: Optional[Dict[str, Any]] = None):
+        """
+        每晚 23:00~01:00 自动在后台静默触发一次夜间海马体反思（同一自然夜仅执行一次，不阻塞主线程）。
+        """
+        if not self.memory or not cfg:
+            return
+        api_key = cfg.get("api_key", "")
+        if not api_key or "YOUR_LLM_API_KEY" in api_key:
+            return
+
+        now_dt = datetime.now()
+        if now_dt.hour not in (23, 0):
+            return
+
+        # 若已是凌晨 0 点，归属前一天夜晚周期，避免凌晨和昨晚重复触发或漏判
+        night_cycle_date = (now_dt - timedelta(days=1)).strftime("%Y-%m-%d") if now_dt.hour == 0 else now_dt.strftime("%Y-%m-%d")
+        today_str = now_dt.strftime("%Y-%m-%d")
+
+        ref = self.memory.long_term_data.get("daily_reflection", {}) if self.memory.long_term_data else {}
+        ref_date = ref.get("reflected_date") or str(ref.get("date", ""))[:10]
+        if ref_date in (night_cycle_date, today_str):
+            return
+
+        now_ts = time.time()
+        with self._reflect_lock:
+            if self._reflecting or (now_ts - self._last_auto_reflect_attempt) < 300.0:
+                return
+            records = (
+                self.memory.get_dialogue_for_reflection(max_turns=5)
+                if hasattr(self.memory, "get_dialogue_for_reflection")
+                else self.memory.short_term_history
+            )
+            if not records:
+                return
+            self._reflecting = True
+            self._last_auto_reflect_attempt = now_ts
+
+        base_url = cfg.get("base_url", "https://api.xiaomimimo.com/v1")
+        model = cfg.get("llm_model", "mimo-v2.6-flash")
+
+        def _worker():
+            try:
+                res = self.trigger_reflection(api_key, base_url, model)
+                if res.get("status") == "ok" and self.memory:
+                    # 统一记录为夜晚周期日期，确保 23:xx~00:xx 内只触发一次
+                    self.memory.long_term_data.setdefault("daily_reflection", {})["reflected_date"] = night_cycle_date
+                    self.memory.save()
+            finally:
+                with self._reflect_lock:
+                    self._reflecting = False
+
+        threading.Thread(target=_worker, daemon=True, name="AutoNightlyReflection").start()
 
     # ==========================================
     # 3. 五维性格养成与默契自进化 (Personality Drift & Private Memes)
