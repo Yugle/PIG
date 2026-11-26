@@ -676,11 +676,12 @@ class HardwareAgent:
             except Exception:
                 pass
 
-    def record_audio_clip(self, max_seconds=6, silence_timeout=None, min_seconds=0.45) -> str:
-        """动态能量 VAD 静音自适应录音"""
+    def record_audio_clip(self, max_seconds=8, silence_timeout=None, min_seconds=0.45) -> str:
+        """动态能量 VAD 静音自适应录音 (支持噪声基线自适应、唤醒尾音屏蔽与首字前滚保留)"""
         if not self.audio_stream or not self.p_audio:
             return ""
 
+        from collections import deque
         import numpy as np
         import pyaudio
 
@@ -690,20 +691,23 @@ class HardwareAgent:
         CHANNELS = 1
 
         if silence_timeout is None:
-            silence_timeout = float(self.cfg.get("vad_silence_timeout", 0.55))
+            silence_timeout = float(self.cfg.get("vad_silence_timeout", 0.85))
 
         frames = []
-        chunk_per_sec = int(RATE / CHUNK)
+        preroll = deque(maxlen=3)
+        chunk_per_sec = max(1, int(RATE / CHUNK))
         max_chunks = int(chunk_per_sec * max_seconds)
-        no_speech_limit = int(chunk_per_sec * min(3.5, max_seconds))
+        no_speech_limit = int(chunk_per_sec * min(4.0, max_seconds))
         min_chunks = int(chunk_per_sec * min_seconds)
-        silence_limit = max(3, int(chunk_per_sec * silence_timeout))
+        silence_limit = max(4, int(chunk_per_sec * silence_timeout))
 
         silence_counter = 0
+        voiced_streak = 0
         has_spoken = False
         rec_meter_counter = 0
         mic_gain = float(self.cfg.get("mic_gain", 2.5))
         speech_thresh = float(self.cfg.get("speech_vad_threshold", 220))
+        noise_samples = []
 
         # 录音开始时立即发送一次电平广播，让前端瞬间进入录音指示状态，杜绝任何停顿感
         self.emit_event("audio_meter", {
@@ -717,7 +721,17 @@ class HardwareAgent:
         self._recording_active = True
         try:
             with self._audio_lock:
-                for _ in range(max_chunks):
+                # 丢弃唤醒词阶段残留的陈旧缓冲帧，避免“你好小猪”尾音或提示音误触发录音截止
+                try:
+                    if hasattr(self.audio_stream, "get_read_available"):
+                        avail = int(self.audio_stream.get_read_available() or 0)
+                        drain_n = min(avail // CHUNK, 4)
+                        for _ in range(drain_n):
+                            self.audio_stream.read(CHUNK, exception_on_overflow=False)
+                except Exception:
+                    pass
+
+                for idx in range(max_chunks):
                     if not self._running:
                         break
                     try:
@@ -725,10 +739,10 @@ class HardwareAgent:
                         audio_raw = np.frombuffer(data, dtype=np.int16)
                         if mic_gain != 1.0:
                             audio_np = np.clip(audio_raw.astype(np.float32) * mic_gain, -32768, 32767).astype(np.int16)
-                            frames.append(audio_np.tobytes())
+                            chunk_bytes = audio_np.tobytes()
                         else:
                             audio_np = audio_raw
-                            frames.append(data)
+                            chunk_bytes = data
 
                         energy = float(np.abs(audio_np).mean())
 
@@ -743,21 +757,48 @@ class HardwareAgent:
                                 "is_listening": True
                             })
 
-                        if energy > speech_thresh:
-                            has_spoken = True
+                        # 前 2 帧 (~160ms) 用于屏蔽唤醒提示音“叮”并采样环境底噪基线
+                        if idx < 2:
+                            noise_samples.append(energy)
+                            preroll.append(chunk_bytes)
+                            continue
+
+                        noise_floor = (sum(noise_samples) / len(noise_samples)) if noise_samples else 0.0
+                        dyn_thresh = max(speech_thresh, noise_floor * 2.2)
+
+                        if energy > dyn_thresh:
+                            voiced_streak += 1
                             silence_counter = 0
+                            if not has_spoken:
+                                preroll.append(chunk_bytes)
+                                # 连续 2 帧高于阈值才确认真人开口，防止单帧爆音/尾音误切段
+                                if voiced_streak >= 2:
+                                    has_spoken = True
+                                    frames.extend(preroll)
+                            else:
+                                frames.append(chunk_bytes)
                         else:
-                            if has_spoken:
+                            voiced_streak = 0
+                            if not has_spoken:
+                                noise_samples.append(energy)
+                                if len(noise_samples) > 8:
+                                    noise_samples.pop(0)
+                                preroll.append(chunk_bytes)
+                                if idx >= no_speech_limit:
+                                    break
+                            else:
+                                frames.append(chunk_bytes)
                                 silence_counter += 1
                                 if silence_counter >= silence_limit and len(frames) >= min_chunks:
                                     print(f"🛑 [VAD] 检测到说话停顿 (持续静音约 {silence_timeout}s)，自动截止录音并提交识别...", flush=True)
                                     break
-                            elif len(frames) >= no_speech_limit:
-                                break
                     except Exception:
                         break
         finally:
             self._recording_active = False
+
+        if not has_spoken or len(frames) < 4:
+            return ""
 
         wav_path = "/tmp/user_input.wav"
         try:
