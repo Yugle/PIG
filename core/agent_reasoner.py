@@ -140,7 +140,8 @@ class AgentReasoner:
 
         steps_log: List[Dict[str, Any]] = []
         final_reply = None
-        final_behaviors = [] if silent else [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
+        final_behaviors = []
+        has_explicit_behaviors = False
         last_observation = None
         first_turn_ack = ""
 
@@ -190,6 +191,7 @@ class AgentReasoner:
                     final_reply = reply_candidate
                 if behaviors_candidate:
                     final_behaviors = behaviors_candidate
+                    has_explicit_behaviors = True
 
 
                 # 检查是否需要调用工具
@@ -326,6 +328,10 @@ class AgentReasoner:
         if silent:
             final_behaviors = []
         else:
+            if not has_explicit_behaviors or (len(final_behaviors) <= 1 and len(str(final_reply or "")) > 18):
+                inferred = PromptBuilder.infer_behaviors_for_reply(final_reply)
+                if not has_explicit_behaviors or len(inferred) > len(final_behaviors):
+                    final_behaviors = inferred
             # 检查是否匹配用户自创的已知舞蹈动作
             known_actions = skill_manager.list_evolved_actions()
             for k, v in known_actions.items():
@@ -381,7 +387,8 @@ class AgentReasoner:
 
         steps_log: List[Dict[str, Any]] = []
         final_reply = None
-        final_behaviors = [] if silent else [{"emotion": "HAPPY", "action": "NOD", "pan": 90, "tilt": 90, "delay": 700}]
+        final_behaviors = []
+        has_explicit_behaviors = False
         last_observation = None
         first_turn_ack = ""
 
@@ -458,6 +465,7 @@ class AgentReasoner:
                     final_reply = reply_candidate
                 if behaviors_candidate:
                     final_behaviors = behaviors_candidate
+                    has_explicit_behaviors = True
 
                 has_valid_tool = (
                     skill_call and
@@ -567,6 +575,10 @@ class AgentReasoner:
         if silent:
             final_behaviors = []
         else:
+            if not has_explicit_behaviors or (len(final_behaviors) <= 1 and len(str(final_reply or "")) > 18):
+                inferred = PromptBuilder.infer_behaviors_for_reply(final_reply)
+                if not has_explicit_behaviors or len(inferred) > len(final_behaviors):
+                    final_behaviors = inferred
             known_actions = skill_manager.list_evolved_actions()
             for k, v in known_actions.items():
                 short_desc = v.get("description", "").split("：")[0].replace("舞", "")

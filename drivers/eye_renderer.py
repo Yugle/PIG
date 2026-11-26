@@ -120,9 +120,9 @@ class EyeRenderer:
 
         return blink_scale, breathe_scale, self.cur_look_x, self.cur_look_y
 
-    def render_eyes(self, emotion: str = "NORMAL", look_x: float = 0, look_y: float = 0, now: float = None) -> Image.Image:
+    def render_eyes(self, emotion: str = "NORMAL", look_x: float = 0, look_y: float = 0, now: float = None, is_speaking: bool = False) -> Image.Image:
         """
-        单帧灵动面部渲染（2x 超采样抗锯齿 + 轻量霓虹光晕 + 纯黑高对比背景）。
+        单帧灵动面部渲染（18 种微表情 + 说话动态声波嘴型 + 2x 超采样抗锯齿 + 霓虹光晕）。
         """
         if now is None:
             now = time.time()
@@ -287,8 +287,95 @@ class EyeRenderer:
                 draw.rounded_rectangle([cx - 38 * S, cy - 32 * S, cx + 38 * S, cy + 44 * S], radius=22 * S, fill=eye_color)
                 draw.ellipse([cx - 6 * S + scan_x, cy - 28 * S, cx + 18 * S + scan_x, cy - 4 * S], fill=highlight_color)
 
+        elif emo == "EXCITED":
+            star_scale = 1.0 + 0.12 * abs(math.sin(now * 7.5))
+            bounce_y = int(4 * math.sin(now * 6.5) * S)
+            gold = (255, 214, 64)
+            for cx in [lx, rx]:
+                oy = cy + bounce_y
+                ro = int(42 * star_scale * S)
+                ri = int(14 * star_scale * S)
+                pts = [
+                    (cx, oy - ro), (cx + ri, oy - ri),
+                    (cx + ro, oy), (cx + ri, oy + ri),
+                    (cx, oy + ro), (cx - ri, oy + ri),
+                    (cx - ro, oy), (cx - ri, oy - ri),
+                ]
+                draw.polygon(pts, fill=gold)
+                draw.ellipse([cx - 10 * S, oy - 10 * S, cx + 10 * S, oy + 10 * S], fill=(255, 255, 255))
+            pink = (255, 77, 141)
+            draw.ellipse([lx - 40 * S, cy + 32 * S, lx - 14 * S, cy + 46 * S], fill=pink)
+            draw.ellipse([rx + 14 * S, cy + 32 * S, rx + 40 * S, cy + 46 * S], fill=pink)
+
+        elif emo == "LAUGH":
+            bounce_y = int(4 * abs(math.sin(now * 10.0)) * S)
+            # 左眼 >
+            draw.line([(lx - 26 * S, cy - 24 * S + bounce_y), (lx + 18 * S, cy + bounce_y), (lx - 26 * S, cy + 24 * S + bounce_y)], fill=eye_color, width=12 * S, joint="curve")
+            # 右眼 <
+            draw.line([(rx + 26 * S, cy - 24 * S + bounce_y), (rx - 18 * S, cy + bounce_y), (rx + 26 * S, cy + 24 * S + bounce_y)], fill=eye_color, width=12 * S, joint="curve")
+            pink = (255, 64, 129)
+            draw.ellipse([lx - 42 * S, cy + 28 * S, lx - 14 * S, cy + 44 * S], fill=pink)
+            draw.ellipse([rx + 14 * S, cy + 28 * S, rx + 42 * S, cy + 44 * S], fill=pink)
+
+        elif emo == "SHY":
+            sway_x = int(2 * math.sin(now * 2.5) * S)
+            draw.arc([lx - 38 * S + sway_x, cy - 10 * S, lx + 38 * S + sway_x, cy + 34 * S], start=190, end=340, fill=eye_color, width=11 * S)
+            draw.arc([rx - 38 * S + sway_x, cy - 10 * S, rx + 38 * S + sway_x, cy + 34 * S], start=200, end=350, fill=eye_color, width=11 * S)
+            pink = (255, 77, 148)
+            for bx in [lx - 18 * S, rx + 18 * S]:
+                draw.ellipse([bx - 22 * S, cy + 22 * S, bx + 22 * S, cy + 40 * S], fill=pink)
+                for dx in [-10, 0, 10]:
+                    draw.line([(bx + dx * S, cy + 25 * S), (bx + (dx - 4) * S, cy + 37 * S)], fill=(255, 180, 210), width=3)
+
+        elif emo == "PROUD":
+            # 自信傲娇半月眉眼
+            draw.rounded_rectangle([lx - 38 * S, cy - 12 * S, lx + 38 * S, cy + 26 * S], radius=18 * S, fill=eye_color)
+            draw.rounded_rectangle([rx - 38 * S, cy - 18 * S, rx + 38 * S, cy + 22 * S], radius=18 * S, fill=eye_color)
+            draw.ellipse([lx + 10 * S, cy - 6 * S, lx + 24 * S, cy + 8 * S], fill=highlight_color)
+            draw.ellipse([rx + 10 * S, cy - 12 * S, rx + 24 * S, cy + 2 * S], fill=highlight_color)
+
+        elif emo == "CURIOUS":
+            # 左眼大而明亮，右眼上挑微眯好奇观察
+            big_w = int(84 * breathe_scale * S)
+            big_h = int(104 * breathe_scale * blink_scale * S)
+            draw.rounded_rectangle([lx - big_w // 2, cy - big_h // 2, lx + big_w // 2, cy + big_h // 2], radius=min(30 * S, big_h // 2), fill=eye_color)
+            if blink_scale > 0.45:
+                _draw_eye_highlights(lx, cy, breathe_scale)
+            sm_w = int(64 * breathe_scale * S)
+            sm_h = int(42 * breathe_scale * blink_scale * S)
+            draw.rounded_rectangle([rx - sm_w // 2, cy - 16 * S - sm_h // 2, rx + sm_w // 2, cy - 16 * S + sm_h // 2], radius=16 * S, fill=eye_color)
+            if blink_scale > 0.45:
+                draw.ellipse([rx - 14 * S, cy - 26 * S, rx - 4 * S, cy - 16 * S], fill=highlight_color)
+
+        elif emo == "COZY":
+            mint = (100, 255, 218)
+            for cx in [lx, rx]:
+                draw.arc([cx - 38 * S, cy - 18 * S, cx + 38 * S, cy + 36 * S], start=15, end=165, fill=mint, width=11 * S)
+            pink = (255, 110, 160)
+            draw.ellipse([lx - 36 * S, cy + 24 * S, lx - 14 * S, cy + 36 * S], fill=pink)
+            draw.ellipse([rx + 14 * S, cy + 24 * S, rx + 36 * S, cy + 36 * S], fill=pink)
+
         else:
-            return self.render_eyes("NORMAL", look_x, look_y, now)
+            return self.render_eyes("NORMAL", look_x, look_y, now, is_speaking=is_speaking)
+
+        # 说话中：在面部下方绘制动态声波唇动条，增强“开口说话”生命感
+        if is_speaking and emo not in ("SLEEPY", "BLINK", "DIZZY"):
+            mouth_y = int((self.height // 2 + 78 + eff_y * 0.4) * S)
+            mouth_cx = int((self.width // 2 + eff_x * 0.5) * S)
+            bars = [
+                (-16 * S, 0.55 + 0.45 * abs(math.sin(now * 13.0))),
+                (0, 0.55 + 0.45 * abs(math.sin(now * 17.0 + 1.2))),
+                (16 * S, 0.55 + 0.45 * abs(math.sin(now * 14.5 + 2.4))),
+            ]
+            mouth_col = (255, 190, 215) if emo in ("LOVE", "SHY") else (0, 229, 255)
+            for dx, amp in bars:
+                bh = int((5 + 11 * amp) * S)
+                bw = 6 * S
+                draw.rounded_rectangle(
+                    [mouth_cx + dx - bw, mouth_y - bh, mouth_cx + dx + bw, mouth_y + bh],
+                    radius=bw,
+                    fill=mouth_col,
+                )
 
         # 2x -> 1x 抗锯齿前景 + 极低成本霓虹外发光层 (缩放到 1/4 做微模糊再拉回合成)
         fg = img_hi.resize((self.width, self.height), Image.Resampling.BILINEAR)

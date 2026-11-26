@@ -1167,15 +1167,21 @@
         <!-- 标签页 2: 动态表情 -->
         <div id="pane-emotion" class="ctrl-pane" style="display:none;">
           <div class="control-section">
-            <div class="section-title">12 款动态情绪表情切换</div>
+            <div class="section-title">18 款动态情绪表情切换</div>
             <div class="btn-grid" style="grid-template-columns: repeat(3, 1fr); gap:6px;">
               <button class="btn" onclick="setEmotion('NORMAL')">😊 常规</button>
               <button class="btn" onclick="setEmotion('HAPPY')">😄 开心</button>
+              <button class="btn" onclick="setEmotion('LAUGH')">😆 爆笑</button>
+              <button class="btn" onclick="setEmotion('EXCITED')">🤩 兴奋</button>
               <button class="btn" onclick="setEmotion('LOVE')">❤️ 爱意</button>
               <button class="btn" onclick="setEmotion('WINK')">😉 眨眼</button>
+              <button class="btn" onclick="setEmotion('SHY')">😳 害羞</button>
+              <button class="btn" onclick="setEmotion('PROUD')">😎 得意</button>
+              <button class="btn" onclick="setEmotion('CURIOUS')">🤨 好奇</button>
               <button class="btn" onclick="setEmotion('CONFUSED')">🤔 困惑</button>
               <button class="btn" onclick="setEmotion('THINKING')">🧐 思考</button>
-              <button class="btn" onclick="setEmotion('SURPRISED')">😳 吃惊</button>
+              <button class="btn" onclick="setEmotion('SURPRISED')">😲 吃惊</button>
+              <button class="btn" onclick="setEmotion('COZY')">😌 惬意</button>
               <button class="btn" onclick="setEmotion('SLEEPY')">😴 困倦</button>
               <button class="btn" onclick="setEmotion('DIZZY')">🌀 眩晕</button>
               <button class="btn" onclick="setEmotion('SAD')">🥺 委屈</button>
@@ -1522,8 +1528,8 @@
       lookOffset.x += (targetLookOffset.x + saccadeOffset.x - lookOffset.x) * 0.55;
       lookOffset.y += (targetLookOffset.y + saccadeOffset.y - lookOffset.y) * 0.55;
 
-      // 4. 清除与绘制底色
-      eyeCtx.fillStyle = "#0a0e14";
+      // 4. 清除与绘制纯黑底色与霓虹微光
+      eyeCtx.fillStyle = "#000000";
       eyeCtx.fillRect(0, 0, 240, 320);
 
       const cy = 160 + lookOffset.y;
@@ -1535,7 +1541,10 @@
       if (baseH < 6) baseH = 6;
 
       const emo = targetEmotion;
-      const eyeColor = emo === "ANGRY" ? "#ff3344" : "#00e5ff";
+      const eyeColor = emo === "ANGRY" ? "#ff3848" : (emo === "EXCITED" ? "#ffd640" : (emo === "COZY" ? "#64ffda" : "#00e5ff"));
+      eyeCtx.save();
+      eyeCtx.shadowColor = emo === "LOVE" || emo === "SHY" ? "rgba(255, 64, 129, 0.55)" : (emo === "ANGRY" ? "rgba(255, 56, 72, 0.55)" : "rgba(0, 229, 255, 0.5)");
+      eyeCtx.shadowBlur = 12;
       eyeCtx.fillStyle = eyeColor;
 
       if (emo === "NORMAL") {
@@ -1708,7 +1717,127 @@
           eyeCtx.fill();
           eyeCtx.fillStyle = eyeColor;
         });
+      } else if (emo === "EXCITED") {
+        const s = 1.0 + 0.12 * Math.abs(Math.sin(now / 135));
+        const bounce = Math.sin(now / 150) * 4;
+        [lx, rx].forEach(cx => {
+          const oy = cy + bounce;
+          const ro = 42 * s;
+          const ri = 14 * s;
+          eyeCtx.fillStyle = "#ffd640";
+          eyeCtx.beginPath();
+          eyeCtx.moveTo(cx, oy - ro);
+          eyeCtx.lineTo(cx + ri, oy - ri);
+          eyeCtx.lineTo(cx + ro, oy);
+          eyeCtx.lineTo(cx + ri, oy + ri);
+          eyeCtx.lineTo(cx, oy + ro);
+          eyeCtx.lineTo(cx - ri, oy + ri);
+          eyeCtx.lineTo(cx - ro, oy);
+          eyeCtx.lineTo(cx - ri, oy - ri);
+          eyeCtx.closePath();
+          eyeCtx.fill();
+          eyeCtx.fillStyle = "#ffffff";
+          eyeCtx.beginPath();
+          eyeCtx.ellipse(cx, oy, 9, 9, 0, 0, Math.PI * 2);
+          eyeCtx.fill();
+        });
+        eyeCtx.fillStyle = "rgba(255, 77, 141, 0.55)";
+        eyeCtx.beginPath();
+        eyeCtx.ellipse(lx - 24, cy + 38, 14, 7, 0, 0, Math.PI * 2);
+        eyeCtx.ellipse(rx + 24, cy + 38, 14, 7, 0, 0, Math.PI * 2);
+        eyeCtx.fill();
+      } else if (emo === "LAUGH") {
+        const bounce = Math.abs(Math.sin(now / 100)) * 4;
+        eyeCtx.lineWidth = 12;
+        eyeCtx.strokeStyle = eyeColor;
+        eyeCtx.lineCap = "round";
+        eyeCtx.lineJoin = "round";
+        eyeCtx.beginPath();
+        eyeCtx.moveTo(lx - 26, cy - 22 + bounce);
+        eyeCtx.lineTo(lx + 16, cy + bounce);
+        eyeCtx.lineTo(lx - 26, cy + 22 + bounce);
+        eyeCtx.stroke();
+        eyeCtx.beginPath();
+        eyeCtx.moveTo(rx + 26, cy - 22 + bounce);
+        eyeCtx.lineTo(rx - 16, cy + bounce);
+        eyeCtx.lineTo(rx + 26, cy + 22 + bounce);
+        eyeCtx.stroke();
+        eyeCtx.fillStyle = "rgba(255, 64, 129, 0.58)";
+        eyeCtx.beginPath();
+        eyeCtx.ellipse(lx - 26, cy + 34, 14, 8, 0, 0, Math.PI * 2);
+        eyeCtx.ellipse(rx + 26, cy + 34, 14, 8, 0, 0, Math.PI * 2);
+        eyeCtx.fill();
+      } else if (emo === "SHY") {
+        const swayX = Math.sin(now / 400) * 2;
+        eyeCtx.lineWidth = 11;
+        eyeCtx.strokeStyle = eyeColor;
+        eyeCtx.lineCap = "round";
+        eyeCtx.beginPath();
+        eyeCtx.arc(lx + swayX, cy + 12, 34, Math.PI * 1.08, Math.PI * 1.88, false);
+        eyeCtx.stroke();
+        eyeCtx.beginPath();
+        eyeCtx.arc(rx + swayX, cy + 12, 34, Math.PI * 1.12, Math.PI * 1.92, false);
+        eyeCtx.stroke();
+        eyeCtx.fillStyle = "rgba(255, 77, 148, 0.65)";
+        eyeCtx.beginPath();
+        eyeCtx.ellipse(lx - 18, cy + 30, 20, 9, 0, 0, Math.PI * 2);
+        eyeCtx.ellipse(rx + 18, cy + 30, 20, 9, 0, 0, Math.PI * 2);
+        eyeCtx.fill();
+      } else if (emo === "PROUD") {
+        roundRect(eyeCtx, lx - 36, cy - 12, 72, 36, 16, true);
+        roundRect(eyeCtx, rx - 36, cy - 18, 72, 38, 16, true);
+        eyeCtx.fillStyle = "#ffffff";
+        eyeCtx.beginPath();
+        eyeCtx.ellipse(lx + 16, cy, 7, 7, 0, 0, Math.PI * 2);
+        eyeCtx.ellipse(rx + 16, cy - 6, 7, 7, 0, 0, Math.PI * 2);
+        eyeCtx.fill();
+      } else if (emo === "CURIOUS") {
+        const bigW = 82 * breatheScale;
+        const bigH = Math.max(8, 104 * breatheScale * blinkScale);
+        roundRect(eyeCtx, lx - bigW / 2, cy - bigH / 2, bigW, bigH, Math.min(26, bigH / 2), true);
+        if (blinkScale > 0.4) {
+          eyeCtx.fillStyle = "#ffffff";
+          eyeCtx.beginPath();
+          eyeCtx.ellipse(lx - 16, cy - 30 * breatheScale, 9, 9, 0, 0, Math.PI * 2);
+          eyeCtx.fill();
+          eyeCtx.fillStyle = eyeColor;
+        }
+        const smW = 62 * breatheScale;
+        const smH = Math.max(8, 40 * breatheScale * blinkScale);
+        roundRect(eyeCtx, rx - smW / 2, cy - 16 - smH / 2, smW, smH, 14, true);
+      } else if (emo === "COZY") {
+        eyeCtx.lineWidth = 11;
+        eyeCtx.strokeStyle = "#64ffda";
+        eyeCtx.lineCap = "round";
+        [lx, rx].forEach(cx => {
+          eyeCtx.beginPath();
+          eyeCtx.arc(cx, cy + 6, 36, Math.PI * 0.12, Math.PI * 0.88, false);
+          eyeCtx.stroke();
+        });
+        eyeCtx.fillStyle = "rgba(255, 110, 160, 0.45)";
+        eyeCtx.beginPath();
+        eyeCtx.ellipse(lx - 24, cy + 30, 12, 6, 0, 0, Math.PI * 2);
+        eyeCtx.ellipse(rx + 24, cy + 30, 12, 6, 0, 0, Math.PI * 2);
+        eyeCtx.fill();
       }
+
+      // 说话时在面部下方绘制动态三段声波唇动条，彻底告别静帧感
+      if (typeof isSpeaking !== "undefined" && isSpeaking && !["SLEEPY", "BLINK", "DIZZY"].includes(emo)) {
+        const mouthY = 238 + lookOffset.y * 0.4;
+        const mouthCx = 120 + lookOffset.x * 0.5;
+        const mCol = (emo === "LOVE" || emo === "SHY") ? "#ff9ec4" : eyeColor;
+        eyeCtx.fillStyle = mCol;
+        const amps = [
+          0.5 + 0.5 * Math.abs(Math.sin(now / 78)),
+          0.5 + 0.5 * Math.abs(Math.sin(now / 58 + 1.2)),
+          0.5 + 0.5 * Math.abs(Math.sin(now / 68 + 2.4))
+        ];
+        [-16, 0, 16].forEach((dx, i) => {
+          const bh = 5 + 11 * amps[i];
+          roundRect(eyeCtx, mouthCx + dx - 5, mouthY - bh, 10, bh * 2, 5, true);
+        });
+      }
+      eyeCtx.restore();
 
       // 叠加 4-Key 菜单与二维码浮层 (与树莓派 ST7789 真机同构)
       renderMenuOverlayCanvas(eyeCtx, 240, 320, now);
@@ -4279,7 +4408,25 @@
 
     const streamingPlayer = new StreamingAudioPlayer();
 
-    function startChunkSpeakingChoreography(chunkText, durationMs, behaviors) {
+    function inferSentenceEmotion(text, seq = 1) {
+      const t = String(text || "").toLowerCase();
+      if (/哈哈|笑死|搞笑|幽默|段子|嘿嘿|嘻嘻|🤣|😆|😄|笑话/.test(t)) return "LAUGH";
+      if (/爱你|喜欢|抱抱|晚安|想你|心疼|贴心|么么|❤️|🥰|😘|甜蜜/.test(t)) return "LOVE";
+      if (/害羞|不好意思|脸红|讨厌|哎呀|撒娇|人家/.test(t)) return "SHY";
+      if (/太棒|搞定|完成|成功|厉害|牛|冲呀|出发|🎉|✨|恭喜|耶/.test(t)) return "EXCITED";
+      if (/包在我身上|当然|小菜一碟|拿捏|轻松|自信|酷|😎/.test(t)) return "PROUD";
+      if (/竟然|居然|天哪|哇|真的吗|震撼|没想到|omg|吓/.test(t)) return "SURPRISED";
+      if (/难过|委屈|抱歉|对不起|辛苦|心累|生病|疼|呜|可惜|未能/.test(t)) return "SAD";
+      if (/警告|不行|生气|愤怒|危险|过分|哼/.test(t)) return "ANGRY";
+      if (/难道|为什么|怎么|好奇|是不是|猜猜|？|\?/.test(t)) return (seq % 2 === 0) ? "CURIOUS" : "CONFUSED";
+      if (/悄悄|秘密|提示|建议|其实|😉/.test(t)) return "WINK";
+      if (/惬意|舒服|晒太阳|慢慢|安静|治愈|温柔|放松/.test(t)) return "COZY";
+      if (/困|睡觉|早点休息|打盹/.test(t)) return "SLEEPY";
+      const palette = ["CURIOUS", "HAPPY", "WINK", "PROUD", "NORMAL", "COZY"];
+      return palette[Math.abs(seq || 0) % palette.length];
+    }
+
+    function startChunkSpeakingChoreography(chunkText, durationMs, behaviors, seq = 1, hintEmotion = "") {
       if (speechTimer) clearTimeout(speechTimer);
       if (afterglowTimer) {
         clearTimeout(afterglowTimer);
@@ -4288,16 +4435,31 @@
       isSpeaking = true;
       document.getElementById("overlay-action").innerText = "🗣️ 语音流式播报中...";
 
-      let b = (behaviors && behaviors.length > 0) ? behaviors[0] : { emotion: "HAPPY", action: "NOD", pan: 90, tilt: 85 };
-      setEmotion(b.emotion || "HAPPY");
+      const idx = Math.max(0, (seq || 1) - 1);
+      let b = null;
+      if (behaviors && behaviors.length > 0) {
+        b = behaviors[idx % behaviors.length];
+      }
+      const inferred = hintEmotion || inferSentenceEmotion(chunkText, seq);
+      // 若 behaviors 仅有兜底的单个 HAPPY，则优先采用单句语义微表情，防止整段对话永远冻在 HAPPY
+      const emo = (b && b.emotion && !(behaviors.length === 1 && b.emotion === "HAPPY" && inferred !== "HAPPY"))
+        ? b.emotion
+        : inferred;
+      setEmotion(emo);
 
-      const pan = b.pan !== undefined ? b.pan : 90;
-      const tilt = b.tilt !== undefined ? b.tilt : 85;
+      const headPose = [
+        { pan: 90, tilt: 84 },
+        { pan: 78, tilt: 88 },
+        { pan: 102, tilt: 85 },
+        { pan: 90, tilt: 80 }
+      ][idx % 4];
+      const pan = (b && b.pan !== undefined) ? b.pan : headPose.pan;
+      const tilt = (b && b.tilt !== undefined) ? b.tilt : headPose.tilt;
 
       actionSequence = [
-        { pan: pan, tilt: Math.max(70, tilt - 5), emotion: b.emotion || "HAPPY", delay: 180 },
-        { pan: pan, tilt: Math.min(105, tilt + 5), emotion: b.emotion || "HAPPY", delay: 180 },
-        { pan: pan, tilt: tilt, emotion: b.emotion || "HAPPY", delay: Math.max(200, durationMs - 360) }
+        { pan: pan, tilt: Math.max(70, tilt - 6), emotion: emo, delay: 180 },
+        { pan: Math.min(115, Math.max(65, pan + (idx % 2 === 0 ? 6 : -6))), tilt: Math.min(105, tilt + 5), emotion: emo, delay: 190 },
+        { pan: pan, tilt: tilt, emotion: emo, delay: Math.max(200, durationMs - 370) }
       ];
       runActionSequence();
     }
@@ -4348,12 +4510,13 @@
       let accumulatedReply = "";
       let toolStepsHtml = "";
       let finalBehaviors = [];
+      const chunkEmotions = {};
       let hasReceivedAudio = false;
       window._accumulatedThought = "";
 
       streamingPlayer.onChunkStart = (chunkText, durationMs, seq) => {
         stopThinkingCadence();
-        startChunkSpeakingChoreography(chunkText, durationMs, finalBehaviors);
+        startChunkSpeakingChoreography(chunkText, durationMs, finalBehaviors, seq, chunkEmotions[seq] || "");
       };
 
       streamingPlayer.onAllFinished = () => {
@@ -4427,6 +4590,9 @@
               chatLogs.scrollTop = chatLogs.scrollHeight;
             } else if (ev.type === "chunk") {
               stopThinkingCadence();
+              if (ev.seq && ev.emotion) {
+                chunkEmotions[ev.seq] = ev.emotion;
+              }
               accumulatedReply += ev.text;
               botDiv.innerHTML = `${toolStepsHtml}<div>${formatMarkdown(accumulatedReply)}<span class="cursor-blink" style="display:inline-block; width:6px; height:12px; background:var(--cyan); margin-left:3px; vertical-align:middle;"></span></div>`;
               chatLogs.scrollTop = chatLogs.scrollHeight;
