@@ -152,8 +152,8 @@ echo -e "${GREEN}✓ 用户组权限配置完成！${NC}"
 # 6. 安装 Python 核心生态依赖 (走清华源 + 兼容 PEP 668)
 echo -e "\n${CYAN}[5/8] 安装 Python 核心依赖与 ST7789 屏幕驱动...${NC}"
 python3 -m pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple >/dev/null 2>&1 || true
-python3 -m pip install pigpio luma.lcd spidev requests openai fastapi uvicorn qrcode edge-tts pypinyin websockets --quiet --break-system-packages 2>/dev/null || \
-    python3 -m pip install pigpio luma.lcd spidev requests openai fastapi uvicorn qrcode edge-tts pypinyin websockets --quiet
+python3 -m pip install pigpio luma.lcd spidev requests openai fastapi uvicorn qrcode edge-tts pypinyin sherpa-onnx websockets --quiet --break-system-packages 2>/dev/null || \
+    python3 -m pip install pigpio luma.lcd spidev requests openai fastapi uvicorn qrcode edge-tts pypinyin sherpa-onnx websockets --quiet
 echo -e "${GREEN}✓ Python 核心依赖与屏幕驱动安装成功！${NC}"
 
 # 6.5 自动下载超轻量中文离线语音唤醒模型 (sherpa-onnx 3.3M int8)
