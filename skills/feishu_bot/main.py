@@ -114,15 +114,24 @@ def _handle_feishu_incoming_message(ctx: dict, clean_text: str, open_id: str, ch
             id_type = "chat_id" if chat_id else "open_id"
 
             text_lower = clean_text.strip().lower()
-            snapshot_triggers = [
-                "看看家", "拍照", "拍张照", "拍个照", "看下家", "监控", "看一眼",
-                "巡视", "巡检", "安防", "家里安全", "看看客厅", "看看周围",
-                "拍张照片", "照一张", "拍一下", "看看现场", "抓拍", "拍一张"
+            photo_or_guard_triggers = [
+                "看看家", "拍照", "拍张照", "拍个照", "拍张", "拍个", "拍一张", "拍一下",
+                "照一张", "抓拍", "看下家", "监控", "看一眼", "巡视", "巡检", "安防",
+                "家里安全", "看看客厅", "看看周围", "看看现场", "环顾", "全景"
             ]
-            if any(k in text_lower for k in snapshot_triggers) and skill_mgr and "remote_guard" in skill_mgr.installed_plugins:
-                print(f"📷 [Feishu Bot] 命中远程看家与监控抓拍意图: '{clean_text}'")
+            target_search_triggers = ["找一下", "找找", "找一找", "帮我找", "帮忙找", "在哪里", "在哪儿", "在不在"]
+            non_visual_exclusions = ["歌", "音乐", "歌词", "菜谱", "天气", "新闻", "资料", "文档", "代码", "文件", "bug", "单词", "翻译", "设置", "闹钟"]
+            def _is_feishu_visual_intent(txt: str) -> bool:
+                if any(k in txt for k in photo_or_guard_triggers):
+                    return True
+                return any(k in txt for k in target_search_triggers) and not any(ex in txt for ex in non_visual_exclusions)
+
+            if _is_feishu_visual_intent(text_lower) and skill_mgr and "remote_guard" in skill_mgr.installed_plugins:
+                print(f"📷 [Feishu Bot] 命中远程抓拍/目标搜寻意图: '{clean_text}'")
                 dir_val = "center"
-                if any(w in text_lower for w in ["向左", "往左", "左边", "左侧", "左看"]):
+                if any(w in text_lower for w in ["环顾", "四周", "一圈", "全景", "到处"]):
+                    dir_val = "scan"
+                elif any(w in text_lower for w in ["向左", "往左", "左边", "左侧", "左看"]):
                     dir_val = "left"
                 elif any(w in text_lower for w in ["向右", "往右", "右边", "右侧", "右看"]):
                     dir_val = "right"
@@ -132,7 +141,7 @@ def _handle_feishu_incoming_message(ctx: dict, clean_text: str, open_id: str, ch
                     dir_val = "down"
                 skill_mgr.execute_skill(
                     "remote_guard",
-                    timeout_seconds=25.0,
+                    timeout_seconds=30.0,
                     direction=dir_val,
                     question=clean_text,
                     target_id=target_id,

@@ -1,24 +1,32 @@
 {
   "id": "remote_guard",
-  "name": "远程看家与监控抓拍",
-  "version": "1.0.0",
+  "name": "远程看家与寻物抓拍",
+  "version": "1.1.0",
   "author": "Antigravity Lab",
-  "category": "生活助手",
-  "description": "远程拍摄家庭现场照片并通过飞书推送安防巡检卡片。当主人在飞书或远程询问'看看家'、'拍张照'、'监控'、'看看客厅'、'看下家里'、'转头看看'或需要远程看家巡检时调用此技能。",
+  "category": "视觉感知",
+  "prompt_desc": "转头找目标/拍照片并推飞书(找猫、拍猫、看家、环顾);target=目标,direction=scan|center|left|right|up|down",
+  "description": "远程拍摄现场照片或主动转动头部搜寻指定目标（如帮我找一下猫、帮我拍一张猫的照片、看看家、环顾四周、向右看看），锁定清晰画面并通过飞书或前端推送照片与描述。",
   "parameters": {
+    "target": {
+      "type": "string",
+      "description": "要搜寻或重点拍摄的目标名称，如 '猫', '小猫', '狗', '人', '钥匙', '快递'。通用安防巡检可留空。",
+      "default": ""
+    },
     "direction": {
       "type": "string",
-      "description": "镜头朝向：'center'(正前方), 'left'(向左看), 'right'(向右看), 'up'(抬头高位视角), 'down'(低头俯视视角)",
+      "description": "镜头机位：'center'(正前), 'left'(左), 'right'(右), 'up'(上), 'down'(下), 'scan'(环顾多向搜寻/全景拼图)；搜寻目标时若未指定方位会自动正前优先再多向扫描。",
       "default": "center"
     },
     "question": {
       "type": "string",
-      "description": "巡检观察重点，如 '看看门窗是否关好', '看看猫咪在不在', '巡视一下客厅'",
+      "description": "主人具体观察要求或提问，如 '帮我找一下猫', '拍一张猫的照片', '看看门窗是否关好'",
       "default": "巡视当前环境并汇报状态"
     }
   },
+  "timeout_seconds": 30.0,
+  "visual_snapshot": true,
   "default_behavior": {
-    "emotion": "WINK",
+    "emotion": "CURIOUS",
     "action": "LOOK_UP"
   }
 }

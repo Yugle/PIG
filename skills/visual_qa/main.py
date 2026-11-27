@@ -72,8 +72,8 @@ def _capture_frame_bytes(max_age_sec: float = 12.0) -> tuple[bytes, str]:
         from core.hardware_agent import get_hardware_agent
         agent = get_hardware_agent()
         if agent and agent.hal:
-            from drivers.hal_physical import PhysicalHAL
-            if isinstance(agent.hal, PhysicalHAL):
+            from drivers.hal_physical import PhysicalRobotHAL
+            if isinstance(agent.hal, PhysicalRobotHAL):
                 frame = agent.hal.capture_image()
                 if frame and len(frame) > 100:
                     return frame, ""

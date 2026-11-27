@@ -85,6 +85,20 @@ def is_skill_failure(obs: Any) -> bool:
     ])
 
 
+def _has_visual_snapshot(steps_log: List[Dict[str, Any]], last_observation: Any, skill_manager) -> bool:
+    """根据插件 skill.json 的 visual_snapshot 声明或视觉反馈前缀判断是否附带实时抓拍卡片"""
+    if last_observation and any(tag in str(last_observation) for tag in ("【小猪视觉观察】", "📷【")):
+        return True
+    for s in steps_log or []:
+        act = s.get("action")
+        if not act:
+            continue
+        meta = skill_manager.resolve_plugin_meta(act) if skill_manager else {}
+        if meta and meta.get("visual_snapshot"):
+            return True
+    return False
+
+
 def try_fast_local_intent(
     user_text: str,
     skill_manager,
@@ -418,7 +432,7 @@ class AgentReasoner:
         # 写入持久化长短期记忆 (支持多通道 Session 隔离)
         memory_manager.record_turn(user_text, final_reply, session_id=session_id)
 
-        has_visual_qa = any(s.get("action") == "visual_qa" for s in steps_log) or (last_observation and "【小猪视觉观察】" in str(last_observation))
+        has_visual_qa = _has_visual_snapshot(steps_log, last_observation, skill_manager)
         ret = {
             "reply": final_reply,
             "behaviors": final_behaviors,
@@ -686,7 +700,7 @@ class AgentReasoner:
 
         memory_manager.record_turn(user_text, final_reply, session_id=session_id)
 
-        has_visual_qa = any(s.get("action") == "visual_qa" for s in steps_log) or (last_observation and "【小猪视觉观察】" in str(last_observation))
+        has_visual_qa = _has_visual_snapshot(steps_log, last_observation, skill_manager)
         done_payload = {
             "type": "done",
             "reply": final_reply,

@@ -25,6 +25,14 @@ class BaseRobotHAL(ABC):
         """
         pass
 
+    def set_screen_power(self, enabled: bool, brightness: int = 100) -> bool:
+        """
+        控制显示屏开关与背光（含彻底断背光熄屏与唤醒亮屏）。
+        :param enabled: True=亮屏, False=彻底熄屏(含背光关闭)
+        :param brightness: 背光亮度百分比 [0, 100]
+        """
+        return True
+
     @abstractmethod
     def capture_image(self) -> bytes:
         """

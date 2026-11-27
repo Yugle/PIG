@@ -50,6 +50,8 @@ class SimulationRobotHAL(BaseRobotHAL):
         self.tilt_min = float(kwargs.get("tilt_min", 60.0))
         self.tilt_max = float(kwargs.get("tilt_max", 120.0))
         self.servo_speed = max(2, int(kwargs.get("servo_speed", 15)))
+        self.screen_on = True
+        self.screen_brightness = max(0, min(100, int(kwargs.get("screen_brightness", 100))))
 
         # 兼容 urdf_path 传参
         if urdf_path is not None:
@@ -121,6 +123,8 @@ class SimulationRobotHAL(BaseRobotHAL):
         self.cur_pan, self.cur_tilt = target_pan, target_tilt
 
     def display_face(self, pil_image: Image.Image):
+        if not getattr(self, "screen_on", True):
+            return
         if cv2 is not None and np is not None and not self.headless:
             try:
                 img_np = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
@@ -134,6 +138,17 @@ class SimulationRobotHAL(BaseRobotHAL):
             pil_image.save("/tmp/robot_face_latest.png")
         except Exception:
             pass
+
+    def set_screen_power(self, enabled: bool, brightness: int = 100) -> bool:
+        self.screen_on = bool(enabled)
+        self.screen_brightness = max(0, min(100, int(brightness)))
+        if not self.screen_on:
+            try:
+                Image.new("RGB", (240, 320), (0, 0, 0)).save("/tmp/robot_face_latest.png")
+            except Exception:
+                pass
+        print(f"📺 [HAL-Sim] 屏幕状态: {'开启 (亮度 ' + str(self.screen_brightness) + '%)' if self.screen_on else '彻底熄屏 (无背光)'}")
+        return True
 
     def capture_image(self) -> bytes:
         now = time.time()

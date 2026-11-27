@@ -146,6 +146,7 @@ graph TD
         Pin23["Pin 23: GPIO 11 (SCLK)"]
         Pin24["Pin 24: GPIO 8 (CE0)"]
         Pin33["Pin 33: GPIO 13 (PWM1)"]
+        Pin36["Pin 36: GPIO 16"]
         Pin37["Pin 37: GPIO 26"]
         Pin39["Pin 39: GND (地)"]
         USB_A["USB 端口 1"]
@@ -161,7 +162,7 @@ graph TD
         Screen_CS["ST7789 屏幕 CS"]
         Screen_DC["ST7789 屏幕 DC"]
         Screen_RES["ST7789 屏幕 RES"]
-        Screen_BLK["ST7789 屏幕 BLK (悬空或接3.3V)"]
+        Screen_BLK["ST7789 屏幕 BLK (背光PWM/彻底断光)"]
 
         Pan_PWM["水平舵机 Pan (黄色信号线)"]
         Pan_VCC["水平舵机 Pan (红色 5V)"]
@@ -198,6 +199,7 @@ graph TD
     Pin24 --> Screen_CS
     Pin22 --> Screen_DC
     Pin15 --> Screen_RES
+    Pin36 --> Screen_BLK
 
     %% 触摸传感器接线
     Pin1 --> Touch_VCC

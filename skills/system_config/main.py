@@ -85,6 +85,57 @@ def run(action="query", value="", **kwargs):
             "behavior": {"emotion": "HAPPY" if new_v > 0 else "NORMAL", "action": "NOD"}
         }
 
+    # 0.5 物理屏幕与背光彻底开关 / 亮度调节
+    if any(k in act for k in ["screen", "display", "backlight", "屏幕", "背光", "熄屏", "息屏", "亮屏", "开屏", "关屏"]):
+        import re
+        digits = "".join(re.findall(r"\d+", val_str))
+        brightness = None
+        is_off_word = (
+            val_str in ("0", "false", "off")
+            or any(w in val_str for w in ["false", "off", "关", "熄", "息", "灭", "休眠"])
+            or (not val_str and any(w in act for w in ["熄", "息", "关"]))
+        )
+        if is_off_word:
+            enable = False
+        elif digits:
+            enable = True
+            brightness = max(10, min(100, int(digits)))
+        else:
+            enable = True
+
+        if brightness is not None:
+            cfg["screen_brightness"] = brightness
+            _save_config(cfg)
+
+        applied = False
+        try:
+            from core.menu_fsm import menu_fsm
+            if menu_fsm and hasattr(menu_fsm, "set_screen_power"):
+                menu_fsm.set_screen_power(enable, brightness=brightness, manual=not enable)
+                applied = True
+        except Exception:
+            pass
+        if not applied:
+            try:
+                from core.hardware_agent import get_hardware_agent
+                ha = get_hardware_agent()
+                if ha and ha.hal and hasattr(ha.hal, "set_screen_power"):
+                    ha.hal.set_screen_power(enable, brightness if brightness is not None else 100)
+            except Exception:
+                pass
+
+        if not enable:
+            msg = "🌙 好嘞，已经把屏幕和背光彻底熄灭啦！需要时叫我亮屏或者按一下机身按键就能唤醒～"
+        elif brightness is not None:
+            msg = f"☀️ 屏幕已点亮，背光亮度调节到 {brightness}% 啦！"
+        else:
+            msg = "☀️ 屏幕和背光已经点亮啦！"
+        return {
+            "status": "success",
+            "message": msg,
+            "behavior": {"emotion": "HAPPY" if enable else "SLEEPY", "action": "NOD"}
+        }
+
     # 1. 人脸视线追踪开关
     if "face" in act or "track" in act or "注视" in act or "人脸" in act or "摄像头" in act:
         enable = val_str in ["true", "1", "on", "yes", "开启", "打开", "开"]

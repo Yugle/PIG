@@ -541,8 +541,8 @@ class SkillManager:
         except Exception as e:
             return {"status": "error", "message": f"持久化技能文件失败: {e}"}
 
-    def execute_skill(self, skill_id: str, timeout_seconds: float = 12.0, **params) -> str:
-        """调用并执行一个已安装的插件技能（带超时熔断保护，防止挂起）"""
+    def execute_skill(self, skill_id: str, timeout_seconds: Optional[float] = None, **params) -> str:
+        """调用并执行一个已安装的插件技能（支持 skill.json 声明式超时与熔断保护）"""
         skill_id = skill_id.strip().lower()
         plugin = self.installed_plugins.get(skill_id)
         if not plugin:
@@ -551,6 +551,13 @@ class SkillManager:
         module = plugin.get("module")
         if not (module and hasattr(module, "run")):
             return f"技能【{skill_id}】内部未定义 run 入口函数。"
+
+        if timeout_seconds is None:
+            meta = plugin.get("meta") or {}
+            try:
+                timeout_seconds = float(meta.get("timeout_seconds", 12.0))
+            except (TypeError, ValueError):
+                timeout_seconds = 12.0
 
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         future = executor.submit(module.run, **params)

@@ -129,17 +129,29 @@ class PhysicalRobotHAL(BaseRobotHAL):
 
 
         # 初始化 ST7789 2.4 寸 SPI 彩屏 (240x320, 48MHz SPI + 16-bit RGB565)
+        # 背光控制引脚 BLK 默认接 GPIO 16 (Pin 36)，支持 PWM 调光与彻底拉低关闭背光
+        self.bl_pin = kwargs.get("bl_pin", 16)
+        self.screen_on = True
+        self.screen_brightness = max(0, min(100, int(kwargs.get("screen_brightness", 100))))
+        self._screen_lock = threading.RLock()
         self.screen = None
         self._spi_serial = None
+        if self.bl_pin is not None:
+            try:
+                self.bl_pin = int(self.bl_pin)
+                self.pi.set_mode(self.bl_pin, pigpio.OUTPUT)
+                self._set_backlight(True, self.screen_brightness)
+                print(f"💡 [HAL-Physical] 屏幕背光控制已绑定 GPIO {self.bl_pin}")
+            except Exception as e:
+                print(f"⚠️ [HAL-Physical] 背光控制引脚初始化跳过: {e}")
+                self.bl_pin = None
+
         if spi is not None and st7789 is not None:
             try:
                 serial_spi = spi(port=spi_port, device=spi_device, gpio_DC=dc_pin, gpio_RST=rst_pin, bus_speed_hz=48000000)
                 self.screen = st7789(serial_spi, width=240, height=320, rotate=0)
                 self._spi_serial = serial_spi
-                # 覆盖 luma.lcd 默认横屏 MADCTL(0x70)、反色 INVON(0x21) 与 18-bit(0x06)，切换 16-bit RGB565(0x05)
-                self.screen.command(0x36, 0x00)
-                self.screen.command(0x20)
-                self.screen.command(0x3A, 0x05)
+                self._apply_st7789_panel_cfg()
                 print("📺 [HAL-Physical] ST7789 屏幕初始化成功 (48MHz RGB565)")
             except Exception as e:
                 print(f"⚠️ [HAL-Physical] ST7789 屏幕初始化失败: {e}")
@@ -310,28 +322,93 @@ class PhysicalRobotHAL(BaseRobotHAL):
         # 到位后自动卸力休眠 (受 auto_detach_delay 控制)
         self._schedule_servo_detach(self.auto_detach_delay)
 
+    def _apply_st7789_panel_cfg(self):
+        """配置 ST7789 竖屏 16-bit RGB565 显示参数"""
+        if self.screen is None:
+            return
+        # 覆盖 luma.lcd 默认横屏 MADCTL(0x70)、反色 INVON(0x21) 与 18-bit(0x06)，切换 16-bit RGB565(0x05)
+        self.screen.command(0x36, 0x00)
+        self.screen.command(0x20)
+        self.screen.command(0x3A, 0x05)
+
+    def _set_backlight(self, enabled: bool, brightness: int = 100):
+        """通过 GPIO 开关 / DMA PWM 控制 ST7789 LED 背光（低电平彻底断光）"""
+        if self.bl_pin is None or not getattr(self, "pi", None) or not self.pi.connected:
+            return
+        try:
+            br = max(0, min(100, int(brightness)))
+            if not enabled or br <= 0:
+                self.pi.set_PWM_dutycycle(self.bl_pin, 0)
+                self.pi.write(self.bl_pin, 0)
+            elif br >= 100:
+                self.pi.set_PWM_dutycycle(self.bl_pin, 0)
+                self.pi.write(self.bl_pin, 1)
+            else:
+                self.pi.set_PWM_dutycycle(self.bl_pin, int(round(br * 255 / 100.0)))
+        except Exception as e:
+            print(f"⚠️ [HAL-Physical] 背光控制异常: {e}")
+
+    def set_screen_power(self, enabled: bool, brightness: int = 100) -> bool:
+        """
+        彻底控制物理屏开关（硬件背光 GPIO 断电 + ST7789 IC 休眠/唤醒）。
+        :param enabled: True=唤醒并点亮屏幕; False=彻底断背光熄屏并进入 SLPIN
+        """
+        with self._screen_lock:
+            target_on = bool(enabled)
+            br = max(0, min(100, int(brightness)))
+            self.screen_on = target_on
+            if target_on and br > 0:
+                self.screen_brightness = br
+
+            if not target_on:
+                self._set_backlight(False, 0)
+                if self.screen is not None:
+                    try:
+                        self.screen.command(0x28)  # DISPOFF
+                        self.screen.command(0x10)  # SLPIN
+                    except Exception as e:
+                        print(f"⚠️ [HAL-Physical] 屏幕休眠指令异常: {e}")
+                print("🌙 [HAL-Physical] ST7789 已彻底熄屏（DISPOFF + SLPIN + 背光归零）")
+                return True
+
+            if self.screen is not None:
+                try:
+                    self.screen.command(0x11)  # SLPOUT
+                    time.sleep(0.06)
+                    self._apply_st7789_panel_cfg()
+                    self.screen.command(0x29)  # DISPON
+                except Exception as e:
+                    print(f"⚠️ [HAL-Physical] 屏幕唤醒指令异常: {e}")
+            active_br = br if br > 0 else self.screen_brightness
+            self._set_backlight(True, active_br)
+            print(f"☀️ [HAL-Physical] ST7789 已点亮屏幕 (亮度 {active_br}%)")
+            return True
+
     def display_face(self, pil_image: Image.Image):
         if self.screen is not None:
-            try:
-                if pil_image.mode != "RGB":
-                    pil_image = pil_image.convert("RGB")
-                if pil_image.size != (240, 320):
-                    pil_image = pil_image.resize((240, 320))
-                arr = np.asarray(pil_image, dtype=np.uint16)
-                rgb565 = ((arr[:, :, 0] & 0xF8) << 8) | ((arr[:, :, 1] & 0xFC) << 3) | (arr[:, :, 2] >> 3)
-                raw_bytes = rgb565.astype(">u2", copy=False).tobytes()
+            with self._screen_lock:
+                if not getattr(self, "screen_on", True):
+                    return
+                try:
+                    if pil_image.mode != "RGB":
+                        pil_image = pil_image.convert("RGB")
+                    if pil_image.size != (240, 320):
+                        pil_image = pil_image.resize((240, 320))
+                    arr = np.asarray(pil_image, dtype=np.uint16)
+                    rgb565 = ((arr[:, :, 0] & 0xF8) << 8) | ((arr[:, :, 1] & 0xFC) << 3) | (arr[:, :, 2] >> 3)
+                    raw_bytes = rgb565.astype(">u2", copy=False).tobytes()
 
-                self.screen.set_window(0, 0, 240, 320)
-                ser = self._spi_serial
-                if ser is not None and hasattr(ser, "_spi") and hasattr(ser._spi, "writebytes2") and hasattr(ser, "_gpio") and hasattr(ser, "_DC"):
-                    ser._gpio.output(ser._DC, 1)
-                    ser._spi.writebytes2(raw_bytes)
-                elif ser is not None:
-                    ser.data(raw_bytes)
-                else:
-                    self.screen.display(pil_image)
-            except Exception as e:
-                print(f"⚠️ [HAL-Physical] 屏幕刷新错误: {e}")
+                    self.screen.set_window(0, 0, 240, 320)
+                    ser = self._spi_serial
+                    if ser is not None and hasattr(ser, "_spi") and hasattr(ser._spi, "writebytes2") and hasattr(ser, "_gpio") and hasattr(ser, "_DC"):
+                        ser._gpio.output(ser._DC, 1)
+                        ser._spi.writebytes2(raw_bytes)
+                    elif ser is not None:
+                        ser.data(raw_bytes)
+                    else:
+                        self.screen.display(pil_image)
+                except Exception as e:
+                    print(f"⚠️ [HAL-Physical] 屏幕刷新错误: {e}")
 
     def capture_image(self) -> bytes:
         with self._cam_lock:
@@ -416,8 +493,9 @@ class PhysicalRobotHAL(BaseRobotHAL):
                     pass
                 self._cam = None
 
-        # 停用舵机信号输出，防止电机发热与持续蜂鸣
+        # 停用舵机与背光输出，防止电机发热与余光常亮
         try:
+            self._set_backlight(False, 0)
             self.pi.set_servo_pulsewidth(self.pan_pin, 0)
             self.pi.set_servo_pulsewidth(self.tilt_pin, 0)
             self.pi.stop()

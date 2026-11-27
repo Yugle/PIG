@@ -436,6 +436,9 @@ class MenuFSM:
         self.is_mic_muted = False
         self.face_tracking_enabled = True
         self.is_servo_sleeping = False
+        self.is_screen_off = False
+        self._screen_manual_off = False
+        self.screen_brightness = max(10, min(100, int(self._load_cfg().get("screen_brightness", 100))))
 
         # 系统主题配色 (mint, orange, blue, purple, mono)
         self.theme_key = self._load_cfg().get("theme_color", "mint")
@@ -569,6 +572,7 @@ class MenuFSM:
         radar_status_txt = "检测有人" if getattr(self, "radar_detected", True) else "无人离席"
         
         self.hardware_items = [
+            {"id": "screen_power", "icon": "eye", "name": "屏幕显示", "val": "熄屏中" if self.is_screen_off else f"{getattr(self, 'screen_brightness', 100)}%", "type": "toggle", "state": not self.is_screen_off},
             {"id": "servo_center", "icon": "servo", "name": "舵机居中归位", "val": getattr(self, "servo_center_status", "回正校准"), "type": "action"},
             {"id": "servo_test", "icon": "spark", "name": "舵机动作自检", "val": getattr(self, "servo_test_status", "自检通过"), "type": "action"},
             {"id": "servo_sleep", "icon": "lock", "name": "舵机保持通电", "val": "", "type": "toggle", "state": not self.is_servo_sleeping},
@@ -1080,6 +1084,34 @@ class MenuFSM:
             self.active_alarm_until = 0.0
         self._notify_listeners()
 
+    def set_screen_power(self, on: bool, brightness: Optional[int] = None, manual: bool = False) -> bool:
+        """统一控制物理/仿真屏幕彻底开关与背光唤醒"""
+        with self._lock:
+            target_on = bool(on)
+            if brightness is not None:
+                self.screen_brightness = max(10, min(100, int(brightness)))
+            self.is_screen_off = not target_on
+            self._screen_manual_off = False if target_on else bool(manual)
+            if target_on:
+                self.last_interaction_time = time.time()
+                self._menu_cache_key = None
+            hal = self.hal
+            if hal is None and self.agent is not None:
+                hal = getattr(self.agent, "hal", None)
+            if hal and hasattr(hal, "set_screen_power"):
+                try:
+                    hal.set_screen_power(target_on, self.screen_brightness)
+                except Exception as e:
+                    print(f"⚠️ [MenuFSM] set_screen_power 异常: {e}")
+            self._sync_hardware_items()
+        self._notify_listeners()
+        return True
+
+    def handle_touch(self):
+        """摸头唤醒已熄灭的屏幕"""
+        if getattr(self, "is_screen_off", False):
+            self.set_screen_power(True)
+
     def handle_key(self, button: str, event_type: str = "click"):
         """
         统一按键处理入口 (K1:上, K2:下, K3:确认, K4:返回)
@@ -1087,6 +1119,11 @@ class MenuFSM:
         with self._lock:
             self.last_interaction_time = time.time()
             button = button.upper()
+
+            # -1. 熄屏状态下按任意键先行唤醒点亮屏幕（消费本次按键避免误触菜单）
+            if getattr(self, "is_screen_off", False):
+                self.set_screen_power(True)
+                return
 
             # 0. 若当前正在真机响铃窗口内，按键优先处理“稍后再响 / 关闭闹钟”
             if self.active_alarm and time.time() < self.active_alarm_until:
@@ -1228,7 +1265,10 @@ class MenuFSM:
                 elif button == "K3":
                     item = self.hardware_items[self.cursor]
                     item_id = item["id"]
-                    if item_id == "servo_center":
+                    if item_id == "screen_power":
+                        self.set_screen_power(self.is_screen_off, manual=not self.is_screen_off)
+                        return
+                    elif item_id == "servo_center":
                         self.run_servo_center()
                     elif item_id == "servo_test":
                         self.run_servo_self_test()
@@ -1407,6 +1447,8 @@ class MenuFSM:
             if self.is_servo_sleeping:
                 self.is_servo_sleeping = False
                 self._apply_servo_sleep(False)
+            if getattr(self, "is_screen_off", False) and not getattr(self, "_screen_manual_off", False):
+                self.set_screen_power(True)
         self._sync_hardware_items()
         self._notify_listeners()
 
@@ -1467,9 +1509,7 @@ class MenuFSM:
                     draw.text((40, 170), "绿灯熄灭后即可拔电", fill=(180, 190, 205), font=self.font_small)
                     self.hal.display_face(img)
                     time.sleep(1.2)
-                    self.hal.display_face(Image.new("RGB", (240, 320), (0, 0, 0)))
-                    if getattr(self.hal, "screen", None) is not None:
-                        self.hal.screen.command(0x28)  # DISPOFF
+                    self.set_screen_power(False, manual=True)
                 except Exception:
                     pass
             os.system("sudo shutdown -h now 2>/dev/null || echo 'Simulation: Shutdown simulated'")
@@ -1569,6 +1609,8 @@ class MenuFSM:
             "is_mic_muted": self.is_mic_muted,
             "face_tracking": self.face_tracking_enabled,
             "servo_sleeping": self.is_servo_sleeping,
+            "screen_on": not getattr(self, "is_screen_off", False),
+            "screen_brightness": getattr(self, "screen_brightness", 100),
             "local_ip": ip,
             "version_hint": self.version_hint,
             "easter_egg_scroll": self.easter_egg_scroll_y,

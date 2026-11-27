@@ -140,7 +140,9 @@ class HardwareAgent:
                 from drivers.hal_physical import PhysicalRobotHAL
                 hal = PhysicalRobotHAL(
                     pan_pin=self.cfg.get("pan_pin", 18),
-                    tilt_pin=self.cfg.get("tilt_pin", 13)
+                    tilt_pin=self.cfg.get("tilt_pin", 13),
+                    bl_pin=self.cfg.get("bl_pin", 16),
+                    screen_brightness=self.cfg.get("screen_brightness", 100),
                 )
                 logger.info("🚀 [HAL] 已加载树莓派物理真机驱动 (Physical HAL)")
                 return hal
@@ -1000,6 +1002,8 @@ class HardwareAgent:
                         "behaviors": final_behaviors,
                         "steps": ev.get("steps", [])
                     }
+                    if ev.get("visual_snapshot"):
+                        done_payload["visual_snapshot"] = ev.get("visual_snapshot")
 
             play_queue.put(None)
             play_thread.join(timeout=120.0)

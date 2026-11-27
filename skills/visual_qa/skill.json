@@ -16,5 +16,6 @@
     "emotion": "WINK",
     "action": "LOOK_UP"
   },
+  "visual_snapshot": true,
   "protected": true
 }

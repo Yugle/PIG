@@ -444,7 +444,9 @@ class FeishuClient:
         direction_desc: str = "水平 90° · 俯仰 90° (正视前方)",
         target_id: Optional[str] = None,
         id_type: str = "open_id",
-        is_live: bool = True
+        is_live: bool = True,
+        card_title: Optional[str] = None,
+        section_title: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         构建并发送【📷 PIG 远程安防与家庭现场巡检】富文本卡片
@@ -523,12 +525,12 @@ class FeishuClient:
 
         # 3. 智能多模态视觉环境分析 / 状态说明
         if vlm_analysis:
-            section_title = "**👁️ 现场智能环境诊断**" if is_live else "**📷 现场画面状态**"
+            sec_title = section_title or ("**👁️ 现场智能环境诊断**" if is_live else "**📷 现场画面状态**")
             elements.append({
                 "tag": "div",
                 "text": {
                     "tag": "lark_md",
-                    "content": f"{section_title}\n{vlm_analysis}"
+                    "content": f"{sec_title}\n{vlm_analysis}"
                 }
             })
 
@@ -540,12 +542,12 @@ class FeishuClient:
             "elements": [
                 {
                     "tag": "plain_text",
-                    "content": "来自 PIG 具身伴侣机器人 · 远程安防巡检通道 (零公网IP长连接直发)"
+                    "content": "来自 PIG 具身伴侣机器人 · 远程安防与视觉抓拍通道 (零公网IP长连接直发)"
                 }
             ]
         })
 
-        title = "📷 PIG 远程安防与家庭现场巡检"
+        title = card_title or "📷 PIG 远程安防与家庭现场巡检"
         template = "blue" if is_live else "indigo"
 
         # 如果显式指定了发送目标 (如当前接收到消息的会话)

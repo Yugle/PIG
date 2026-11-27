@@ -75,8 +75,8 @@ def get_latest_vision_frame(max_age_sec: float = 12.0) -> bytes:
     # 3. 检查硬件 HAL（物理真机摄像头）
     if hardware_agent and hardware_agent.hal:
         try:
-            from drivers.hal_physical import PhysicalHAL
-            if isinstance(hardware_agent.hal, PhysicalHAL):
+            from drivers.hal_physical import PhysicalRobotHAL
+            if isinstance(hardware_agent.hal, PhysicalRobotHAL):
                 img = hardware_agent.hal.capture_image()
                 if img and len(img) > 100:
                     return img
@@ -168,6 +168,10 @@ def apply_runtime_config(cur_cfg: dict, updates: dict):
                     "tilt": tilt_now,
                     "emotion": "SLEEPY" if sleep_on else "NORMAL"
                 })
+        if "screen_on" in updates or "screen_brightness" in updates:
+            target_on = bool(updates["screen_on"]) if "screen_on" in updates else not getattr(menu_fsm, "is_screen_off", False)
+            br = updates.get("screen_brightness")
+            menu_fsm.set_screen_power(target_on, brightness=br, manual=not target_on)
         menu_fsm._sync_hardware_items()
         menu_fsm._sync_system_items()
         menu_fsm._sync_skill_items()
@@ -230,9 +234,16 @@ agent_event_subscribers = []
 subscribers_lock = threading.Lock()
 
 def on_agent_event_broadcast(event_dict):
-    if isinstance(event_dict, dict) and event_dict.get("type") == "pose_sync" and event_dict.get("emotion"):
-        if hardware_agent is not None:
-            hardware_agent.current_emotion = str(event_dict["emotion"]).upper()
+    if isinstance(event_dict, dict):
+        if event_dict.get("type") == "pose_sync" and event_dict.get("emotion"):
+            if hardware_agent is not None:
+                hardware_agent.current_emotion = str(event_dict["emotion"]).upper()
+        elif event_dict.get("type") == "status_change" and event_dict.get("status") == "WAKING":
+            try:
+                if getattr(menu_fsm, "is_screen_off", False):
+                    menu_fsm.set_screen_power(True)
+            except Exception:
+                pass
     with subscribers_lock:
         dead_subs = []
         for q in agent_event_subscribers:
@@ -347,6 +358,8 @@ def on_menu_state_broadcast(state_dict):
 menu_fsm.add_listener(on_menu_state_broadcast)
 if hardware_agent and hardware_agent.hal:
     hardware_agent.hal.add_button_listener(menu_fsm.handle_key)
+    if hasattr(hardware_agent.hal, "add_touch_listener"):
+        hardware_agent.hal.add_touch_listener(menu_fsm.handle_touch)
 
     # 📡 联动 HLK-LD2402 毫米波人体雷达：人来极速唤醒、人走自动休眠
     def _on_radar_event_link(detected: bool):
@@ -377,10 +390,7 @@ if hardware_agent and hardware_agent.hal:
                     if getattr(menu_fsm, "_shutting_down", False):
                         return
                     if getattr(menu_fsm, "is_screen_off", False):
-                        if not last_black:
-                            hardware_agent.hal.display_face(Image.new("RGB", (240, 320), (0, 0, 0)))
-                            last_black = True
-                            last_frame_bytes = None
+                        last_frame_bytes = None
                         time.sleep(0.15)
                         continue
                     last_black = False
@@ -507,6 +517,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "face_tracking": hardware_agent.cfg.get("face_tracking", True),
                 "is_mic_muted": menu_fsm.is_mic_muted,
                 "servo_sleeping": menu_fsm.is_servo_sleeping,
+                "screen_on": not getattr(menu_fsm, "is_screen_off", False),
+                "screen_brightness": getattr(menu_fsm, "screen_brightness", 100),
+                "bl_pin": cur_cfg.get("bl_pin", 16),
                 "cur_pan": getattr(hardware_agent.hal, "cur_pan", 90.0) if (hardware_agent and hardware_agent.hal) else 90.0,
                 "cur_tilt": getattr(hardware_agent.hal, "cur_tilt", 90.0) if (hardware_agent and hardware_agent.hal) else 90.0,
                 "pan_trim": cur_cfg.get("pan_trim", 0.0),
@@ -983,6 +996,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         cur_cfg[k] = body[k]
                 if "face_tracking" in body:
                     cur_cfg["face_tracking"] = bool(body["face_tracking"])
+                if "screen_brightness" in body:
+                    cur_cfg["screen_brightness"] = max(10, min(100, int(body["screen_brightness"])))
 
                 apply_runtime_config(cur_cfg, body)
 
