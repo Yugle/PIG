@@ -35,5 +35,39 @@
     "system_config",
     "face_tracking",
     "track"
+  ],
+  "fast_local_intents": [
+    {
+      "triggers": ["音量调大", "音量大点", "声音大点", "音量调高", "声音调大", "大声点"],
+      "args": {"action": "volume", "value": "+"},
+      "emotion": "HAPPY"
+    },
+    {
+      "triggers": ["音量调小", "音量小点", "声音小点", "音量调低", "声音调小", "小声点"],
+      "args": {"action": "volume", "value": "-"},
+      "emotion": "NORMAL"
+    },
+    {
+      "triggers": ["静音", "打开静音"],
+      "args": {"action": "volume", "value": "mute"},
+      "emotion": "NORMAL"
+    },
+    {
+      "triggers": ["取消静音", "关闭静音", "恢复声音"],
+      "args": {"action": "volume", "value": "60"},
+      "emotion": "HAPPY"
+    },
+    {
+      "triggers": ["开启人脸追踪", "打开人脸追踪", "开启人脸跟随", "打开人脸跟随"],
+      "args": {"action": "face_tracking", "value": "true"},
+      "reply": "好嘞，已开启人脸追踪！",
+      "emotion": "HAPPY"
+    },
+    {
+      "triggers": ["关闭人脸追踪", "关掉人脸追踪", "关闭人脸跟随", "关掉人脸跟随"],
+      "args": {"action": "face_tracking", "value": "false"},
+      "reply": "好的，已关闭人脸追踪。",
+      "emotion": "NORMAL"
+    }
   ]
 }

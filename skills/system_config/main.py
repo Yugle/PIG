@@ -24,9 +24,11 @@ def _load_config():
 
 def _save_config(cfg):
     cfg_path = os.path.join(PROJECT_ROOT, "config.json")
+    tmp_path = cfg_path + ".tmp"
     try:
-        with open(cfg_path, "w", encoding="utf-8") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, cfg_path)
         return True
     except Exception as e:
         print(f"⚠️ [system_config] 保存 config.json 失败: {e}")
@@ -88,6 +90,19 @@ def run(action="query", value="", **kwargs):
         enable = val_str in ["true", "1", "on", "yes", "开启", "打开", "开"]
         cfg["face_tracking"] = enable
         _save_config(cfg)
+        try:
+            from core.hardware_agent import get_hardware_agent
+            ha = get_hardware_agent()
+            if ha:
+                ha.set_face_tracking(enable)
+        except Exception:
+            pass
+        try:
+            from core.menu_fsm import menu_fsm
+            if menu_fsm:
+                menu_fsm.face_tracking_enabled = enable
+        except Exception:
+            pass
         status_text = "开启" if enable else "关闭"
         return {
             "status": "success",

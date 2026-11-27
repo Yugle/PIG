@@ -566,6 +566,28 @@ class SkillManager:
         finally:
             executor.shutdown(wait=False)
 
+    def match_fast_local_intent(self, normalized_text: str) -> Optional[Dict[str, Any]]:
+        """遍历已加载插件 skill.json 中的声明式 fast_local_intents，保持内核零业务硬编码"""
+        if not normalized_text:
+            return None
+        for skill_id, plugin in (self.installed_plugins or {}).items():
+            meta = plugin.get("meta") or {}
+            rules = meta.get("fast_local_intents")
+            if not isinstance(rules, list):
+                continue
+            for rule in rules:
+                if not isinstance(rule, dict):
+                    continue
+                triggers = rule.get("triggers") or []
+                if any(normalized_text == str(t).strip().lower() for t in triggers):
+                    return {
+                        "skill": skill_id,
+                        "args": dict(rule.get("args") or {}),
+                        "reply": str(rule.get("reply") or ""),
+                        "emotion": str(rule.get("emotion") or "HAPPY").upper(),
+                    }
+        return None
+
     def get_skills_tools_prompt(self) -> str:
         """生成精简且高信息密度的技能清单与调用规范，控制 System Prompt Token 开销"""
         installed = self.list_installed_skills()

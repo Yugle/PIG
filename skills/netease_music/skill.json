@@ -73,5 +73,37 @@
     "点歌"
   ],
   "screen_qr_mode": "NETEASE_QR",
-  "screen_qr_title": "网易云登录"
+  "screen_qr_title": "网易云登录",
+  "fast_local_intents": [
+    {
+      "triggers": ["停止播放", "别放了", "关掉音乐", "把歌关了", "别唱了", "关闭音乐", "停止放歌"],
+      "args": {"action": "stop"},
+      "reply": "好嘞，已停止播放！",
+      "emotion": "NORMAL"
+    },
+    {
+      "triggers": ["暂停", "暂停播放", "先停一下", "暂停音乐"],
+      "args": {"action": "pause"},
+      "reply": "好嘞，已暂停播放。",
+      "emotion": "NORMAL"
+    },
+    {
+      "triggers": ["继续播放", "继续放歌", "恢复播放", "接着放"],
+      "args": {"action": "resume"},
+      "reply": "好嘞，继续给你播放！",
+      "emotion": "HAPPY"
+    },
+    {
+      "triggers": ["下一首", "换一首", "切歌", "下首歌", "放下一首"],
+      "args": {"action": "next"},
+      "reply": "好嘞，切下一首！",
+      "emotion": "HAPPY"
+    },
+    {
+      "triggers": ["上一首", "上首歌", "放上一首"],
+      "args": {"action": "prev"},
+      "reply": "好嘞，切回上一首！",
+      "emotion": "HAPPY"
+    }
+  ]
 }

@@ -63,8 +63,8 @@ class PromptBuilder:
         """精炼 ReAct 规则与极速首字 JSON 输出规范（emotion -> reply 在最前，零前置等待）"""
         return """
 【执行与输出铁律】:
-1. 动作类技能 (set_bot_name/set_user_name/set_alarm/set_timer/evolve_action/play_action/register_master_face/pomodoro/开关类 xiaomi_iot 等)：第1轮 `reply` 直接给出最终确认话术，`skill` 填工具调用，单轮闭环。
-2. 查询类技能 (weather/xiaomi_iot查询列表/news_briefing/remote_guard/visual_qa/netease_music 等)：第1轮 `reply` 给极简垫话（如“好嘞，我看看~”），绝不提前编造结果；第2轮严格按真实 Observation 汇报（失败则如实说明）。
+1. 状态变更/控制类动作技能 (如改名、设闹钟、倒计时、学/演动作、开关控制等)：第1轮 `reply` 直接给出最终确认话术，`skill` 填工具调用，单轮闭环。
+2. 信息查询/视觉/点播类技能 (需要等待外部反馈再汇报结果的)：第1轮 `reply` 给极简垫话（如“好嘞，我看看~”），绝不提前编造结果；第2轮严格按真实 Observation 汇报（失败则如实说明）。
 3. 命名与闭环：改机器人名调 `set_bot_name`，改主人称呼调 `set_user_name`；多参数一次传全；禁止空口承诺“稍后查/查日志”；若被问到突发推送/测试消息，当场坦诚解释原因。
 4. 严格按 `emotion` -> `reply` -> `behaviors` -> `skill` 顺序输出标准 JSON（禁止在 `reply` 前写长数组或冗余解释，确保首字秒出）：
    - `emotion`: 首帧主表情，必须从以下18种选1个：NORMAL/HAPPY/LAUGH/LOVE/EXCITED/WINK/SHY/PROUD/CURIOUS/CONFUSED/THINKING/SURPRISED/COZY/SLEEPY/DIZZY/SAD/ANGRY/BLINK。

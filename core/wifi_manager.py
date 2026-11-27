@@ -140,15 +140,17 @@ class WiFiManager:
                 logger.warning(f"读取 wifi_config.json 异常: {e}")
 
     def _save_config(self, ssid: str, password: str):
-        """持久化已配置的 Wi-Fi 凭证"""
+        """原子化持久化已配置的 Wi-Fi 凭证"""
         try:
             DATA_DIR.mkdir(parents=True, exist_ok=True)
-            with open(WIFI_CFG_PATH, "w", encoding="utf-8") as f:
+            tmp_path = WIFI_CFG_PATH.with_suffix(".tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump({
                     "ssid": ssid,
                     "password": password,
                     "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")
                 }, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, WIFI_CFG_PATH)
         except Exception as e:
             logger.warning(f"保存 wifi_config.json 异常: {e}")
 
