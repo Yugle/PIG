@@ -7,6 +7,7 @@ import base64
 import json
 import hashlib
 import shutil
+import threading
 
 TTS_CACHE_DIR = "/tmp/pig_tts_cache"
 os.makedirs(TTS_CACHE_DIR, exist_ok=True)
@@ -114,6 +115,9 @@ class TTSEngine:
         self._start_time = 0
         self._current_duration = 0.0
         self._player_proc = None
+        self._pcm_proc = None
+        self._pcm_lock = threading.Lock()
+        self._pcm_stream_active = False
 
         if pygame is not None:
             try:
@@ -261,8 +265,66 @@ class TTSEngine:
             except Exception as e:
                 print(f"⚠️ [TTS 播放异常]: {e}")
 
+    def start_pcm_stream(self, sample_rate: int = 24000) -> bool:
+        """打开常驻 aplay 原始 PCM 管道，收到首块 ~370ms 音频即刻零落盘出声"""
+        self.stop()
+        with self._pcm_lock:
+            try:
+                self._pcm_proc = subprocess.Popen(
+                    ["aplay", "-q", "-f", "S16_LE", "-r", str(sample_rate), "-c", "1", "-t", "raw", "-"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                self._pcm_stream_active = True
+                return True
+            except Exception:
+                self._pcm_proc = None
+                self._pcm_stream_active = False
+                return False
+
+    def write_pcm_chunk(self, pcm_bytes: bytes) -> bool:
+        """向已打开的 aplay PCM 管道写入音频分片并应用软件音量缩放"""
+        if not pcm_bytes:
+            return False
+        with self._pcm_lock:
+            proc = self._pcm_proc
+            if proc is None or proc.poll() is not None or not proc.stdin:
+                return False
+            data = pcm_bytes
+            vol = max(0, min(100, int(self.volume)))
+            if vol == 0:
+                data = b"\x00" * len(pcm_bytes)
+            elif vol < 100:
+                try:
+                    import numpy as np
+                    arr = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32)
+                    data = np.clip(arr * (vol / 100.0), -32768, 32767).astype(np.int16).tobytes()
+                except Exception:
+                    pass
+            try:
+                proc.stdin.write(data)
+                proc.stdin.flush()
+                return True
+            except Exception:
+                return False
+
+    def finish_pcm_stream(self):
+        """闭合 PCM 写入流，让 aplay 自然播完尾音后退出"""
+        with self._pcm_lock:
+            proc = self._pcm_proc
+            self._pcm_stream_active = False
+            if proc is not None and proc.stdin:
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
+
     def is_playing(self) -> bool:
         """检查当前语音是否仍在播放中"""
+        pcm_proc = getattr(self, "_pcm_proc", None)
+        if self._pcm_stream_active or (pcm_proc is not None and pcm_proc.poll() is None):
+            return True
         proc = getattr(self, "_player_proc", None)
         if proc is not None:
             if proc.poll() is None:
@@ -279,6 +341,22 @@ class TTSEngine:
 
     def stop(self):
         """停止播放"""
+        with self._pcm_lock:
+            self._pcm_stream_active = False
+            pcm_proc = getattr(self, "_pcm_proc", None)
+            if pcm_proc is not None:
+                try:
+                    if pcm_proc.stdin:
+                        pcm_proc.stdin.close()
+                except Exception:
+                    pass
+                if pcm_proc.poll() is None:
+                    try:
+                        pcm_proc.terminate()
+                        pcm_proc.wait(timeout=0.2)
+                    except Exception:
+                        pass
+                self._pcm_proc = None
         proc = getattr(self, "_player_proc", None)
         if proc is not None and proc.poll() is None:
             try:

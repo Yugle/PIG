@@ -10,6 +10,7 @@ PIG 机器人 - 高并发流式推理与即时断句音频合成流水线 (strea
 import os
 import json
 import time
+import struct
 import asyncio
 import base64
 import logging
@@ -21,6 +22,22 @@ logger = logging.getLogger("StreamingPipeline")
 
 TTS_CACHE_DIR = "/tmp/pig_tts_cache"
 os.makedirs(TTS_CACHE_DIR, exist_ok=True)
+
+
+def wrap_pcm16_wav(pcm_bytes: bytes, sample_rate: int = 24000, channels: int = 1) -> bytes:
+    """将 16-bit PCM 裸流封装为标准 44B WAV 头（Web Audio 样本级零缝对齐解码）"""
+    if not pcm_bytes:
+        return b""
+    data_size = len(pcm_bytes)
+    byte_rate = sample_rate * channels * 2
+    block_align = channels * 2
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF", 36 + data_size, b"WAVE",
+        b"fmt ", 16, 1, channels, sample_rate, byte_rate, block_align, 16,
+        b"data", data_size,
+    )
+    return header + pcm_bytes
 
 try:
     import edge_tts
@@ -318,6 +335,12 @@ class AsyncEdgeTTSStreamer:
             logger.warning(f"Edge-TTS 流式单句合成失败 [{clean_text[:15]}]: {e}")
             return b""
 
+    def iter_synthesize_chunks(self, text: str):
+        """统一分片流接口（Edge-TTS 为单段完整 MP3）"""
+        audio_b = asyncio.run(self.synthesize_chunk(text))
+        if audio_b:
+            yield (b"", audio_b)
+
 
 class AsyncMiMoTTSStreamer:
     """
@@ -339,6 +362,136 @@ class AsyncMiMoTTSStreamer:
         self._clone_audio_b64 = None
         self._fallback_edge = AsyncEdgeTTSStreamer()
         self._thread_local = threading.local()
+
+    def _get_session(self):
+        import requests
+        sess = getattr(self._thread_local, "session", None)
+        if sess is None:
+            sess = requests.Session()
+            self._thread_local.session = sess
+        return sess
+
+    def iter_synthesize_chunks(self, text: str):
+        """
+        真流式音频分片生成器：
+        - 预置精品音色 (mimo-v2.5-tts) 启用 stream=True + pcm16，~370ms 即产出首块 160ms PCM/WAV 切片；
+        - 音色设计/声音克隆模型自动回退单段整句合成；
+        - 命中磁盘 WAV/MP3 缓存时 0ms 直出。
+        yield (pcm16_bytes_or_empty, wire_wav_or_mp3_bytes)
+        """
+        clean_text = (text or "").strip()
+        if not clean_text:
+            return
+        if not self.api_key:
+            yield from self._fallback_edge.iter_synthesize_chunks(clean_text)
+            return
+
+        cache_key = hashlib.md5(
+            f"{self.voice}_{self.clone_audio}_{self.design_prompt}_{clean_text}".encode("utf-8")
+        ).hexdigest()
+        wav_cache = os.path.join(TTS_CACHE_DIR, f"{cache_key}.wav")
+        mp3_cache = os.path.join(TTS_CACHE_DIR, f"{cache_key}.mp3")
+
+        if os.path.exists(wav_cache):
+            try:
+                with open(wav_cache, "rb") as cf:
+                    w = cf.read()
+                if len(w) > 44:
+                    yield (w[44:], w)
+                    return
+            except Exception:
+                pass
+        if os.path.exists(mp3_cache):
+            try:
+                with open(mp3_cache, "rb") as cf:
+                    m = cf.read()
+                if m:
+                    yield (b"", m)
+                    return
+            except Exception:
+                pass
+
+        try:
+            from drivers.tts_engine import resolve_mimo_tts_params
+            model, user_prompt, audio_voice, self._clone_audio_b64 = resolve_mimo_tts_params(
+                voice=self.voice,
+                clone_audio=self.clone_audio,
+                design_prompt=self.design_prompt,
+                clone_b64_cache=self._clone_audio_b64,
+            )
+
+            if model == "mimo-v2.5-tts":
+                url = "https://api.xiaomimimo.com/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "user", "content": user_prompt},
+                        {"role": "assistant", "content": clean_text}
+                    ],
+                    "audio": {"format": "pcm16", "voice": audio_voice},
+                    "stream": True
+                }
+                res = self._get_session().post(url, json=payload, headers=headers, stream=True, timeout=12)
+                if res.status_code == 200:
+                    buf = bytearray()
+                    all_pcm = []
+                    sent_first = False
+                    for line in res.iter_lines():
+                        if not line:
+                            continue
+                        line_str = line.decode("utf-8", errors="ignore")
+                        if not line_str.startswith("data: ") or line_str == "data: [DONE]":
+                            continue
+                        try:
+                            ch = json.loads(line_str[6:]).get("choices") or []
+                            if not ch:
+                                continue
+                            b64_chunk = ((ch[0].get("delta") or {}).get("audio") or {}).get("data", "")
+                            if not b64_chunk:
+                                continue
+                            raw_pcm = base64.b64decode(b64_chunk)
+                            buf.extend(raw_pcm)
+                            min_bytes = 7680 if not sent_first else 15360
+                            if len(buf) >= min_bytes:
+                                take_n = len(buf) & ~1
+                                if take_n > 0:
+                                    part = bytes(buf[:take_n])
+                                    del buf[:take_n]
+                                    all_pcm.append(part)
+                                    sent_first = True
+                                    yield (part, wrap_pcm16_wav(part))
+                        except Exception:
+                            pass
+
+                    rem_n = len(buf) & ~1
+                    if rem_n > 0:
+                        tail = bytes(buf[:rem_n])
+                        all_pcm.append(tail)
+                        yield (tail, wrap_pcm16_wav(tail))
+
+                    if all_pcm:
+                        try:
+                            full_wav = wrap_pcm16_wav(b"".join(all_pcm))
+                            with open(wav_cache, "wb") as cf:
+                                cf.write(full_wav)
+                        except Exception:
+                            pass
+                        return
+                else:
+                    logger.warning(f"小米 MiMo 流式 PCM16 异常 [{res.status_code}]: {res.text[:120]}")
+        except Exception as e:
+            logger.warning(f"小米 MiMo 流式音频失败 [{clean_text[:15]}]: {e}")
+
+        # 音色设计/声音克隆模型或流式异常时，平滑回退整句合成与 Edge-TTS
+        audio_b = self._sync_synthesize(clean_text)
+        if audio_b:
+            yield (b"", audio_b)
+        else:
+            yield from self._fallback_edge.iter_synthesize_chunks(clean_text)
 
     def _sync_synthesize(self, text: str) -> bytes:
         clean_text = (text or "").strip()
@@ -390,12 +543,7 @@ class AsyncMiMoTTSStreamer:
             if audio_voice is not None:
                 payload["audio"]["voice"] = audio_voice
 
-            # 单句完整合成，每线程复用 Keep-Alive 连接池减少重复 TLS 握手耗时
-            sess = getattr(self._thread_local, "session", None)
-            if sess is None:
-                sess = requests.Session()
-                self._thread_local.session = sess
-            res = sess.post(url, json=payload, headers=headers, timeout=12)
+            res = self._get_session().post(url, json=payload, headers=headers, timeout=12)
             if res.status_code == 200:
                 data = res.json()
                 choices = data.get("choices", [])
@@ -426,6 +574,25 @@ class AsyncMiMoTTSStreamer:
         if self._fallback_edge:
             return await self._fallback_edge.synthesize_chunk(text)
         return b""
+
+
+def stream_sentence_to_queue(executor, streamer, text: str):
+    """提交后台流式 TTS 任务并立即返回接收分片的 queue（产出 ('chunk', pcm_b, wire_b) 与 ('done', None, None)）"""
+    import queue as _queue
+    sub_q: "_queue.Queue[tuple]" = _queue.Queue()
+
+    def _run():
+        try:
+            for pcm_b, wire_b in streamer.iter_synthesize_chunks(text):
+                if wire_b:
+                    sub_q.put(("chunk", pcm_b, wire_b))
+        except Exception as ex:
+            logger.warning(f"流式 TTS 后台分片异常: {ex}")
+        finally:
+            sub_q.put(("done", None, None))
+
+    executor.submit(_run)
+    return sub_q
 
 
 def get_tts_streamer(cfg: Optional[Dict[str, Any]] = None):

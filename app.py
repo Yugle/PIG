@@ -1716,7 +1716,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
 
-            from core.streaming_pipeline import get_tts_streamer
+            from core.streaming_pipeline import get_tts_streamer, stream_sentence_to_queue
             tts_streamer = get_tts_streamer(cfg)
 
             reasoner = AgentReasoner(
@@ -1729,30 +1729,46 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
             from concurrent.futures import ThreadPoolExecutor
             tts_executor = ThreadPoolExecutor(max_workers=3)
-            audio_futures = []
+            audio_order_q = queue.Queue()
+            sse_lock = threading.Lock()
+            audio_seq = 0
+            audio_stopped = False
 
-            def _drain_ready_audio(force_all=False):
-                nonlocal audio_futures
-                while audio_futures:
-                    if not force_all and not audio_futures[0][2].done():
-                        break
-                    a_seq, a_txt, a_fut = audio_futures.pop(0)
+            def _emit_sse(obj: dict):
+                with sse_lock:
+                    self.wfile.write(f"data: {json.dumps(obj, ensure_ascii=False)}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+
+            def _audio_stream_worker():
+                nonlocal audio_seq
+                while True:
+                    item = audio_order_q.get()
                     try:
-                        audio_b = a_fut.result(timeout=6.0 if force_all else 0.02)
-                        if audio_b:
-                            b64 = base64.b64encode(audio_b).decode("utf-8")
-                            a_payload = {
-                                "type": "audio_chunk",
-                                "seq": a_seq,
-                                "text": a_txt,
-                                "audio": b64
-                            }
-                            self.wfile.write(f"data: {json.dumps(a_payload, ensure_ascii=False)}\n\n".encode("utf-8"))
-                            self.wfile.flush()
+                        if item is None:
+                            break
+                        a_txt, sub_q = item
+                        sub_idx = 0
+                        while True:
+                            tag, _, wire_b = sub_q.get()
+                            if tag == "done":
+                                break
+                            if wire_b:
+                                audio_seq += 1
+                                _emit_sse({
+                                    "type": "audio_chunk",
+                                    "seq": audio_seq,
+                                    "text": a_txt if sub_idx == 0 else "",
+                                    "audio": base64.b64encode(wire_b).decode("utf-8"),
+                                })
+                                sub_idx += 1
                     except Exception as ex:
-                        print(f"⚠️ [WebSim] 音频切片合成异常: {ex}")
+                        print(f"⚠️ [WebSim] 音频切片流式推送异常: {ex}")
+                    finally:
+                        audio_order_q.task_done()
 
-            seq = 0
+            audio_thread = threading.Thread(target=_audio_stream_worker, daemon=True, name="WebSSEAudio")
+            audio_thread.start()
+
             print(f"👉 [Stream Start] User text: {user_text}", flush=True)
             if hardware_agent is not None:
                 _sync_behavior_seq += 1
@@ -1774,51 +1790,35 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     if ev_type == "behaviors":
                         synced_behaviors = event.get("behaviors")
                         _sync_hardware_behaviors(synced_behaviors, default_emotion="NORMAL", hold_sec=12.0)
-                        msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-                        self.wfile.write(msg.encode("utf-8"))
-                        self.wfile.flush()
-                        _drain_ready_audio(force_all=False)
+                        _emit_sse(event)
                     elif ev_type == "text_delta":
                         delta_txt = event.get("text", "")
                         if delta_txt:
                             saw_text_delta = True
                             stream_reply_len += len(delta_txt)
-                            payload = {
+                            _emit_sse({
                                 "type": "chunk",
                                 "seq": 0,
                                 "text": delta_txt,
                                 "audio": ""
-                            }
-                            self.wfile.write(f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8"))
-                            self.wfile.flush()
+                            })
                     elif ev_type == "sentence":
                         sentence_text = event.get("text", "").strip()
                         if sentence_text:
-                            seq += 1
                             if not saw_text_delta:
                                 stream_reply_len += len(sentence_text)
-                                payload = {
+                                _emit_sse({
                                     "type": "chunk",
-                                    "seq": seq,
+                                    "seq": 0,
                                     "text": sentence_text,
                                     "audio": ""
-                                }
-                                self.wfile.write(f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8"))
-                                self.wfile.flush()
+                                })
 
-                            # 提交后台线程池并发合成音频
-                            fut = tts_executor.submit(
-                                lambda txt: asyncio.run(tts_streamer.synthesize_chunk(txt)),
-                                sentence_text
-                            )
-                            audio_futures.append((seq, sentence_text, fut))
-                            _drain_ready_audio(force_all=False)
+                            sub_q = stream_sentence_to_queue(tts_executor, tts_streamer, sentence_text)
+                            audio_order_q.put((sentence_text, sub_q))
 
                     elif ev_type in ["tool_start", "observation", "thought"]:
-                        msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-                        self.wfile.write(msg.encode("utf-8"))
-                        self.wfile.flush()
-                        _drain_ready_audio(force_all=False)
+                        _emit_sse(event)
 
                     elif ev_type == "done":
                         # 同步真机屏幕表情与舵机动作（若流中未前置播放或工具覆盖了新动作，再触发）
@@ -1826,22 +1826,23 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         if done_bh != synced_behaviors:
                             hold_s = max(6.0, min(stream_reply_len * 0.25, 12.0))
                             _sync_hardware_behaviors(done_bh, default_emotion="NORMAL", hold_sec=hold_s)
-                        # 在发送 done 前排空并送达所有已合成的音频切片
-                        _drain_ready_audio(force_all=True)
-                        msg = f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-                        self.wfile.write(msg.encode("utf-8"))
-                        self.wfile.flush()
+                        if not audio_stopped:
+                            audio_order_q.put(None)
+                            audio_stopped = True
+                        audio_thread.join(timeout=20.0)
+                        _emit_sse(event)
                         self.close_connection = True
 
             except Exception as e:
-                err_ev = {"type": "error", "message": str(e)}
                 try:
-                    self.wfile.write(f"data: {json.dumps(err_ev, ensure_ascii=False)}\n\n".encode("utf-8"))
-                    self.wfile.flush()
+                    _emit_sse({"type": "error", "message": str(e)})
                 except Exception:
                     pass
             finally:
-                _drain_ready_audio(force_all=True)
+                if not audio_stopped:
+                    audio_order_q.put(None)
+                    audio_stopped = True
+                audio_thread.join(timeout=3.0)
                 tts_executor.shutdown(wait=False)
                 self.close_connection = True
             return

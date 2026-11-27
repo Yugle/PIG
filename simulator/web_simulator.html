@@ -4448,7 +4448,8 @@
           this.onChunkStart(item.text, 2000, item.seq);
         }
 
-        const audio = new Audio("data:audio/mp3;base64," + item.base64Audio);
+        const mime = (item.base64Audio && item.base64Audio.startsWith("UklG")) ? "audio/wav" : "audio/mp3";
+        const audio = new Audio(`data:${mime};base64,` + item.base64Audio);
         const onEnd = () => {
           this.pendingCount--;
           this.isFallbackPlaying = false;

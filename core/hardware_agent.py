@@ -831,7 +831,7 @@ class HardwareAgent:
 
         from core.prompt_builder import PromptBuilder
         from core.agent_reasoner import AgentReasoner
-        from core.streaming_pipeline import get_tts_streamer
+        from core.streaming_pipeline import get_tts_streamer, stream_sentence_to_queue
 
         max_len = self.cfg.get("max_reply_length", 200)
         sys_prompt = PromptBuilder.build_base_prompt(max_reply_length=max_len, skill_manager=self.skill_manager)
@@ -856,63 +856,93 @@ class HardwareAgent:
         done_payload = None
         saw_text_delta = False
 
-        # 并发预合成线程池 + 有序播报队列：LLM 边吐字边预合成后续句子，杜绝首句播放阻塞后续句与工具调用
+        # 真流式并发合成 + 常驻 PCM 管道直推：~370ms 拿到首块音频即刻写入树莓派喇叭并同步推 Web 大屏
         tts_executor = ThreadPoolExecutor(max_workers=2)
         play_queue: "queue.Queue[Optional[tuple]]" = queue.Queue()
 
-        def _synth_task(txt: str) -> bytes:
-            return asyncio.run(tts_streamer.synthesize_chunk(txt))
-
         def _playback_worker():
-            while True:
-                item = play_queue.get()
-                try:
-                    if item is None or self._interrupt_requested:
-                        break
-                    seq_idx, s_txt, fut = item
+            pcm_stream_open = False
+            audio_seq = 0
+            try:
+                while True:
+                    item = play_queue.get()
                     try:
-                        audio_b = fut.result(timeout=10.0)
-                    except Exception as ex:
-                        logger.warning(f"TTS 分片并发合成失败: {ex}")
-                        audio_b = b""
+                        if item is None or self._interrupt_requested:
+                            break
+                        s_txt, sub_q = item
+                        sub_idx = 0
+                        while True:
+                            tag, pcm_b, wire_b = sub_q.get()
+                            if tag == "done" or self._interrupt_requested:
+                                break
+                            if not wire_b:
+                                continue
 
+                            b64_audio = base64.b64encode(wire_b).decode("utf-8")
+
+                            # 1. 优先立即触发真机物理喇叭出声
+                            started_fallback_file = False
+                            est_dur = max(3.0, len(s_txt) * 0.45 + 1.5)
+                            if self.tts_engine:
+                                try:
+                                    if pcm_b:
+                                        if not pcm_stream_open and hasattr(self.tts_engine, "start_pcm_stream"):
+                                            pcm_stream_open = self.tts_engine.start_pcm_stream(24000)
+                                            if self.hal:
+                                                self.hal.set_angles(90, 85)
+                                        if pcm_stream_open:
+                                            self.tts_engine.write_pcm_chunk(pcm_b)
+                                    else:
+                                        # 非 PCM 回退（如 voicedesign/edge-tts MP3）
+                                        if pcm_stream_open:
+                                            self.tts_engine.finish_pcm_stream()
+                                            t_flush = time.time()
+                                            while self.tts_engine.is_playing() and (time.time() - t_flush) < 15.0:
+                                                if self._interrupt_requested:
+                                                    self.tts_engine.stop()
+                                                    break
+                                                time.sleep(0.03)
+                                            pcm_stream_open = False
+                                        tmp_chunk_path = f"/tmp/chunk_{audio_seq + 1}.mp3"
+                                        with open(tmp_chunk_path, "wb") as f:
+                                            f.write(wire_b)
+                                        self.tts_engine.play_async(tmp_chunk_path, est_dur)
+                                        started_fallback_file = True
+                                        if self.hal:
+                                            self.hal.set_angles(90, 85)
+                                except Exception as ex:
+                                    logger.warning(f"音频播放异常: {ex}")
+
+                            # 2. 物理喇叭写入后向 Web 孪生大屏推流，按统一音频流序号递增
+                            audio_seq += 1
+                            self.emit_event("robot_audio", {
+                                "text": s_txt if sub_idx == 0 else "",
+                                "audio": b64_audio,
+                                "seq": audio_seq
+                            })
+                            sub_idx += 1
+
+                            if started_fallback_file and self.tts_engine:
+                                play_start = time.time()
+                                while self.tts_engine.is_playing() and (time.time() - play_start) < (est_dur + 1.0):
+                                    if self._interrupt_requested:
+                                        self.tts_engine.stop()
+                                        break
+                                    time.sleep(0.04)
+                    finally:
+                        play_queue.task_done()
+            finally:
+                if pcm_stream_open and self.tts_engine:
                     if self._interrupt_requested:
-                        break
-
-                    b64_audio = base64.b64encode(audio_b).decode("utf-8") if audio_b else ""
-
-                    # 1. 优先立即触发物理喇叭播放（跳过 ffprobe 子进程探测时长，直接以进程轮询控制收尾）
-                    est_dur = max(3.0, len(s_txt) * 0.45 + 1.5)
-                    started_hw = False
-                    if self.tts_engine and audio_b:
-                        try:
-                            tmp_chunk_path = f"/tmp/chunk_{seq_idx}.mp3"
-                            with open(tmp_chunk_path, "wb") as f:
-                                f.write(audio_b)
-                            self.tts_engine.play_async(tmp_chunk_path, est_dur)
-                            started_hw = True
-                            if self.hal:
-                                self.hal.set_angles(90, 85)
-                        except Exception as ex:
-                            logger.warning(f"音频播放异常: {ex}")
-
-                    # 2. 物理喇叭拉起后再向 Web 孪生大屏推音频流，文字已提前于句生成瞬间上屏
-                    if b64_audio:
-                        self.emit_event("robot_audio", {
-                            "text": s_txt,
-                            "audio": b64_audio,
-                            "seq": seq_idx
-                        })
-
-                    if started_hw and self.tts_engine:
-                        play_start = time.time()
-                        while self.tts_engine.is_playing() and (time.time() - play_start) < (est_dur + 1.0):
+                        self.tts_engine.stop()
+                    else:
+                        self.tts_engine.finish_pcm_stream()
+                        t_tail = time.time()
+                        while self.tts_engine.is_playing() and (time.time() - t_tail) < 30.0:
                             if self._interrupt_requested:
                                 self.tts_engine.stop()
                                 break
                             time.sleep(0.04)
-                finally:
-                    play_queue.task_done()
 
         play_thread = threading.Thread(target=_playback_worker, daemon=True, name="VoiceTTSPlayback")
         play_thread.start()
@@ -952,16 +982,15 @@ class HardwareAgent:
                     s_text = ev.get("text", "").strip()
                     if s_text:
                         stream_sentences.append(s_text)
-                        seq_num = len(stream_sentences)
                         self.state = self.STATE_SPEAKING
                         if not saw_text_delta:
                             self.emit_event("robot_chunk", {
                                 "text": s_text,
                                 "audio": "",
-                                "seq": seq_num
+                                "seq": 0
                             })
-                        fut = tts_executor.submit(_synth_task, s_text)
-                        play_queue.put((seq_num, s_text, fut))
+                        sub_q = stream_sentence_to_queue(tts_executor, tts_streamer, s_text)
+                        play_queue.put((s_text, sub_q))
 
                 elif ev_type == "done":
                     final_reply = ev.get("reply") or "".join(stream_sentences) or "收到啦！"
