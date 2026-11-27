@@ -58,6 +58,7 @@ class StreamingJsonReplyExtractor:
         self.emotion_done = False
         self.behaviors_done = False
         self.behaviors_emitted: Optional[List[Dict[str, Any]]] = None
+        self._emitted_sentence_count = 0
 
     def _proc_thought_char(self, ch: str):
         if self.escape_thought:
@@ -261,16 +262,18 @@ class StreamingJsonReplyExtractor:
         self.reply_delta += ch
         self.full_reply_text += ch
 
-        # 智能平滑断句 (确保发音时长大于网络合成耗时，彻底根治下溢断流卡顿)
-        # 1. 强句末标点 (。！？!?\n) 且字数 >= 16 字：切片发射 (保证足够播放时长覆盖后续切片合成)
-        # 2. 弱停顿标点 (，；,;)：必须积累到长意群 (>= 22 字) 才切片
-        # 3. 常见 20~30 字以内的日常简短答复将作为单段完整音频输出，语调圆润丝滑绝不卡壳
+        # 智能平滑断句 (兼顾首句抢跑与后续不断流)
+        # 0. 第 1 句抢跑切片：遇到首个标点且 >= 5 字立刻发出，与 LLM 后续吐字并行合成，显著压低首音等待
+        # 1. 后续强句末标点 (。！？!?\n) 且字数 >= 16 字：切片发射
+        # 2. 后续弱停顿标点 (，；,;)：积累到长意群 (>= 22 字) 才切片，保证语调流畅不断音
         is_major_delim = ch in "。！？!?\n"
         is_minor_delim = ch in "，；,;"
         buf_len = len(self.reply_buffer.strip())
 
         should_split = False
-        if is_major_delim and buf_len >= 16:
+        if self._emitted_sentence_count == 0 and (is_major_delim or is_minor_delim) and buf_len >= 5:
+            should_split = True
+        elif is_major_delim and buf_len >= 16:
             should_split = True
         elif is_minor_delim and buf_len >= 22:
             should_split = True
@@ -278,6 +281,7 @@ class StreamingJsonReplyExtractor:
         if should_split:
             sents.append(self.reply_buffer.strip())
             self.reply_buffer = ""
+            self._emitted_sentence_count += 1
 
         return sents
 
