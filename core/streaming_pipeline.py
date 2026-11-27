@@ -44,16 +44,18 @@ class StreamingJsonReplyExtractor:
         self.state = self.STATE_BEFORE_REPLY
         self.full_raw_text = ""
         self.reply_buffer = ""
+        self.reply_delta = ""
         self.full_reply_text = ""
         self.escape_next = False
         self.is_tool_step = False
 
-        # 思考内容与前置 behaviors 增量提取器
+        # 思考内容与前置 emotion / behaviors 增量提取器
         self.in_thought = False
         self.thought_buffer = ""
         self.thought_delta = ""
         self.thought_done = False
         self.escape_thought = False
+        self.emotion_done = False
         self.behaviors_done = False
         self.behaviors_emitted: Optional[List[Dict[str, Any]]] = None
 
@@ -80,8 +82,31 @@ class StreamingJsonReplyExtractor:
         self.thought_delta = ""
         return d
 
+    def _try_extract_emotion(self):
+        """流式前 5 个 token 提取前置 emotion 字段，零等待切表情"""
+        if self.emotion_done or self.behaviors_done:
+            return
+        idx = self.full_raw_text.find('"emotion"')
+        if idx == -1:
+            return
+        after = self.full_raw_text[idx + 9:]
+        colon = after.find(":")
+        if colon == -1:
+            return
+        val_part = after[colon + 1:].lstrip()
+        if not val_part.startswith('"'):
+            return
+        end_q = val_part.find('"', 1)
+        if end_q != -1:
+            emo = val_part[1:end_q].strip().upper()
+            self.emotion_done = True
+            if emo:
+                self.behaviors_emitted = [{
+                    "emotion": emo, "action": "NOD", "pan": 90, "tilt": 88, "delay": 500
+                }]
+
     def _try_extract_behaviors(self):
-        """在流式正文开口之前，优先提取大模型前置输出好的 behaviors 数组"""
+        """提取大模型输出的 behaviors 数组（兼容前置或置于 reply 之后）"""
         if self.behaviors_done:
             return
         idx = self.full_raw_text.find('"behaviors"')
@@ -124,10 +149,16 @@ class StreamingJsonReplyExtractor:
                         return
 
     def pop_behaviors(self) -> Optional[List[Dict[str, Any]]]:
-        """弹出尚未发出的前置大模型 behaviors 列表"""
+        """弹出尚未发出的前置大模型 emotion / behaviors 列表"""
         b = self.behaviors_emitted
         self.behaviors_emitted = None
         return b
+
+    def pop_reply_delta(self) -> str:
+        """弹出尚未发出的实时打字文本增量（0等待上屏，独立于 TTS 断句缓冲）"""
+        d = self.reply_delta
+        self.reply_delta = ""
+        return d
 
     def _has_active_skill_before(self, reply_idx: int) -> bool:
         before_reply = self.full_raw_text[:reply_idx]
@@ -165,6 +196,7 @@ class StreamingJsonReplyExtractor:
                                 self.in_thought = True
 
             if self.state == self.STATE_BEFORE_REPLY:
+                self._try_extract_emotion()
                 self._try_extract_behaviors()
                 # 兜底：如果模型未按要求输出 JSON (不以 { 开头)，自动平滑切换为纯文本流式输出
                 trimmed = self.full_raw_text.lstrip()
@@ -197,8 +229,8 @@ class StreamingJsonReplyExtractor:
                 emitted_sentences.extend(sents)
 
             else:
-                # STATE_DONE 阶段：已闭合 reply 或处于 tool_step，忽略后续字符
-                pass
+                # STATE_DONE 阶段：提取 reply 之后补全的 behaviors 序列
+                self._try_extract_behaviors()
 
         return emitted_sentences
 
@@ -207,6 +239,7 @@ class StreamingJsonReplyExtractor:
         if self.escape_next:
             ch_real = "\n" if ch == "n" else ("\t" if ch == "t" else ch)
             self.reply_buffer += ch_real
+            self.reply_delta += ch_real
             self.full_reply_text += ch_real
             self.escape_next = False
             return sents
@@ -225,6 +258,7 @@ class StreamingJsonReplyExtractor:
             return sents
 
         self.reply_buffer += ch
+        self.reply_delta += ch
         self.full_reply_text += ch
 
         # 智能平滑断句 (确保发音时长大于网络合成耗时，彻底根治下溢断流卡顿)

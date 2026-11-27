@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import time
+import threading
 import requests
 from typing import Dict, Any, List, Optional, Generator
 
@@ -103,6 +104,36 @@ class AgentReasoner:
         self.model = model
         self.max_steps = max_steps
         self.enable_thinking = enable_thinking
+        self._thread_local = threading.local()
+
+    def _get_session(self) -> requests.Session:
+        """每线程复用 Keep-Alive Session，减少冷 TCP/TLS 握手开销"""
+        sess = getattr(self._thread_local, "session", None)
+        if sess is None:
+            sess = requests.Session()
+            self._thread_local.session = sess
+        return sess
+
+    @staticmethod
+    def _assemble_system_prompt(base_sys_prompt: str, skill_manager, evolution_engine=None) -> str:
+        """组装静态前缀优先的 System Prompt（静态人设+技能+规则前置，动态时间/进化/记忆后置以命中服务端 Prefix Cache）"""
+        from core.prompt_builder import PromptBuilder
+        tools_prompt = skill_manager.get_skills_tools_prompt()
+        react_rules = PromptBuilder.get_react_guidelines_prompt()
+
+        marker = "\n【实时环境上下文】"
+        if marker in base_sys_prompt:
+            static_base, dynamic_tail = base_sys_prompt.split(marker, 1)
+            dynamic_tail = marker + dynamic_tail
+        else:
+            static_base, dynamic_tail = base_sys_prompt, ""
+
+        static_prefix = static_base + "\n" + tools_prompt + "\n" + react_rules
+        assembled = static_prefix + dynamic_tail
+        if evolution_engine:
+            evolution_engine.record_interaction()
+            assembled = evolution_engine.augment_prompt_with_evolution(assembled)
+        return assembled
 
     def run_react_loop(
         self,
@@ -126,17 +157,7 @@ class AgentReasoner:
             "final_skill_res": Any            # 最后一步工具的真实返回值
         }
         """
-        # 记录交互作息时间戳
-        if evolution_engine:
-            evolution_engine.record_interaction()
-            augmented_sys = evolution_engine.augment_prompt_with_evolution(base_sys_prompt)
-        else:
-            augmented_sys = base_sys_prompt
-
-        # 注入当前已激活的动态技能列表
-        from core.prompt_builder import PromptBuilder
-        tools_prompt = skill_manager.get_skills_tools_prompt()
-        full_sys_prompt = augmented_sys + "\n" + tools_prompt + "\n" + PromptBuilder.get_react_guidelines_prompt()
+        full_sys_prompt = self._assemble_system_prompt(base_sys_prompt, skill_manager, evolution_engine)
 
         # 构造包含短期上下文的基础消息链 (支持多 Session 隔离)
         messages = memory_manager.get_messages_for_llm(user_text, full_sys_prompt, session_id=session_id)
@@ -166,7 +187,7 @@ class AgentReasoner:
                     payload["thinking"] = {"type": "disabled"}
 
             try:
-                resp = requests.post(url, headers=headers, json=payload, timeout=60)
+                resp = self._get_session().post(url, headers=headers, json=payload, timeout=60)
                 if resp.status_code != 200:
                     logger.error(f"LLM 调用失败 [{resp.status_code}]: {resp.text}")
                     final_reply = f"认知大模型调用失败 (状态码 {resp.status_code})：{resp.text[:120]}"
@@ -188,6 +209,8 @@ class AgentReasoner:
                 skill_call = parsed.get("skill") or parsed.get("skill_call")
                 reply_candidate = parsed.get("reply", "")
                 behaviors_candidate = parsed.get("behaviors", [])
+                if not behaviors_candidate and parsed.get("emotion"):
+                    behaviors_candidate = [{"emotion": str(parsed["emotion"]).upper(), "action": "NOD", "pan": 90, "tilt": 88, "delay": 500}]
 
                 if reply_candidate:
                     final_reply = reply_candidate
@@ -371,15 +394,7 @@ class AgentReasoner:
         """
         from core.streaming_pipeline import StreamingJsonReplyExtractor
 
-        if evolution_engine:
-            evolution_engine.record_interaction()
-            augmented_sys = evolution_engine.augment_prompt_with_evolution(base_sys_prompt)
-        else:
-            augmented_sys = base_sys_prompt
-
-        from core.prompt_builder import PromptBuilder
-        tools_prompt = skill_manager.get_skills_tools_prompt()
-        full_sys_prompt = augmented_sys + "\n" + tools_prompt + "\n" + PromptBuilder.get_react_guidelines_prompt()
+        full_sys_prompt = self._assemble_system_prompt(base_sys_prompt, skill_manager, evolution_engine)
         messages = memory_manager.get_messages_for_llm(user_text, full_sys_prompt, session_id=session_id)
 
         steps_log: List[Dict[str, Any]] = []
@@ -408,7 +423,7 @@ class AgentReasoner:
                     payload["thinking"] = {"type": "disabled"}
 
             try:
-                resp = requests.post(url, headers=headers, json=payload, stream=True, timeout=60)
+                resp = self._get_session().post(url, headers=headers, json=payload, stream=True, timeout=60)
                 if resp.status_code != 200:
                     logger.error(f"LLM 流式调用失败 [{resp.status_code}]: {resp.text}")
                     err_msg = f"大模型连接异常 (状态码 {resp.status_code})，未能完成操作。"
@@ -439,6 +454,9 @@ class AgentReasoner:
                                         if bh and not silent:
                                             final_behaviors = bh
                                             yield {"type": "behaviors", "behaviors": bh}
+                                        td = extractor.pop_reply_delta()
+                                        if td:
+                                            yield {"type": "text_delta", "text": td}
                                         for s in sentences:
                                             yield {"type": "sentence", "text": s}
                                         th = extractor.pop_thought_delta()
@@ -447,6 +465,13 @@ class AgentReasoner:
                             except Exception:
                                 pass
 
+                bh_tail = extractor.pop_behaviors()
+                if bh_tail and not silent:
+                    final_behaviors = bh_tail
+                    yield {"type": "behaviors", "behaviors": bh_tail}
+                td_tail = extractor.pop_reply_delta()
+                if td_tail:
+                    yield {"type": "text_delta", "text": td_tail}
                 for rem in extractor.flush():
                     yield {"type": "sentence", "text": rem}
 
@@ -460,6 +485,8 @@ class AgentReasoner:
                 skill_call = parsed.get("skill") or parsed.get("skill_call")
                 reply_candidate = parsed.get("reply", "") or extractor.full_reply_text
                 behaviors_candidate = parsed.get("behaviors", [])
+                if not behaviors_candidate and parsed.get("emotion"):
+                    behaviors_candidate = [{"emotion": str(parsed["emotion"]).upper(), "action": "NOD", "pan": 90, "tilt": 88, "delay": 500}]
 
                 if reply_candidate:
                     final_reply = reply_candidate

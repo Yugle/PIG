@@ -1759,6 +1759,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 hardware_agent.current_emotion = "THINKING"
             stream_reply_len = 0
             synced_behaviors = None
+            saw_text_delta = False
             try:
                 for event in reasoner.run_react_loop_stream(
                     user_text=user_text,
@@ -1768,7 +1769,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     evolution_engine=evolution_engine
                 ):
                     ev_type = event.get("type")
-                    print(f"👉 [Stream Ev] {ev_type}", flush=True)
+                    if ev_type != "text_delta":
+                        print(f"👉 [Stream Ev] {ev_type}", flush=True)
                     if ev_type == "behaviors":
                         synced_behaviors = event.get("behaviors")
                         _sync_hardware_behaviors(synced_behaviors, default_emotion="NORMAL", hold_sec=12.0)
@@ -1776,23 +1778,35 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         self.wfile.write(msg.encode("utf-8"))
                         self.wfile.flush()
                         _drain_ready_audio(force_all=False)
+                    elif ev_type == "text_delta":
+                        delta_txt = event.get("text", "")
+                        if delta_txt:
+                            saw_text_delta = True
+                            stream_reply_len += len(delta_txt)
+                            payload = {
+                                "type": "chunk",
+                                "seq": 0,
+                                "text": delta_txt,
+                                "audio": ""
+                            }
+                            self.wfile.write(f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8"))
+                            self.wfile.flush()
                     elif ev_type == "sentence":
                         sentence_text = event.get("text", "").strip()
                         if sentence_text:
                             seq += 1
-                            stream_reply_len += len(sentence_text)
-                            # 1. 立即将文本切片推至前端渲染（零延时上屏）
-                            payload = {
-                                "type": "chunk",
-                                "seq": seq,
-                                "text": sentence_text,
-                                "audio": ""
-                            }
-                            msg = f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-                            self.wfile.write(msg.encode("utf-8"))
-                            self.wfile.flush()
+                            if not saw_text_delta:
+                                stream_reply_len += len(sentence_text)
+                                payload = {
+                                    "type": "chunk",
+                                    "seq": seq,
+                                    "text": sentence_text,
+                                    "audio": ""
+                                }
+                                self.wfile.write(f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8"))
+                                self.wfile.flush()
 
-                            # 2. 提交后台线程池并发合成音频
+                            # 提交后台线程池并发合成音频
                             fut = tts_executor.submit(
                                 lambda txt: asyncio.run(tts_streamer.synthesize_chunk(txt)),
                                 sentence_text

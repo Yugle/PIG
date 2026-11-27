@@ -854,6 +854,7 @@ class HardwareAgent:
         final_behaviors = []
         final_reply = ""
         done_payload = None
+        saw_text_delta = False
 
         # 并发预合成线程池 + 有序播报队列：LLM 边吐字边预合成后续句子，杜绝首句播放阻塞后续句与工具调用
         tts_executor = ThreadPoolExecutor(max_workers=2)
@@ -938,18 +939,27 @@ class HardwareAgent:
                     if bh:
                         final_behaviors = bh
                         self.emit_event("behaviors", {"behaviors": bh})
+                elif ev_type == "text_delta":
+                    td = ev.get("text", "")
+                    if td:
+                        saw_text_delta = True
+                        self.emit_event("robot_chunk", {
+                            "text": td,
+                            "audio": "",
+                            "seq": 0
+                        })
                 elif ev_type == "sentence":
                     s_text = ev.get("text", "").strip()
                     if s_text:
                         stream_sentences.append(s_text)
                         seq_num = len(stream_sentences)
                         self.state = self.STATE_SPEAKING
-                        # 立即推送文字上屏（对齐网页文字链路零等待），同时后台并发合成语音
-                        self.emit_event("robot_chunk", {
-                            "text": s_text,
-                            "audio": "",
-                            "seq": seq_num
-                        })
+                        if not saw_text_delta:
+                            self.emit_event("robot_chunk", {
+                                "text": s_text,
+                                "audio": "",
+                                "seq": seq_num
+                            })
                         fut = tts_executor.submit(_synth_task, s_text)
                         play_queue.put((seq_num, s_text, fut))
 
