@@ -21,6 +21,7 @@ data/master_face.json
 data/proactive_state.json
 data/netease_session.json
 data/miot_specs/
+data/tts_cache/
 data/*.png
 
 # Temporary media files

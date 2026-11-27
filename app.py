@@ -214,6 +214,17 @@ hardware_agent = HardwareAgent(
 )
 hardware_agent.start()
 
+try:
+    from core.streaming_pipeline import prewarm_cloud_and_tts
+    threading.Thread(
+        target=prewarm_cloud_and_tts,
+        args=(server_cfg,),
+        daemon=True,
+        name="CloudTTSPrewarm",
+    ).start()
+except Exception:
+    pass
+
 # Web 实时数字孪生 SSE 订阅广播总线
 agent_event_subscribers = []
 subscribers_lock = threading.Lock()

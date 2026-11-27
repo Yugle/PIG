@@ -20,7 +20,8 @@ from typing import Dict, Any, List, Optional, Generator, AsyncGenerator
 
 logger = logging.getLogger("StreamingPipeline")
 
-TTS_CACHE_DIR = "/tmp/pig_tts_cache"
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TTS_CACHE_DIR = os.path.join(_PROJECT_ROOT, "data", "tts_cache")
 os.makedirs(TTS_CACHE_DIR, exist_ok=True)
 
 
@@ -593,6 +594,43 @@ def stream_sentence_to_queue(executor, streamer, text: str):
 
     executor.submit(_run)
     return sub_q
+
+
+PREWARM_PHRASES = (
+    "好嘞，我看看！",
+    "好嘞，已停止播放！",
+    "好嘞，已暂停播放。",
+    "好嘞，继续给你播放！",
+    "好嘞，切下一首！",
+    "好嘞，切回上一首！",
+    "好嘞，已开启人脸追踪！",
+    "好的，已关闭人脸追踪。",
+    "收到啦！",
+)
+
+
+def prewarm_cloud_and_tts(cfg: Optional[Dict[str, Any]] = None):
+    """开机后台预热云端 Keep-Alive TLS 握手与高频短句持久化 WAV 缓存（零阻塞）"""
+    cfg = cfg or {}
+    base_url = str(cfg.get("base_url") or "https://api.xiaomimimo.com/v1").rstrip("/")
+    try:
+        import requests
+        requests.head(base_url, timeout=3)
+    except Exception:
+        pass
+
+    api_key = cfg.get("mimo_api_key") or cfg.get("api_key") or ""
+    if not api_key:
+        return
+
+    try:
+        streamer = get_tts_streamer(cfg)
+        for phrase in PREWARM_PHRASES:
+            for _ in streamer.iter_synthesize_chunks(phrase):
+                pass
+            time.sleep(0.05)
+    except Exception as ex:
+        logger.debug(f"TTS 缓存预热跳过: {ex}")
 
 
 def get_tts_streamer(cfg: Optional[Dict[str, Any]] = None):

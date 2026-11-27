@@ -567,28 +567,39 @@ class SkillManager:
             executor.shutdown(wait=False)
 
     def get_skills_tools_prompt(self) -> str:
-        """生成供云端大模型 System Prompt 参考的技能清单与调用指令说明"""
+        """生成精简且高信息密度的技能清单与调用规范，控制 System Prompt Token 开销"""
         installed = self.list_installed_skills()
         if not installed:
             return ""
 
-        lines = ["\n【当前已安装并激活的技能插件 (Skill Plugins)】:"]
+        lines = ["\n【可用技能插件】:"]
         for s in installed:
             sid = s["id"]
-            desc = s.get("description", "")
+            desc = (s.get("prompt_desc") or s.get("description") or "").replace("\n", " ").strip()
+            # 精简超长描述（保留关键调用约定前 80 字，若含重要参数提示如 action=/device= 则保留至覆盖提示）
+            if len(desc) > 78:
+                has_hint = ("action=" in desc or "device=" in desc)
+                cutoff = desc.rfind("。", 0, 82)
+                if cutoff >= 28 and "action=" not in desc[cutoff:] and "device=" not in desc[cutoff:]:
+                    desc = desc[:cutoff + 1]
+                elif has_hint:
+                    if len(desc) > 135:
+                        desc = desc[:135].rstrip("，； ") + "…"
+                else:
+                    desc = desc[:76].rstrip("，； ") + "…"
             params = s.get("parameters", {})
-            param_str = ", ".join([f"{k}: {v.get('type', 'str')}" for k, v in params.items()])
+            param_str = ", ".join(params.keys())
             lines.append(f"- {sid}({param_str}): {desc}")
 
         lines.append(
-            "\n💡 【内置 PIG 进化指令】:"
-            "\n- set_bot_name(name): 当主人给你（机器人自身）起名或改名（如“你叫 PIG”、“以后你的名字叫阿强”、“给你起名叫小搭”）时调用，更新机器人自身名字。"
-            "\n- set_user_name(name): 当主人要求更名对主人的称呼（如“我叫张三”、“以后叫我阿珍”、“把我的名字改成胖虎”）时调用，更新长期档案。"
-            "\n- create_skill(skill_id, name, description, code, parameters): 当主人要求你“新整一个技能/自创新功能/写新插件”时调用，你可自主生成 Python 代码 (必须包含 def run(**kwargs): 函数) 编写全新热加载技能！"
-            "\n- install_skill(skill_id) / uninstall_skill(skill_id): 安装或卸载技能商店插件。"
-            "\n- evolve_action(name, description, keyframes): 用户教你动作或口令时自创动作序列。keyframes 包含动作帧列表，每帧含 pan(水平角0~180), tilt(俯仰角0~180), emotion(表情如HAPPY/WINK/LOVE), delay(毫秒如300)。示例: evolve_action(name=\"点头打招呼\", description=\"上下点头两次\", keyframes=[{\"pan\": 90, \"tilt\": 70, \"emotion\": \"HAPPY\", \"delay\": 300}, {\"pan\": 90, \"tilt\": 90, \"emotion\": \"HAPPY\", \"delay\": 300}])"
-            "\n- play_action(action): 指挥机器人展示执行动作库中的自创动作 (如“表演一下上上下下左左右右”)，例如 play_action(action=\"上上下下左左右右\")。"
-            "\n- register_master_face(): 当主人对你说“认主”、“记住我的脸”、“拍照认主”、“记一下我是谁”时调用，命令摄像头捕捉当前人脸并保存为唯一的主人面容识别特征。"
+            "\n【内置指令】:"
+            "\n- set_bot_name(name): 改机器人自己的名字。"
+            "\n- set_user_name(name): 改对主人的称呼。"
+            "\n- create_skill(skill_id, name, description, code, parameters): 自创热加载技能 (code 须含 def run(**kwargs))。"
+            "\n- install_skill(skill_id) / uninstall_skill(skill_id): 安装或卸载插件。"
+            "\n- evolve_action(name, description, keyframes): 自创动作序列，keyframes 为 [{\"pan\":0~180,\"tilt\":0~180,\"emotion\":\"HAPPY|WINK|LOVE\",\"delay\":300}]。"
+            "\n- play_action(action): 执行自创动作库里的动作。"
+            "\n- register_master_face(): 拍照录入主人人脸特征。"
         )
         return "\n".join(lines)
 

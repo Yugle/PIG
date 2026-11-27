@@ -9,7 +9,8 @@ import hashlib
 import shutil
 import threading
 
-TTS_CACHE_DIR = "/tmp/pig_tts_cache"
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TTS_CACHE_DIR = os.path.join(_PROJECT_ROOT, "data", "tts_cache")
 os.makedirs(TTS_CACHE_DIR, exist_ok=True)
 
 MIMO_PRESET_VOICES = ("mimo_default", "冰糖", "茉莉", "苏打", "白桦", "Mia", "Chloe", "Milo", "Dean")

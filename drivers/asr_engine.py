@@ -1,6 +1,7 @@
 import os
 import time
 import base64
+import threading
 import requests
 
 
@@ -15,6 +16,14 @@ class MimoASR:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self._thread_local = threading.local()
+
+    def _get_session(self) -> requests.Session:
+        sess = getattr(self._thread_local, "session", None)
+        if sess is None:
+            sess = requests.Session()
+            self._thread_local.session = sess
+        return sess
 
     def recognize(self, audio_path: str, rate: int = 16000) -> str:
         """
@@ -65,7 +74,7 @@ class MimoASR:
             }
 
             url = f"{self.base_url}/chat/completions"
-            resp = requests.post(url, headers=headers, json=payload, timeout=12)
+            resp = self._get_session().post(url, headers=headers, json=payload, timeout=12)
             if resp.status_code == 200:
                 res_data = resp.json()
                 choices = res_data.get("choices", [])

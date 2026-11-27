@@ -85,6 +85,77 @@ def is_skill_failure(obs: Any) -> bool:
     ])
 
 
+# 本地零大模型直通表：完全确定且高频的短控制指令，直接调技能并秒回（0ms LLM 等待）
+_FAST_LOCAL_RULES = (
+    ({"停止播放", "别放了", "关掉音乐", "把歌关了", "别唱了", "关闭音乐", "停止放歌"}, "netease_music", {"action": "stop"}, "好嘞，已停止播放！", "NORMAL"),
+    ({"暂停", "暂停播放", "先停一下", "暂停音乐"}, "netease_music", {"action": "pause"}, "好嘞，已暂停播放。", "NORMAL"),
+    ({"继续播放", "继续放歌", "恢复播放", "接着放"}, "netease_music", {"action": "resume"}, "好嘞，继续给你播放！", "HAPPY"),
+    ({"下一首", "换一首", "切歌", "下首歌", "放下一首"}, "netease_music", {"action": "next"}, "好嘞，切下一首！", "HAPPY"),
+    ({"上一首", "上首歌", "放上一首"}, "netease_music", {"action": "prev"}, "好嘞，切回上一首！", "HAPPY"),
+    ({"音量调大", "音量大点", "声音大点", "音量调高", "声音调大", "大声点"}, "system_config", {"action": "volume", "value": "+"}, "", "HAPPY"),
+    ({"音量调小", "音量小点", "声音小点", "音量调低", "声音调小", "小声点"}, "system_config", {"action": "volume", "value": "-"}, "", "NORMAL"),
+    ({"静音", "打开静音"}, "system_config", {"action": "volume", "value": "mute"}, "", "NORMAL"),
+    ({"取消静音", "关闭静音", "恢复声音"}, "system_config", {"action": "volume", "value": "60"}, "", "HAPPY"),
+    ({"开启人脸追踪", "打开人脸追踪", "开启人脸跟随", "打开人脸跟随"}, "system_config", {"action": "face_tracking", "value": "true"}, "好嘞，已开启人脸追踪！", "HAPPY"),
+    ({"关闭人脸追踪", "关掉人脸追踪", "关闭人脸跟随", "关掉人脸跟随"}, "system_config", {"action": "face_tracking", "value": "false"}, "好的，已关闭人脸追踪。", "NORMAL"),
+)
+
+
+def try_fast_local_intent(
+    user_text: str,
+    skill_manager,
+    memory_manager=None,
+    evolution_engine=None,
+    session_id: str = "device",
+    silent: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """命中高频确定性短指令时本地直接执行并返回，彻底跳过云端 LLM 耗时"""
+    clean = re.sub(r"[\s，。！？,.!?~～呀啊哦呢啦吧哈嘛]+", "", str(user_text or "")).lower()
+    if not clean or len(clean) > 12 or not skill_manager:
+        return None
+
+    installed = getattr(skill_manager, "installed_plugins", {}) or {}
+    for triggers, skill_name, skill_args, fixed_reply, emo in _FAST_LOCAL_RULES:
+        if clean not in triggers or skill_name not in installed:
+            continue
+
+        tool_call = {"name": skill_name, "args": dict(skill_args)}
+        observation = skill_manager.dispatch(tool_call)
+        if is_skill_failure(observation):
+            return None
+
+        if skill_name == "system_config" and skill_args.get("action") == "face_tracking":
+            try:
+                from core.hardware_agent import get_hardware_agent
+                ha = get_hardware_agent()
+                if ha:
+                    ha.set_face_tracking(skill_args.get("value") == "true")
+            except Exception:
+                pass
+
+        obs_msg = observation.get("message", "") if isinstance(observation, dict) else str(observation)
+        reply = fixed_reply or obs_msg or "好嘞，已经帮你办妥啦！"
+        behaviors = [] if silent else [{"emotion": emo, "action": "NOD", "pan": 90, "tilt": 88, "delay": 500}]
+        if evolution_engine:
+            try:
+                evolution_engine.record_interaction()
+            except Exception:
+                pass
+        if memory_manager:
+            try:
+                memory_manager.record_turn(user_text, reply, session_id=session_id)
+            except Exception:
+                pass
+        logger.info(f"⚡ [FastLocal] 本地直通命中 '{clean}' -> {skill_name}({skill_args}) [0ms LLM]")
+        return {
+            "reply": reply,
+            "behaviors": behaviors,
+            "steps": [{"step": 1, "thought": "本地高频控制指令直通", "action": skill_name, "args": dict(skill_args), "observation": str(observation)}],
+            "final_skill_res": observation,
+        }
+    return None
+
+
 class AgentReasoner:
     """
     ReAct 认知循环引擎：
@@ -157,6 +228,13 @@ class AgentReasoner:
             "final_skill_res": Any            # 最后一步工具的真实返回值
         }
         """
+        fast_res = try_fast_local_intent(
+            user_text, skill_manager, memory_manager=memory_manager,
+            evolution_engine=evolution_engine, session_id=session_id, silent=silent,
+        )
+        if fast_res is not None:
+            return fast_res
+
         full_sys_prompt = self._assemble_system_prompt(base_sys_prompt, skill_manager, evolution_engine)
 
         # 构造包含短期上下文的基础消息链 (支持多 Session 隔离)
@@ -393,6 +471,27 @@ class AgentReasoner:
         :param silent: 是否静默模式 (不驱动物理动作)
         """
         from core.streaming_pipeline import StreamingJsonReplyExtractor
+
+        fast_res = try_fast_local_intent(
+            user_text, skill_manager, memory_manager=memory_manager,
+            evolution_engine=evolution_engine, session_id=session_id, silent=silent,
+        )
+        if fast_res is not None:
+            s0 = fast_res["steps"][0]
+            yield {"type": "tool_start", "name": s0["action"], "args": s0["args"]}
+            yield {"type": "observation", "name": s0["action"], "result": s0["observation"]}
+            if fast_res["behaviors"]:
+                yield {"type": "behaviors", "behaviors": fast_res["behaviors"]}
+            yield {"type": "text_delta", "text": fast_res["reply"]}
+            yield {"type": "sentence", "text": fast_res["reply"]}
+            yield {
+                "type": "done",
+                "reply": fast_res["reply"],
+                "behaviors": fast_res["behaviors"],
+                "steps": fast_res["steps"],
+                "final_skill_res": fast_res["final_skill_res"],
+            }
+            return
 
         full_sys_prompt = self._assemble_system_prompt(base_sys_prompt, skill_manager, evolution_engine)
         messages = memory_manager.get_messages_for_llm(user_text, full_sys_prompt, session_id=session_id)
