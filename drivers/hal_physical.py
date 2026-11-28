@@ -71,11 +71,12 @@ class PhysicalRobotHAL(BaseRobotHAL):
         self.touch_listeners = []
         self._touch_cb_handle = None
 
-        # 初始化 TTP223 摸头传感器 (默认点动高电平有效)
+        # 初始化 TTP223 摸头传感器 (默认点动高电平有效 + 40ms 硬件消抖)
         if self.touch_pin is not None:
             try:
                 self.pi.set_mode(self.touch_pin, pigpio.INPUT)
                 self.pi.set_pull_up_down(self.touch_pin, pigpio.PUD_DOWN)
+                self.pi.set_glitch_filter(self.touch_pin, 40000)
                 self._touch_cb_handle = self.pi.callback(self.touch_pin, pigpio.RISING_EDGE, self._on_gpio_touch)
                 print(f"👆 [HAL-Physical] TTP223 摸头传感器已就绪 (GPIO {self.touch_pin})")
             except Exception as e:

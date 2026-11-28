@@ -547,7 +547,12 @@ class HardwareAgent:
         self.emit_event("barge_in", {"action": "interrupted", "timestamp": time.time()})
 
     def _on_touch_event(self):
-        """处理摸头传感器 (TTP223) 触摸事件"""
+        """处理摸头传感器 (TTP223) 触摸事件 (带 0.8s 防抖节流)"""
+        now = time.time()
+        if now - getattr(self, "_last_touch_ts", 0.0) < 0.8:
+            return
+        self._last_touch_ts = now
+        print("👆 [Touch] 捕获到头顶摸头传感器 (TTP223) 触发！", flush=True)
         logger.info("👆 [Touch] 捕获到头顶摸头传感器 (TTP223) 信号")
         self._pause_music_for_voice()
 
@@ -595,9 +600,9 @@ class HardwareAgent:
         import core.sound_effects as sound_effects
         sound_effects.play_sound("purr", async_play=True)
 
-        if self.memory_manager:
+        if self.evolution_engine:
             try:
-                self.memory_manager.record_interaction()
+                self.evolution_engine.record_interaction()
             except Exception:
                 pass
 
