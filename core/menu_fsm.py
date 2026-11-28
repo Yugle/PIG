@@ -13,7 +13,7 @@ import socket
 import subprocess
 import threading
 from typing import Dict, Any, Optional, Callable, List, Tuple
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from core.wifi_manager import wifi_manager, get_local_ip, _is_real_lan_ip
 
 try:
@@ -524,6 +524,9 @@ class MenuFSM:
         # 人脸录入与响铃弹窗状态
         self.face_enroll_msg = ""
         self.face_enroll_step = 0
+        self.face_enroll_status = "counting"  # counting | processing | ok | error
+        self.face_enroll_preview_img = None
+        self.face_enroll_preview_seq = 0
         self.active_alarm: Optional[Dict[str, Any]] = None
         self.active_alarm_until: float = 0.0
 
@@ -877,11 +880,84 @@ class MenuFSM:
             self._notify_listeners()
             self._notify_listeners()
 
+    def _grab_enroll_preview_pil(self, prefer_agent_latest: bool = False, draw_face_box: bool = False):
+        """抓取当前摄像头画面并裁成镜像正方形预览图 (304x304 用于 2x SSAA 渲染)"""
+        import io
+        rgb_img = None
+
+        def _bgr_to_rgb_pil(bgr_arr):
+            if bgr_arr is None:
+                return None
+            return Image.fromarray(bgr_arr[:, :, ::-1].copy(), "RGB")
+
+        if prefer_agent_latest and self.agent and getattr(self.agent, "latest_camera_frame", None) is not None:
+            try:
+                rgb_img = _bgr_to_rgb_pil(self.agent.latest_camera_frame)
+            except Exception:
+                rgb_img = None
+
+        if rgb_img is None and self.hal and hasattr(self.hal, "capture_image"):
+            try:
+                jpg_bytes = self.hal.capture_image()
+                if jpg_bytes and len(jpg_bytes) > 100:
+                    rgb_img = Image.open(io.BytesIO(jpg_bytes)).convert("RGB")
+            except Exception:
+                rgb_img = None
+
+        if rgb_img is None and self.agent and getattr(self.agent, "latest_camera_frame", None) is not None:
+            try:
+                rgb_img = _bgr_to_rgb_pil(self.agent.latest_camera_frame)
+            except Exception:
+                rgb_img = None
+
+        if rgb_img is None and os.path.exists("/tmp/pig_latest_frame.jpg"):
+            try:
+                if time.time() - os.path.getmtime("/tmp/pig_latest_frame.jpg") <= 12.0:
+                    rgb_img = Image.open("/tmp/pig_latest_frame.jpg").convert("RGB")
+            except Exception:
+                rgb_img = None
+
+        if rgb_img is None:
+            return None
+
+        w, h = rgb_img.size
+        side = min(w, h)
+        left = (w - side) // 2
+        top = (h - side) // 2
+        cropped = rgb_img.crop((left, top, left + side, top + side))
+        mirrored = ImageOps.mirror(cropped).resize((304, 304), Image.Resampling.BILINEAR)
+
+        if draw_face_box and self.agent and getattr(self.agent, "face_tracker", None):
+            box = getattr(self.agent.face_tracker, "last_box", None)
+            in_w, in_h = getattr(self.agent.face_tracker, "input_size", (320, 240))
+            if isinstance(box, dict) and in_w > 0 and in_h > 0:
+                in_side = min(in_w, in_h)
+                in_left = (in_w - in_side) / 2.0
+                in_top = (in_h - in_side) / 2.0
+                scale = 304.0 / in_side
+                bx1 = (float(box.get("x", 0)) - in_left) * scale
+                by1 = (float(box.get("y", 0)) - in_top) * scale
+                bx2 = (float(box.get("x", 0) + box.get("w", 0)) - in_left) * scale
+                by2 = (float(box.get("y", 0) + box.get("h", 0)) - in_top) * scale
+                # 镜像翻转 X 坐标
+                mx1 = max(2, min(302, 304.0 - bx2))
+                mx2 = max(2, min(302, 304.0 - bx1))
+                my1 = max(2, min(302, by1))
+                my2 = max(2, min(302, by2))
+                if mx2 > mx1 + 8 and my2 > my1 + 8:
+                    d_box = ImageDraw.Draw(mirrored)
+                    d_box.rounded_rectangle([mx1, my1, mx2, my2], radius=10, outline=(74, 222, 128), width=4)
+
+        return mirrored
+
     def trigger_face_id_enrollment(self):
-        """进入人脸录入倒计时模式并在 3 秒后抓拍认主"""
+        """进入人脸录入倒计时模式：实时在屏幕显示镜头画面，3 秒后抓拍认主并展示锁定照片"""
         self.current_mode = "FACE_ENROLL"
         self.face_enroll_msg = "请正对摄像头"
         self.face_enroll_step = 3
+        self.face_enroll_status = "counting"
+        self.face_enroll_preview_img = self._grab_enroll_preview_pil()
+        self.face_enroll_preview_seq += 1
         self._notify_listeners()
 
         def _worker():
@@ -890,15 +966,26 @@ class MenuFSM:
                     if self.current_mode != "FACE_ENROLL":
                         return
                     self.face_enroll_step = count
+                    self.face_enroll_status = "counting"
                     self.face_enroll_msg = f"请正对摄像头 ({count}s)"
                     self._notify_listeners()
-                time.sleep(1.0)
-            
+                # 1 秒倒计时期间 ~6FPS 刷新实时镜头取景画面
+                for _ in range(6):
+                    time.sleep(0.16)
+                    with self._lock:
+                        if self.current_mode != "FACE_ENROLL":
+                            return
+                        prev = self._grab_enroll_preview_pil(draw_face_box=False)
+                        if prev is not None:
+                            self.face_enroll_preview_img = prev
+                            self.face_enroll_preview_seq += 1
+
             with self._lock:
                 if self.current_mode != "FACE_ENROLL":
                     return
                 self.face_enroll_step = 0
-                self.face_enroll_msg = "📸 正在提取特征..."
+                self.face_enroll_status = "processing"
+                self.face_enroll_msg = "正在提取人脸特征..."
                 self._notify_listeners()
 
             # 抓取画面并录入
@@ -906,25 +993,32 @@ class MenuFSM:
             msg = ""
             if self.agent and hasattr(self.agent, "register_master_face"):
                 res = self.agent.register_master_face()
-                if isinstance(res, dict) and res.get("status") == "ok":
+                if isinstance(res, dict) and (res.get("status") == "ok" or res.get("success")):
                     ok = True
                 else:
-                    msg = res.get("message", "未识别到清晰人脸") if isinstance(res, dict) else str(res)
+                    msg = (res.get("message") or res.get("msg") or "未识别到清晰人脸") if isinstance(res, dict) else str(res)
             else:
                 msg = "未连接摄像头设备"
 
+            locked_preview = self._grab_enroll_preview_pil(prefer_agent_latest=True, draw_face_box=ok)
             with self._lock:
                 if self.current_mode != "FACE_ENROLL":
                     return
+                if locked_preview is not None:
+                    self.face_enroll_preview_img = locked_preview
+                    self.face_enroll_preview_seq += 1
                 if ok:
-                    self.face_enroll_msg = "✅ 认主成功！已绑定"
+                    self.face_enroll_status = "ok"
+                    self.face_enroll_msg = "认主成功! 已绑定"
                 else:
-                    self.face_enroll_msg = f"❌ {msg or '录入失败'}"
+                    self.face_enroll_status = "error"
+                    self.face_enroll_msg = msg or "录入失败"
                 self._notify_listeners()
 
-            time.sleep(2.0)
+            time.sleep(2.2)
             with self._lock:
                 if self.current_mode == "FACE_ENROLL":
+                    self.face_enroll_preview_img = None
                     self.current_mode = "SYSTEM"
                     self.cursor = 0
                     self._notify_listeners()
@@ -1775,7 +1869,7 @@ class MenuFSM:
             d = self.doctor_cache
             return (mode, theme_key, tick, tuple(sorted(d.items())))
         elif mode == "FACE_ENROLL":
-            return (mode, theme_key, self.face_enroll_step, self.face_enroll_msg)
+            return (mode, theme_key, self.face_enroll_step, self.face_enroll_status, self.face_enroll_msg, self.face_enroll_preview_seq)
         elif mode == "EASTER_EGG":
             return (mode, theme_key, self.easter_egg_scroll_y)
         else:
@@ -2057,18 +2151,52 @@ class MenuFSM:
         elif self.current_mode == "FACE_ENROLL":
             _draw_menu_header(draw, "面容录入", "CAMERA", f_title, f_small, theme, show_back=True)
 
-            box_col = p_col if self.face_enroll_step > 0 else (74, 222, 128)
+            st_flag = getattr(self, "face_enroll_status", "counting")
+            if st_flag == "ok":
+                box_col = (74, 222, 128)
+            elif st_flag == "error":
+                box_col = (248, 113, 113)
+            else:
+                box_col = p_col
+
             draw.rounded_rectangle([80, 108, 400, 428], radius=24, fill=surf_cont, outline=box_col, width=4)
+            prev_img = getattr(self, "face_enroll_preview_img", None)
+            if prev_img is not None:
+                try:
+                    hi.paste(prev_img, (88, 116))
+                    draw.rounded_rectangle([80, 108, 400, 428], radius=24, outline=box_col, width=6)
+                except Exception:
+                    pass
+
             cl = 28
             for (x1, y1, dx, dy) in [(80, 108, 1, 1), (400, 108, -1, 1), (80, 428, 1, -1), (400, 428, -1, -1)]:
                 draw.line([(x1, y1), (x1 + dx * cl, y1)], fill=(255, 255, 255), width=6)
                 draw.line([(x1, y1), (x1, y1 + dy * cl)], fill=(255, 255, 255), width=6)
 
             if self.face_enroll_step > 0:
-                _draw_text_vcenter(draw, 240, 268, str(self.face_enroll_step), f_large, p_col, "c")
+                if prev_img is not None:
+                    # 有实景预览时将倒计时放到左上角浮标，避免遮挡正脸
+                    draw.rounded_rectangle([96, 124, 152, 180], radius=16, fill=(10, 14, 20), outline=p_col, width=3)
+                    _draw_text_vcenter(draw, 124, 152, str(self.face_enroll_step), f_title, p_col, "c")
+                else:
+                    _draw_text_vcenter(draw, 240, 268, str(self.face_enroll_step), f_large, p_col, "c")
 
-            draw.rounded_rectangle([22, 456, 458, 560], radius=26, fill=surf_cont, outline=outline, width=2)
-            _draw_text_vcenter(draw, 240, 508, _fit_pil_text(draw, self.face_enroll_msg, f_bold, 404), f_bold, on_surf, "c")
+            # 底部状态条（全矢量状态圆点/对勾/叉号，彻底杜绝 Linux TTF 缺 Emoji 字形显示白框）
+            draw.rounded_rectangle([22, 456, 458, 560], radius=26, fill=surf_cont, outline=box_col if st_flag in ("ok", "error") else outline, width=2)
+            fit_msg = _fit_pil_text(draw, self.face_enroll_msg, f_bold, 344)
+            if st_flag == "ok":
+                draw.ellipse([44, 488, 84, 528], fill=(34, 197, 94))
+                draw.line([(54, 509), (62, 517), (76, 499)], fill=(255, 255, 255), width=5, joint="curve")
+                _draw_text_vcenter(draw, 264, 508, fit_msg, f_bold, (134, 239, 172), "c")
+            elif st_flag == "error":
+                draw.ellipse([44, 488, 84, 528], fill=(239, 68, 68))
+                draw.line([(56, 500), (72, 516)], fill=(255, 255, 255), width=5)
+                draw.line([(72, 500), (56, 516)], fill=(255, 255, 255), width=5)
+                _draw_text_vcenter(draw, 264, 508, fit_msg, f_bold, (252, 165, 165), "c")
+            else:
+                dot_col = p_col if st_flag == "counting" else (56, 189, 248)
+                draw.ellipse([52, 496, 76, 520], fill=dot_col)
+                _draw_text_vcenter(draw, 264, 508, fit_msg, f_bold, on_surf, "c")
 
         # G. 通用技能服务二维码弹窗
         elif self.current_mode == "SKILLS_QR" or (self.active_qr_skill_id and self.current_mode not in ("FACE", "MENU_MAIN", "QR_CODE", "DOCTOR", "TOGGLES", "SKILLS", "SYSTEM", "FACE_ENROLL", "EASTER_EGG")):

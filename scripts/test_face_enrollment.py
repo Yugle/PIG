@@ -72,7 +72,43 @@ def test_hardware_agent_captures_physical_hal_with_retry():
             assert fake_hal.capture_image.call_count == 2
 
 
+def test_menu_fsm_face_enroll_preview_and_no_emoji_tofu():
+    from PIL import Image
+    from core.menu_fsm import MenuFSM
+
+    fake_hal = MagicMock()
+    rgb = np.full((240, 320, 3), 140, dtype=np.uint8)
+    rgb[40:160, 100:220] = (50, 180, 90)
+    jpg = cv2.imencode(".jpg", rgb)[1].tobytes()
+    fake_hal.capture_image.return_value = jpg
+
+    fsm = MenuFSM(hal=fake_hal)
+    fsm.agent = MagicMock()
+    fsm.agent.latest_camera_frame = rgb
+    fsm.agent.face_tracker = MagicMock()
+    fsm.agent.face_tracker.last_box = {"x": 100, "y": 40, "w": 120, "h": 120}
+    fsm.agent.face_tracker.input_size = (320, 240)
+
+    prev = fsm._grab_enroll_preview_pil(prefer_agent_latest=True, draw_face_box=True)
+    assert prev is not None and prev.size == (304, 304)
+
+    fsm.current_mode = "FACE_ENROLL"
+    fsm.face_enroll_step = 0
+    fsm.face_enroll_status = "ok"
+    fsm.face_enroll_msg = "认主成功! 已绑定"
+    fsm.face_enroll_preview_img = prev
+    fsm.face_enroll_preview_seq = 1
+    assert all(ord(c) <= 0x9FFF for c in fsm.face_enroll_msg)
+
+    rendered = fsm.render_pil_overlay(Image.new("RGB", (240, 320), (0, 0, 0)))
+    assert rendered.size == (240, 320)
+    # 确认屏幕取景框中心区域确实粘贴了预览图像（非纯黑/纯灰背景）
+    center_px = rendered.getpixel((120, 130))
+    assert center_px != (0, 0, 0) and center_px != (18, 25, 27), f"Unexpected blank preview pixel: {center_px}"
+
+
 if __name__ == "__main__":
     test_register_works_even_when_tracking_disabled()
     test_hardware_agent_captures_physical_hal_with_retry()
+    test_menu_fsm_face_enroll_preview_and_no_emoji_tofu()
     print("ALL_FACE_ENROLLMENT_TESTS_PASSED")
