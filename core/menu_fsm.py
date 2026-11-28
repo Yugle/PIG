@@ -12,7 +12,7 @@ import time
 import socket
 import subprocess
 import threading
-from typing import Dict, Any, Optional, Callable, List
+from typing import Dict, Any, Optional, Callable, List, Tuple
 from PIL import Image, ImageDraw, ImageFont
 from core.wifi_manager import wifi_manager, get_local_ip, _is_real_lan_ip
 
