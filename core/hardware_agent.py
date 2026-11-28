@@ -546,58 +546,85 @@ class HardwareAgent:
                 pass
         self.emit_event("barge_in", {"action": "interrupted", "timestamp": time.time()})
 
+    def _play_touch_choreography(self, my_seq: int, hold_shy_sec: float = 1.4):
+        """后台执行摸头连贯动作：低下 -> 左右摇头 -> 害羞保持 -> 平滑回正"""
+        try:
+            keyframes = [
+                # (pan, tilt, emotion, min_step_sec) — tilt>90 为低头，pan 72<->108 为摇头
+                (90, 108, "COZY", 0.32),
+                (72, 108, "COZY", 0.28),
+                (108, 108, "COZY", 0.28),
+                (90, 106, "SHY", hold_shy_sec),
+            ]
+            for pan, tilt, emo, min_step_sec in keyframes:
+                if getattr(self, "_touch_seq", 0) != my_seq:
+                    return
+                if self.state not in [self.STATE_IDLE, self.STATE_AFTERGLOW, "TOUCHED"]:
+                    return
+                t0 = time.monotonic()
+                self.emit_event("pose_sync", {"pan": pan, "tilt": tilt, "emotion": emo})
+                if self.hal:
+                    self.hal.set_angles(pan, tilt, smooth=True)
+                elapsed = time.monotonic() - t0
+                remain = min_step_sec - elapsed
+                if remain > 0:
+                    time.sleep(remain)
+
+            if getattr(self, "_touch_seq", 0) != my_seq:
+                return
+            if self.state in [self.STATE_IDLE, self.STATE_AFTERGLOW, "TOUCHED"]:
+                self.state = self.STATE_IDLE
+                self.emit_event("status_change", {
+                    "status": self.STATE_IDLE,
+                    "message": "就绪 (Online)"
+                })
+                self.emit_event("pose_sync", {"pan": 90, "tilt": 90, "emotion": "NORMAL"})
+                if self.hal:
+                    self.hal.set_angles(90, 90, smooth=True)
+        except Exception as e:
+            logger.warning(f"⚠️ [Touch] 摸头动作编排异常: {e}")
+
     def _on_touch_event(self):
         """处理摸头传感器 (TTP223) 触摸事件 (带 0.8s 防抖节流)"""
         now = time.time()
         if now - getattr(self, "_last_touch_ts", 0.0) < 0.8:
             return
         self._last_touch_ts = now
+        self._touch_seq = getattr(self, "_touch_seq", 0) + 1
+        my_seq = self._touch_seq
+
         print("👆 [Touch] 捕获到头顶摸头传感器 (TTP223) 触发！", flush=True)
         logger.info("👆 [Touch] 捕获到头顶摸头传感器 (TTP223) 信号")
         self._pause_music_for_voice()
+
+        import core.sound_effects as sound_effects
 
         # 1. 若当前正在播报语音，摸头作为全双工硬件打断 (Barge-in)
         if self.state == self.STATE_SPEAKING:
             logger.info("🛑 [Barge-in] 播报中检测到摸头，立即打断语音播放！")
             self.stop_speaking()
             self.state = self.STATE_AFTERGLOW
+            self.mark_action_playing(2.6)
             self.emit_event("status_change", {
                 "status": self.STATE_AFTERGLOW,
-                "message": "✋ 主人摸头打断，已停止播报"
+                "message": "✋ 主人摸头打断，低头害羞中..."
             })
-            self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "HAPPY"})
-            if self.hal:
-                self.hal.set_angles(90, 80)
-            import core.sound_effects as sound_effects
             sound_effects.play_sound("purr", async_play=True)
-
-            def _barge_recover():
-                time.sleep(1.2)
-                if self.state == self.STATE_AFTERGLOW:
-                    self.state = self.STATE_IDLE
-                    self.emit_event("status_change", {
-                        "status": self.STATE_IDLE,
-                        "message": "就绪 (Online)"
-                    })
-                    self.emit_event("pose_sync", {"pan": 90, "tilt": 90, "emotion": "NORMAL"})
-                    if self.hal:
-                        self.hal.set_angles(90, 90)
-
-            threading.Thread(target=_barge_recover, daemon=True).start()
+            threading.Thread(
+                target=self._play_touch_choreography,
+                args=(my_seq, 1.2),
+                daemon=True,
+                name="TouchChoreographyBarge"
+            ).start()
             return
 
-        # 2. 待机或余韵状态下，触发情感摸头杀
-        self.mark_action_playing(2.2)
+        # 2. 待机或余韵状态下，触发低下摇头后害羞的情感摸头杀
+        self.mark_action_playing(2.8)
         self.emit_event("touch", {"action": "pet_head", "timestamp": time.time()})
         self.emit_event("status_change", {
             "status": "TOUCHED",
-            "message": "🥰 享受主人的摸头杀中..."
+            "message": "😳 低下头摇了摇，害羞地享受摸头杀..."
         })
-        self.emit_event("pose_sync", {"pan": 90, "tilt": 80, "emotion": "HAPPY"})
-        if self.hal:
-            self.hal.set_angles(90, 80)
-
-        import core.sound_effects as sound_effects
         sound_effects.play_sound("purr", async_play=True)
 
         if self.evolution_engine:
@@ -606,19 +633,12 @@ class HardwareAgent:
             except Exception:
                 pass
 
-        def _recover():
-            time.sleep(2.0)
-            if self.state in [self.STATE_IDLE, "TOUCHED"]:
-                self.state = self.STATE_IDLE
-                self.emit_event("status_change", {
-                    "status": self.STATE_IDLE,
-                    "message": "就绪 (Online)"
-                })
-                self.emit_event("pose_sync", {"pan": 90, "tilt": 90, "emotion": "NORMAL"})
-                if self.hal:
-                    self.hal.set_angles(90, 90)
-
-        threading.Thread(target=_recover, daemon=True).start()
+        threading.Thread(
+            target=self._play_touch_choreography,
+            args=(my_seq, 1.4),
+            daemon=True,
+            name="TouchChoreography"
+        ).start()
 
     def add_radar_listener(self, callback):
         """注册外层毫米波雷达事件监听器"""
