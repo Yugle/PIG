@@ -227,13 +227,21 @@ if [ ! -f /etc/asound.conf ]; then
 elif grep -qi "bluealsa" /etc/asound.conf 2>/dev/null; then
     $SUDO cp /etc/asound.conf /etc/asound.conf.bak
     NEED_ASOUND_WRITE=1
+else
+    # 校验现有 /etc/asound.conf 绑定的 CARD 名称在当前系统中是否仍有效，若重启后 CARD 名称漂移则自动刷新
+    CFG_CAP_CARD="$(sed -n 's/.*slave\.pcm "hw:CARD=\([^,]*\),DEV=.*/\1/p' /etc/asound.conf | tail -n 1)"
+    if [ -n "$CFG_CAP_CARD" ] && ! arecord -l 2>/dev/null | grep -q " ${CFG_CAP_CARD} "; then
+        echo -e "${YELLOW}⚠️ 检测到 /etc/asound.conf 绑定的录音声卡 [${CFG_CAP_CARD}] 已变化，正在自动重新绑定...${NC}"
+        $SUDO cp /etc/asound.conf /etc/asound.conf.bak
+        NEED_ASOUND_WRITE=1
+    fi
 fi
 
 if [ "$NEED_ASOUND_WRITE" -eq 1 ]; then
-    USB_PLAY_ID="$(aplay -l 2>/dev/null | awk -F'[: \\[]+' '/USB/ && /card /{print $3; exit}')"
-    USB_CAP_ID="$(arecord -l 2>/dev/null | awk -F'[: \\[]+' '/USB PnP Sound Device/ && /card /{print $3; exit}')"
+    USB_PLAY_ID="$(aplay -l 2>/dev/null | grep -ivE 'camera|webcam|uvc' | awk -F'[: \\[]+' '/USB/ && /card /{print $3; exit}')"
+    USB_CAP_ID="$(arecord -l 2>/dev/null | grep -ivE 'camera|webcam|uvc' | awk -F'[: \\[]+' '/USB PnP Sound Device/ && /card /{print $3; exit}')"
     if [ -z "$USB_CAP_ID" ]; then
-        USB_CAP_ID="$(arecord -l 2>/dev/null | awk -F'[: \\[]+' '/USB/ && /card /{print $3; exit}')"
+        USB_CAP_ID="$(arecord -l 2>/dev/null | grep -ivE 'camera|webcam|uvc' | awk -F'[: \\[]+' '/USB/ && /card /{print $3; exit}')"
     fi
     if [ -n "$USB_PLAY_ID" ] && [ -n "$USB_CAP_ID" ]; then
         $SUDO tee /etc/asound.conf > /dev/null <<EOF

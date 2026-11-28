@@ -99,6 +99,11 @@ class HardwareAgent:
         self.audio_stream = None
         self._audio_lock = threading.Lock()
         self._recording_active = False
+        self._mic_rate = 16000
+        self._mic_channels = 1
+        self._mic_chunk = 1280
+        self._mic_device_name = ""
+        self._mic_read_errors = 0
         self.oww_model = None
         self.wakeword_engine = None
 
@@ -183,8 +188,130 @@ class HardwareAgent:
             logger.warning(f"⚠️ [TTS] TTSEngine 初始化异常: {e}")
             return None
 
+    @staticmethod
+    def _rank_input_devices(p_audio) -> List[tuple]:
+        """扫描并按优先级排序 PyAudio 录音设备 (真实 USB 麦 > 系统默认总线 > 其他 > 摄像头内置麦)"""
+        ranked = []
+        try:
+            count = p_audio.get_device_count()
+        except Exception:
+            return ranked
+
+        for idx in range(count):
+            try:
+                info = p_audio.get_device_info_by_index(idx)
+            except Exception:
+                continue
+            if int(info.get("maxInputChannels", 0) or 0) < 1:
+                continue
+            name = str(info.get("name") or f"device_{idx}")
+            low = name.lower()
+            is_cam = any(k in low for k in ("camera", "webcam", "uvc", "imx", "ov5647"))
+            is_sys = low in ("default", "sysdefault", "pulse", "pipewire") or low.startswith(("sysdefault:", "pulse", "pipewire"))
+            is_usb_mic = any(k in low for k in ("pnp", "mic", "microphone", "usb", "headset", "dongle", "fifine", "jabra"))
+            is_virtual_unused = any(k in low for k in ("dmix", "spdif", "iec958", "hdmi", "vc4"))
+
+            if is_usb_mic and not is_cam:
+                tier = 0
+            elif is_sys:
+                tier = 1
+            elif not is_cam and not is_virtual_unused:
+                tier = 2
+            elif is_cam:
+                tier = 3
+            else:
+                tier = 4
+            ranked.append((tier, idx, info))
+
+        ranked.sort(key=lambda item: (item[0], item[1]))
+        return ranked
+
+    @staticmethod
+    def _probe_and_open_input(p_audio, dev_idx: Optional[int], dev_info: Dict[str, Any]):
+        """尝试打开指定录音设备并预读 1 帧验证可用性，自动兼容 16kHz 与原生 48k/44.1kHz"""
+        import pyaudio
+
+        max_ch = int(dev_info.get("maxInputChannels", 1) or 1)
+        default_sr = int(round(float(dev_info.get("defaultSampleRate") or 48000)))
+        rates = []
+        for r in (16000, default_sr, 48000, 44100):
+            if r > 0 and r not in rates:
+                rates.append(r)
+        channels_try = [1] + ([2] if max_ch >= 2 else [])
+
+        for rate in rates:
+            chunk = max(256, int(round(1280 * rate / 16000.0)))
+            for ch in channels_try:
+                stream = None
+                try:
+                    stream = p_audio.open(
+                        format=pyaudio.paInt16,
+                        channels=ch,
+                        rate=rate,
+                        input=True,
+                        input_device_index=dev_idx,
+                        frames_per_buffer=chunk,
+                    )
+                    probe = stream.read(chunk, exception_on_overflow=False)
+                    if probe:
+                        return stream, rate, ch, chunk
+                    stream.stop_stream()
+                    stream.close()
+                except Exception:
+                    if stream is not None:
+                        try:
+                            stream.stop_stream()
+                            stream.close()
+                        except Exception:
+                            pass
+        return None
+
+    def _read_mic_16k_frame(self) -> bytes:
+        """从当前麦克风读取一帧 80ms 音频，并统一转换为 16kHz 单声道 PCM16 bytes (1280 samples)"""
+        if not self.audio_stream:
+            return b""
+        chunk = max(256, int(getattr(self, "_mic_chunk", 1280)))
+        data = self.audio_stream.read(chunk, exception_on_overflow=False)
+        if not data:
+            return b""
+
+        ch = int(getattr(self, "_mic_channels", 1))
+        rate = int(getattr(self, "_mic_rate", 16000))
+        if ch == 1 and rate == 16000:
+            return data
+
+        import numpy as np
+        arr = np.frombuffer(data, dtype=np.int16)
+        if ch > 1:
+            n_frames = len(arr) // ch
+            if n_frames <= 0:
+                return b""
+            arr = arr[:n_frames * ch].reshape(n_frames, ch).mean(axis=1)
+        if rate != 16000 and len(arr) > 1:
+            x_old = np.linspace(0.0, 1.0, num=len(arr), endpoint=False)
+            x_new = np.linspace(0.0, 1.0, num=1280, endpoint=False)
+            arr = np.interp(x_new, x_old, arr.astype(np.float32))
+        return np.clip(arr, -32768, 32767).astype(np.int16).tobytes()
+
+    def _close_microphone(self):
+        with self._audio_lock:
+            if self.audio_stream:
+                try:
+                    self.audio_stream.stop_stream()
+                    self.audio_stream.close()
+                except Exception:
+                    pass
+                self.audio_stream = None
+            if self.p_audio:
+                try:
+                    self.p_audio.terminate()
+                except Exception:
+                    pass
+                self.p_audio = None
+            self.has_mic = False
+
     def _init_microphone(self):
-        """初始化物理/蓝牙麦克风及离线中文/英文唤醒引擎 (sherpa-onnx / openWakeWord)"""
+        """初始化物理/蓝牙麦克风及离线唤醒引擎 (支持 ALSA 默认失败时自动遍历可用 USB 麦与重采样兜底)"""
         if self.mode == "simulation":
             logger.info("ℹ️ [音频] 当前处于纯网页仿真模式，跳过物理麦克风初始化")
             return
@@ -193,28 +320,53 @@ class HardwareAgent:
             import pyaudio
             from drivers.wakeword_engine import WakeWordEngine
 
-            FORMAT = pyaudio.paInt16
-            CHANNELS = 1
-            RATE = 16000
-            CHUNK = 1280
-
-            engine = WakeWordEngine(self.cfg)
+            engine = self.wakeword_engine or WakeWordEngine(self.cfg)
             if not engine.is_ready:
                 raise RuntimeError("未找到可用的离线唤醒引擎 (请检查 sherpa-onnx 中文模型或 openWakeWord)")
 
-            self.p_audio = pyaudio.PyAudio()
-            self.audio_stream = self.p_audio.open(
-                format=FORMAT,
-                channels=CHANNELS,
-                rate=RATE,
-                input=True,
-                frames_per_buffer=CHUNK
-            )
+            self._close_microphone()
+            p_audio = pyaudio.PyAudio()
+            opened = None
+            chosen_name = "default"
 
+            # 1. 先尝试系统 ALSA/PulseAudio 默认输入设备
+            try:
+                def_info = p_audio.get_default_input_device_info()
+                chosen_name = str(def_info.get("name") or "default")
+                opened = self._probe_and_open_input(p_audio, None, def_info)
+            except Exception as def_err:
+                logger.info(f"ℹ️ [音频] 默认输入设备打开失败，启动全声卡扫描 ({def_err})")
+
+            # 2. 默认设备失败（常见于重启后 USB card 序号或 Device/Device_1 漂移）：自动遍历可用物理 USB 麦
+            if opened is None:
+                for tier, dev_idx, dev_info in self._rank_input_devices(p_audio):
+                    opened = self._probe_and_open_input(p_audio, dev_idx, dev_info)
+                    if opened is not None:
+                        chosen_name = f"[{dev_idx}] {dev_info.get('name', dev_idx)}"
+                        break
+
+            if opened is None:
+                try:
+                    p_audio.terminate()
+                except Exception:
+                    pass
+                raise RuntimeError("未探测到可用的物理录音设备 (请检查 USB 麦克风插口及 arecord -l)")
+
+            stream, rate, ch, chunk = opened
+            self.p_audio = p_audio
+            self.audio_stream = stream
+            self._mic_rate = rate
+            self._mic_channels = ch
+            self._mic_chunk = chunk
+            self._mic_device_name = chosen_name
+            self._mic_read_errors = 0
             self.wakeword_engine = engine
             self.oww_model = engine.oww_model
             self.has_mic = True
-            logger.info(f"🎙️ [音频模块] 麦克风与唤醒引擎就绪 ({engine.backend}): {engine.model_label}")
+            logger.info(
+                f"🎙️ [音频模块] 麦克风与唤醒引擎就绪 ({engine.backend}): {engine.model_label} "
+                f"| 设备={chosen_name} ({rate}Hz, ch={ch})"
+            )
 
         except Exception as e:
             self.has_mic = False
@@ -294,6 +446,7 @@ class HardwareAgent:
             "wakeword_keywords": self.cfg.get("wakeword_keywords", ["你好小猪", "小猪小猪"]),
             "wakeword_threshold": float(self.cfg.get("wakeword_threshold", 0.20)),
             "mic_gain": float(self.cfg.get("mic_gain", 2.5)),
+            "mic_device": getattr(self, "_mic_device_name", ""),
             "cur_pan": getattr(self.hal, "cur_pan", 90.0),
             "cur_tilt": getattr(self.hal, "cur_tilt", 90.0),
             "radar_detected": getattr(self, "radar_detected", True),
@@ -666,17 +819,7 @@ class HardwareAgent:
     def stop(self):
         """停止工作线程并安全释放音频设备"""
         self._running = False
-        if self.audio_stream:
-            try:
-                self.audio_stream.stop_stream()
-                self.audio_stream.close()
-            except Exception:
-                pass
-        if self.p_audio:
-            try:
-                self.p_audio.terminate()
-            except Exception:
-                pass
+        self._close_microphone()
 
     def record_audio_clip(self, max_seconds=8, silence_timeout=None, min_seconds=0.45) -> str:
         """动态能量 VAD 静音自适应录音 (支持噪声基线自适应、唤醒尾音屏蔽与首字前滚保留)"""
@@ -727,9 +870,10 @@ class HardwareAgent:
                 try:
                     if hasattr(self.audio_stream, "get_read_available"):
                         avail = int(self.audio_stream.get_read_available() or 0)
-                        drain_n = min(avail // CHUNK, 4)
+                        step_chunk = max(256, int(getattr(self, "_mic_chunk", CHUNK)))
+                        drain_n = min(avail // step_chunk, 4)
                         for _ in range(drain_n):
-                            self.audio_stream.read(CHUNK, exception_on_overflow=False)
+                            self.audio_stream.read(step_chunk, exception_on_overflow=False)
                 except Exception:
                     pass
 
@@ -737,7 +881,9 @@ class HardwareAgent:
                     if not self._running:
                         break
                     try:
-                        data = self.audio_stream.read(CHUNK, exception_on_overflow=False)
+                        data = self._read_mic_16k_frame()
+                        if not data:
+                            continue
                         audio_raw = np.frombuffer(data, dtype=np.int16)
                         if mic_gain != 1.0:
                             raw_peak = float(np.max(np.abs(audio_raw))) if len(audio_raw) else 0.0
@@ -1048,9 +1194,21 @@ class HardwareAgent:
 
         meter_counter = 0
         while self._running:
-            # 若处于纯网页仿真模式或无麦克风，线程低频休眠保活，同时定期巡检主动关怀
+            # 若处于纯网页仿真模式或无麦克风，线程低频休眠保活；真机模式下每 10 秒自动重探 USB 麦支持热插拔自愈
             if self.mode != "twin" or not self.has_mic or not self.audio_stream:
                 time.sleep(0.5)
+                if self.mode == "twin" and (not self.has_mic or not self.audio_stream):
+                    probe_counter = getattr(self, "_mic_retry_counter", 0) + 1
+                    self._mic_retry_counter = probe_counter
+                    if probe_counter >= 20:
+                        self._mic_retry_counter = 0
+                        self._init_microphone()
+                        if self.has_mic:
+                            self.emit_event("mode_changed", {
+                                "mode": self.mode,
+                                "has_mic": True,
+                                "message": f"🎙️ 已热重连物理麦克风：{self._mic_device_name}",
+                            })
                 if self.proactive_care and self.state == self.STATE_IDLE:
                     sim_counter = getattr(self, "_sim_care_tick_counter", 0) + 1
                     self._sim_care_tick_counter = sim_counter
@@ -1066,15 +1224,15 @@ class HardwareAgent:
                 continue
 
             try:
-                CHUNK = 1280
                 with self._audio_lock:
                     if self._recording_active or self.state in (self.STATE_WAKING, self.STATE_LISTENING):
                         data = b""
                     else:
-                        data = self.audio_stream.read(CHUNK, exception_on_overflow=False)
+                        data = self._read_mic_16k_frame()
                 if not data:
                     time.sleep(0.01)
                     continue
+                self._mic_read_errors = 0
 
                 audio_raw = np.frombuffer(data, dtype=np.int16)
                 mic_gain = float(self.cfg.get("mic_gain", 2.5))
@@ -1193,4 +1351,9 @@ class HardwareAgent:
 
             except Exception as e:
                 logger.warning(f"麦克风监听循环异常: {e}")
+                self._mic_read_errors = getattr(self, "_mic_read_errors", 0) + 1
+                if self._mic_read_errors >= 8:
+                    logger.warning("🔄 [音频] 连续读麦异常，释放旧句柄并等待自动重连...")
+                    self._close_microphone()
+                    self.emit_event("mode_changed", {"mode": self.mode, "has_mic": False})
                 time.sleep(0.3)
