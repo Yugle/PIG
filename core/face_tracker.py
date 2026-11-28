@@ -76,23 +76,63 @@ class FaceTracker:
                 print(f"⚠️ [FaceTracker] 读取主人人脸特征库异常: {e}")
         return None
 
-    def register_master_face(self, frame=None) -> Dict[str, Any]:
-        """将当前画面中的人脸特征录入为唯一的【主人特征向量】"""
-        if self.recognizer is None or cv2 is None:
-            return {"success": False, "msg": "SFace 人脸识别引擎未就绪"}
+    def _detect_yunet_row(self, frame_resized, min_score: float = 0.6):
+        """在指定已缩放帧 (320x240) 上运行 YuNet 人脸检测并返回最佳人脸特征行 (不受 self.enabled 开关限制)"""
+        if self.detector is None or frame_resized is None or cv2 is None:
+            return None
+        try:
+            self.detector.setInputSize(self.input_size)
+            if hasattr(self.detector, "setScoreThreshold"):
+                self.detector.setScoreThreshold(min_score)
+            _, faces = self.detector.detect(frame_resized)
+            if faces is not None and len(faces) > 0:
+                return faces[0]
+        except Exception:
+            pass
+        return None
 
-        target_frame = frame if frame is not None else getattr(self, "last_frame_resized", None)
-        target_face = getattr(self, "last_raw_face_row", None)
-        if target_frame is None or target_face is None:
-            return {"success": False, "msg": "未在镜头中检测到人脸，请正对摄像头"}
+    def register_master_face(self, frame=None) -> Dict[str, Any]:
+        """将传入或最新画面中的人脸特征录入为唯一的【主人特征向量】"""
+        if self.recognizer is None or cv2 is None:
+            err = "SFace 人脸识别引擎未就绪"
+            return {"status": "error", "success": False, "msg": err, "message": err}
+
+        raw_frame = frame if frame is not None else getattr(self, "last_frame_resized", None)
+        if raw_frame is None:
+            err = "未获取到有效摄像头画面，请确认摄像头已连接"
+            return {"status": "error", "success": False, "msg": err, "message": err}
+
+        target_frame = (
+            cv2.resize(raw_frame, self.input_size)
+            if (raw_frame.shape[1], raw_frame.shape[0]) != self.input_size
+            else raw_frame
+        )
+
+        # 直接对当前抓拍帧主动执行 YuNet 检测（即使关闭了视线跟随开关也能认主），弱光下放宽阈值至 0.45 兜底
+        target_face = self._detect_yunet_row(target_frame, min_score=0.6)
+        if target_face is None:
+            target_face = self._detect_yunet_row(target_frame, min_score=0.45)
+        if self.detector is not None and hasattr(self.detector, "setScoreThreshold"):
+            try:
+                self.detector.setScoreThreshold(0.6)
+            except Exception:
+                pass
+        if target_face is None and frame is None:
+            target_face = getattr(self, "last_raw_face_row", None)
+
+        if target_face is None:
+            err = "未在镜头中检测到人脸，请正对摄像头"
+            return {"status": "error", "success": False, "msg": err, "message": err}
+
+        self.last_raw_face_row = target_face.copy()
+        self.last_frame_resized = target_frame.copy()
 
         try:
-            if target_frame.shape[1] != self.input_size[0] or target_frame.shape[0] != self.input_size[1]:
-                target_frame = cv2.resize(target_frame, self.input_size)
             aligned = self.recognizer.alignCrop(target_frame, target_face)
             feat = self.recognizer.feature(aligned)  # shape: (1, 128)
             self.master_embedding = feat
 
+            os.makedirs(os.path.dirname(MASTER_FACE_FILE), exist_ok=True)
             master_data = {
                 "registered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "embedding": feat.flatten().tolist()
@@ -102,10 +142,12 @@ class FaceTracker:
 
             self.last_identity = "MASTER"
             self.last_similarity = 1.0
+            ok_msg = "主人面容录入成功！PIG 已经记住你了~"
             print("👑 [FaceTracker] 主人人脸 128-d 特征向量录入成功！已持久化至 data/master_face.json")
-            return {"success": True, "msg": "主人面容录入成功！PIG 已经记住你了~"}
+            return {"status": "ok", "success": True, "msg": ok_msg, "message": ok_msg}
         except Exception as e:
-            return {"success": False, "msg": f"录入失败: {e}"}
+            err = f"录入失败: {e}"
+            return {"status": "error", "success": False, "msg": err, "message": err}
 
     def _init_detector(self):
         if cv2 is None:

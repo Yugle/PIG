@@ -208,13 +208,14 @@ def on_alarm_triggered(rem):
 
 skill_mgr.register_trigger_callback(on_alarm_triggered)
 
-# 初始化真机硬件与数字孪生工作中枢
+# 初始化真机硬件与数字孪生工作中枢（共享同一个 FaceTracker 实例，真机/Web 认主状态完全同步）
 hardware_agent = HardwareAgent(
     config=server_cfg,
     memory_manager=mem,
     skill_manager=skill_mgr,
     evolution_engine=evolution_engine,
-    proactive_care=proactive_care
+    proactive_care=proactive_care,
+    face_tracker=face_tracker,
 )
 hardware_agent.start()
 
@@ -334,20 +335,6 @@ def _get_app_ctx():
 
 if skill_mgr:
     skill_mgr.emit_hook("on_startup", ctx=_get_app_ctx())
-
-def _sim_register_master_face():
-    global _latest_webcam_frame
-    frame = None
-    if _latest_webcam_frame:
-        import cv2, numpy as np
-        nparr = np.frombuffer(_latest_webcam_frame, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    return face_tracker.register_master_face(frame)
-
-if skill_mgr:
-    skill_mgr.register_face_callback = _sim_register_master_face
-if hardware_agent:
-    hardware_agent.register_master_face = _sim_register_master_face
 
 def on_menu_state_broadcast(state_dict):
     on_agent_event_broadcast({
@@ -1443,7 +1430,12 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     nparr = np.frombuffer(img_bytes, np.uint8)
                     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-                reg_res = face_tracker.register_master_face(frame)
+                if frame is not None:
+                    reg_res = face_tracker.register_master_face(frame)
+                elif hardware_agent and hasattr(hardware_agent, "register_master_face"):
+                    reg_res = hardware_agent.register_master_face()
+                else:
+                    reg_res = face_tracker.register_master_face(None)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()

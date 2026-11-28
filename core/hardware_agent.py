@@ -65,7 +65,8 @@ class HardwareAgent:
         skill_manager,
         evolution_engine=None,
         proactive_care=None,
-        hal=None
+        hal=None,
+        face_tracker=None,
     ):
         global _global_hardware_agent
         _global_hardware_agent = self
@@ -117,9 +118,14 @@ class HardwareAgent:
         # 全双工打断 (Barge-in) 请求标记
         self._interrupt_requested = False
 
-        # 人脸视觉注视与两级头部追踪引擎
-        self.face_tracker = FaceTracker(enabled=self.cfg.get("face_tracking", False))
+        # 人脸视觉注视与两级头部追踪引擎（优先复用外部传入实例，保障全链路单实例状态一致）
+        if face_tracker is not None:
+            self.face_tracker = face_tracker
+            self.face_tracker.set_enabled(self.cfg.get("face_tracking", False))
+        else:
+            self.face_tracker = FaceTracker(enabled=self.cfg.get("face_tracking", False))
         self.latest_camera_frame = None
+        self.latest_camera_frame_ts = 0.0
         if self.skill_manager:
             self.skill_manager.register_face_callback = self.register_master_face
 
@@ -731,37 +737,60 @@ class HardwareAgent:
         self.face_tracker.set_enabled(enabled)
 
     def register_master_face(self, frame=None) -> Dict[str, Any]:
-        """树莓派真机人脸认主录入 (SFace 128-d 特征)"""
+        """真机与仿真统一的人脸认主录入 (SFace 128-d 特征)：优先实时抓拍并支持 3 帧重试"""
         import numpy as np
         try:
             import cv2
         except ImportError:
             cv2 = None
 
+        if frame is not None:
+            return self.face_tracker.register_master_face(frame)
+
+        # 1. 真机 / HAL 优先实时抓拍（最多连拍 3 帧，规避刚启动自动曝光暗帧或眨眼）
+        last_res: Optional[Dict[str, Any]] = None
+        if self.hal and hasattr(self.hal, "capture_image") and cv2 is not None:
+            for attempt in range(3):
+                try:
+                    img_bytes = self.hal.capture_image()
+                    if img_bytes and len(img_bytes) > 100:
+                        nparr = np.frombuffer(img_bytes, np.uint8)
+                        cand = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                        if cand is not None:
+                            self.latest_camera_frame = cand
+                            self.latest_camera_frame_ts = time.time()
+                            res = self.face_tracker.register_master_face(cand)
+                            last_res = res
+                            if res.get("status") == "ok" or res.get("success"):
+                                return res
+                except Exception as e:
+                    logger.warning(f"⚠️ [FaceID] 从 HAL capture_image 异常: {e}")
+                if attempt < 2:
+                    time.sleep(0.15)
+
+        # 2. 若 HAL 未捕获有效帧（如网页纯仿真模式使用浏览器摄像头），回退读取主模块最新推流帧
+        main_mod = sys.modules.get("__main__")
+        if main_mod and hasattr(main_mod, "get_latest_vision_frame") and cv2 is not None:
+            try:
+                web_bytes = main_mod.get_latest_vision_frame(max_age_sec=12.0)
+                if web_bytes and len(web_bytes) > 100:
+                    nparr = np.frombuffer(web_bytes, np.uint8)
+                    web_frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    if web_frame is not None:
+                        return self.face_tracker.register_master_face(web_frame)
+            except Exception:
+                pass
+
+        # 3. 回退到近期缓存帧（12s TTL 内）
         now = time.time()
         last_cam_ts = getattr(self, "latest_camera_frame_ts", 0.0)
-        if frame is None and getattr(self, "latest_camera_frame", None) is not None:
-            if now - last_cam_ts <= 12.0:
-                frame = self.latest_camera_frame
-            else:
-                self.latest_camera_frame = None
+        if getattr(self, "latest_camera_frame", None) is not None and (now - last_cam_ts <= 12.0):
+            return self.face_tracker.register_master_face(self.latest_camera_frame)
 
-        if frame is None and self.hal and hasattr(self.hal, "capture_image"):
-            try:
-                img_bytes = self.hal.capture_image()
-                if img_bytes and cv2 is not None:
-                    nparr = np.frombuffer(img_bytes, np.uint8)
-                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                    self.latest_camera_frame = frame
-                    self.latest_camera_frame_ts = time.time()
-            except Exception as e:
-                logger.warning(f"⚠️ [FaceID] 从 HAL capture_image 异常: {e}")
-
-        if frame is None:
-            return {"status": "error", "message": "无法从摄像头捕获有效画面"}
-
-        res = self.face_tracker.register_master_face(frame)
-        return res
+        if last_res is not None:
+            return last_res
+        err = "无法从摄像头捕获有效画面，请确认摄像头已连接或网页端已开启摄像头"
+        return {"status": "error", "success": False, "msg": err, "message": err}
 
     def _vision_loop(self):
         """低功耗人脸视觉注视与两级头部追踪后台循环 (~10FPS) - 最低优先级生效"""
