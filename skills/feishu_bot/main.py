@@ -234,6 +234,8 @@ def _sync_feishu_service(feishu_cfg: dict, ctx: dict):
     if not isinstance(feishu_cfg, dict):
         return
     feishu_client.update_config(feishu_cfg)
+    if feishu_cfg.get("enabled", True) is False:
+        return
     if feishu_client.app_id and feishu_client.app_secret:
         feishu_client.start_ws_service(
             lambda txt, oid, cid, mid="": _handle_feishu_incoming_message(ctx, txt, oid, cid, mid)

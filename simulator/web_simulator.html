@@ -2226,10 +2226,23 @@
             return;
           } else if (cur.id === "restart") {
             cur.val = "正在重启...";
-            fetch("/api/system/restart", { method: "POST" }).catch(() => {});
+            fetch("/api/system/restart", { method: "POST" })
+              .then(r => r.json())
+              .then(d => { cur.val = (d && d.ok === false) ? "重启失败" : "正在重启..."; })
+              .catch(() => {});
           } else if (cur.id === "shutdown") {
             cur.val = "正在关机...";
-            fetch("/api/system/shutdown", { method: "POST" }).catch(() => {});
+            fetch("/api/system/shutdown", { method: "POST" })
+              .then(r => r.json())
+              .then(d => {
+                if (d && d.ok === false) {
+                  cur.val = "无关机权限";
+                  alert(d.message || "关机失败");
+                } else if (d && d.simulated) {
+                  cur.val = "仿真已休眠";
+                }
+              })
+              .catch(() => {});
           }
         }
       } else if (menuState.mode === "FACE_ENROLL") {

@@ -123,7 +123,18 @@ def try_fast_local_intent(
     if is_skill_failure(observation):
         return None
 
-    obs_msg = observation.get("message", "") if isinstance(observation, dict) else str(observation)
+    if isinstance(observation, dict):
+        obs_msg = observation.get("message", "")
+    else:
+        obs_msg = str(observation)
+        if obs_msg.startswith("{") and "'message'" in obs_msg:
+            try:
+                import ast
+                parsed_obs = ast.literal_eval(obs_msg)
+                if isinstance(parsed_obs, dict) and parsed_obs.get("message"):
+                    obs_msg = str(parsed_obs["message"])
+            except Exception:
+                pass
     reply = matched.get("reply") or obs_msg or "好嘞，已经帮你办妥啦！"
     emo = matched.get("emotion") or "HAPPY"
     behaviors = [] if silent else [{"emotion": emo, "action": "NOD", "pan": 90, "tilt": 88, "delay": 500}]

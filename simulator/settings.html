@@ -519,6 +519,10 @@
       <button class="btn btn-secondary" style="flex:1;" id="otaCheckBtn" onclick="checkOtaFromSettings()">检查更新</button>
     </div>
     <button class="btn" id="otaPerformBtn" style="display:none; margin-top:10px; background:linear-gradient(135deg,#10b981,#059669);" onclick="performOtaFromSettings()">立即升级固件</button>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-secondary" style="flex:1;" onclick="triggerPowerAction('restart')">🔄 重启服务</button>
+      <button class="btn" style="flex:1; background:linear-gradient(135deg,#ef4444,#b91c1c);" onclick="triggerPowerAction('shutdown')">🔴 安全关机</button>
+    </div>
   </section>
 
   <div class="card" style="text-align:center; padding:14px;">
@@ -911,6 +915,22 @@
           }
         }
       } catch (e) {}
+    }
+
+    async function triggerPowerAction(action) {
+      const label = action === "shutdown" ? "安全关机" : "重启后台服务";
+      if (!confirm(`确定要执行【${label}】吗？`)) return;
+      try {
+        const res = await fetch(action === "shutdown" ? "/api/system/shutdown" : "/api/system/restart", { method: "POST" });
+        const d = await res.json().catch(() => ({}));
+        if (d.ok === false || d.status === "error") {
+          alert(d.message || `${label}失败`);
+        } else {
+          showToast(d.message || `已发送${label}指令`);
+        }
+      } catch (e) {
+        alert(`${label}请求异常: ` + e);
+      }
     }
 
     loadSettings();

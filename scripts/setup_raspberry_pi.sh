@@ -318,6 +318,12 @@ EOF
 $SUDO systemctl daemon-reload
 $SUDO systemctl enable robot.service
 
+# 9.5 配置无密码 sudo 电源管理白名单 (确保网页/语音/物理菜单【安全关机】与【重启服务】100% 生效)
+SUDOERS_FILE="/etc/sudoers.d/pig-power"
+echo "${TARGET_USER} ALL=(root) NOPASSWD: /sbin/shutdown, /usr/sbin/shutdown, /sbin/poweroff, /usr/sbin/poweroff, /sbin/reboot, /usr/sbin/reboot, /bin/systemctl, /usr/bin/systemctl" | $SUDO tee "$SUDOERS_FILE" > /dev/null
+$SUDO chmod 0440 "$SUDOERS_FILE"
+echo -e "${GREEN}✓ 已配置电源管理免密权限 (${SUDOERS_FILE})${NC}"
+
 if [ "$START_NOW" -eq 1 ]; then
     $SUDO systemctl restart robot.service
     echo -e "${GREEN}✓ robot.service 已注册开机自启并立即启动！${NC}"

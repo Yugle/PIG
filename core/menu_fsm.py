@@ -7,8 +7,10 @@ MenuFSM: PIG 桌面机器人统一 4 键菜单状态机 (Unified 4-Button Menu S
 """
 
 import os
+import sys
 import time
 import socket
+import subprocess
 import threading
 from typing import Dict, Any, Optional, Callable, List
 from PIL import Image, ImageDraw, ImageFont
@@ -438,6 +440,7 @@ class MenuFSM:
         self.is_servo_sleeping = False
         self.is_screen_off = False
         self._screen_manual_off = False
+        self._shutting_down = False
         self.screen_brightness = max(10, min(100, int(self._load_cfg().get("screen_brightness", 100))))
 
         # 系统主题配色 (mint, orange, blue, purple, mono)
@@ -1491,28 +1494,162 @@ class MenuFSM:
         self._sync_system_items()
         self._notify_listeners()
 
-    def _execute_power_action(self, action: str):
-        if action == "restart":
+    @staticmethod
+    def _is_raspberry_pi_host() -> bool:
+        try:
+            if os.path.exists("/proc/device-tree/model"):
+                with open("/proc/device-tree/model", "r", encoding="utf-8", errors="ignore") as f:
+                    return "Raspberry Pi" in f.read()
+        except Exception:
+            pass
+        return False
+
+    @staticmethod
+    def _can_passwordless_poweroff() -> Tuple[bool, str]:
+        if os.geteuid() == 0:
+            return True, "root"
+        checks = [
+            ["sudo", "-n", "-l", "/sbin/shutdown"],
+            ["sudo", "-n", "-l", "/usr/sbin/shutdown"],
+            ["sudo", "-n", "-l", "/sbin/poweroff"],
+            ["sudo", "-n", "true"],
+        ]
+        last_err = ""
+        for cmd in checks:
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+                if res.returncode == 0:
+                    return True, " ".join(cmd)
+                err = (res.stderr or res.stdout or "").strip()
+                if err:
+                    last_err = err
+            except Exception as e:
+                last_err = str(e)
+        return False, last_err or "需要 sudo 免密关机权限"
+
+    def _run_os_shutdown(self) -> Tuple[bool, str]:
+        is_root = (os.geteuid() == 0)
+        cmds = (
+            [
+                ["/sbin/shutdown", "-h", "now"],
+                ["/usr/sbin/shutdown", "-h", "now"],
+                ["systemctl", "poweroff", "-i"],
+                ["/sbin/poweroff"],
+            ]
+            if is_root
+            else [
+                ["sudo", "-n", "/sbin/shutdown", "-h", "now"],
+                ["sudo", "-n", "/usr/sbin/shutdown", "-h", "now"],
+                ["sudo", "-n", "shutdown", "-h", "now"],
+                ["systemctl", "poweroff", "-i"],
+                ["sudo", "-n", "/sbin/poweroff"],
+                ["sudo", "-n", "poweroff"],
+            ]
+        )
+        errors = []
+        for cmd in cmds:
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=6)
+                if res.returncode == 0:
+                    return True, " ".join(cmd)
+                detail = (res.stderr or res.stdout or f"exit {res.returncode}").strip()
+                errors.append(f"{cmd[0]}: {detail}")
+            except FileNotFoundError:
+                continue
+            except Exception as e:
+                errors.append(f"{cmd[0]}: {e}")
+        return False, " | ".join(errors) or "未找到可用的关机命令"
+
+    def _execute_power_action(self, action: str, async_exec: bool = True) -> Dict[str, Any]:
+        act = (action or "").strip().lower()
+        if act == "restart":
             print("🔄 [MenuFSM] 正在安全重启机器人后台服务...")
-            # 退出当前应用并让 systemd 守护拉起，或返回提示
             self.current_mode = "FACE"
             self._notify_listeners()
-        elif action == "shutdown":
-            print("🛑 [MenuFSM] 执行树莓派系统关机: sudo shutdown -h now")
-            self._shutting_down = True
-            if self.hal and hasattr(self.hal, "display_face"):
+
+            def _do_restart():
+                time.sleep(0.5)
+                if os.environ.get("INVOCATION_ID"):
+                    os._exit(0)
                 try:
-                    img = Image.new("RGB", (240, 320), (10, 12, 16))
-                    draw = ImageDraw.Draw(img)
-                    draw.rounded_rectangle([24, 108, 216, 212], radius=14, fill=(24, 28, 36), outline=(239, 68, 68), width=2)
-                    draw.text((48, 134), "正在安全关机...", fill=(248, 113, 113), font=self.font_bold)
-                    draw.text((40, 170), "绿灯熄灭后即可拔电", fill=(180, 190, 205), font=self.font_small)
-                    self.hal.display_face(img)
-                    time.sleep(1.2)
-                    self.set_screen_power(False, manual=True)
+                    if os.geteuid() == 0:
+                        res = subprocess.run(["systemctl", "restart", "robot.service"], capture_output=True, timeout=4)
+                        if res.returncode == 0:
+                            return
+                    else:
+                        res = subprocess.run(["sudo", "-n", "systemctl", "restart", "robot.service"], capture_output=True, timeout=4)
+                        if res.returncode == 0:
+                            return
                 except Exception:
                     pass
-            os.system("sudo shutdown -h now 2>/dev/null || echo 'Simulation: Shutdown simulated'")
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+
+            if async_exec:
+                threading.Thread(target=_do_restart, daemon=True, name="SystemRestart").start()
+            else:
+                _do_restart()
+            return {"ok": True, "status": "restarting", "message": "正在重启 PIG 后台服务..."}
+
+        if act == "shutdown":
+            is_pi = self._is_raspberry_pi_host()
+            if is_pi:
+                can_off, reason = self._can_passwordless_poweroff()
+                if not can_off:
+                    msg = (
+                        f"关机失败：当前运行用户无免密 sudo 关机权限（{reason}）。"
+                        "请在树莓派终端执行一次 sudo bash scripts/setup_raspberry_pi.sh --no-start 授予免密关机权限。"
+                    )
+                    print(f"❌ [MenuFSM] {msg}")
+                    return {"ok": False, "status": "error", "message": msg}
+
+            print(f"🛑 [MenuFSM] 准备执行安全关机 (is_pi={is_pi})...")
+
+            def _do_shutdown():
+                time.sleep(0.25)
+                if self.hal and hasattr(self.hal, "display_face"):
+                    try:
+                        img = Image.new("RGB", (240, 320), (10, 12, 16))
+                        draw = ImageDraw.Draw(img)
+                        draw.rounded_rectangle([24, 108, 216, 212], radius=14, fill=(24, 28, 36), outline=(239, 68, 68), width=2)
+                        draw.text((48, 134), "正在安全关机...", fill=(248, 113, 113), font=self.font_bold)
+                        draw.text((40, 170), "绿灯熄灭后即可拔电", fill=(180, 190, 205), font=self.font_small)
+                        self.hal.display_face(img)
+                        time.sleep(1.2)
+                    except Exception:
+                        pass
+
+                self.set_screen_power(False, manual=True)
+                try:
+                    self._apply_servo_sleep(True)
+                except Exception:
+                    pass
+
+                if is_pi:
+                    self._shutting_down = True
+                    if self.hal and hasattr(self.hal, "close"):
+                        try:
+                            self.hal.close()
+                        except Exception:
+                            pass
+                    ok, detail = self._run_os_shutdown()
+                    if not ok:
+                        self._shutting_down = False
+                        print(f"❌ [MenuFSM] 树莓派系统关机命令执行失败: {detail}")
+                else:
+                    print("ℹ️ [MenuFSM] 仿真环境已执行关机休眠（仅实机树莓派会执行系统断电）")
+
+            if async_exec:
+                threading.Thread(target=_do_shutdown, daemon=True, name="SystemShutdown").start()
+            else:
+                _do_shutdown()
+            return {
+                "ok": True,
+                "status": "shutting_down",
+                "simulated": not is_pi,
+                "message": "正在执行安全关机，屏幕即将熄灭，绿灯熄灭后即可安全断电。" if is_pi else "仿真环境已进入关机休眠状态（实机树莓派上将执行断电关机）。",
+            }
+
+        return {"ok": False, "status": "error", "message": f"未知电源动作: {action}"}
 
     def refresh_doctor_data_async(self):
         """后台异步进行一次全面诊断"""

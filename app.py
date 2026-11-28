@@ -1175,20 +1175,14 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
         # 重启机器人服务
         if self.path == "/api/system/restart":
-            menu_fsm._execute_power_action("restart")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "restarting"}, ensure_ascii=False).encode("utf-8"))
+            res = menu_fsm._execute_power_action("restart", async_exec=True)
+            self._send_json(res if isinstance(res, dict) else {"ok": True, "status": "restarting"})
             return
 
         # 安全关闭系统
         if self.path == "/api/system/shutdown":
-            menu_fsm._execute_power_action("shutdown")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "shutting_down"}, ensure_ascii=False).encode("utf-8"))
+            res = menu_fsm._execute_power_action("shutdown", async_exec=True)
+            self._send_json(res if isinstance(res, dict) else {"ok": True, "status": "shutting_down"})
             return
 
         # Wi-Fi 配网连接

@@ -136,6 +136,24 @@ def run(action="query", value="", **kwargs):
             "behavior": {"emotion": "HAPPY" if enable else "SLEEPY", "action": "NOD"}
         }
 
+    # 0.6 安全关机 / 重启服务
+    if any(k in act for k in ["power", "shutdown", "poweroff", "reboot", "restart", "关机", "重启"]):
+        p_act = "restart" if any(w in (act + " " + val_str) for w in ["restart", "reboot", "重启"]) else "shutdown"
+        try:
+            from core.menu_fsm import menu_fsm
+            if menu_fsm and hasattr(menu_fsm, "_execute_power_action"):
+                res = menu_fsm._execute_power_action(p_act, async_exec=True)
+                ok = bool(res.get("ok", False)) if isinstance(res, dict) else True
+                msg = (res.get("message") if isinstance(res, dict) else "") or ("正在执行关机..." if p_act == "shutdown" else "正在重启服务...")
+                return {
+                    "status": "success" if ok else "error",
+                    "message": msg,
+                    "behavior": {"emotion": "SLEEPY" if (ok and p_act == "shutdown") else "NORMAL", "action": "NOD"},
+                }
+        except Exception as e:
+            return {"status": "error", "message": f"执行{p_act}失败: {e}"}
+        return {"status": "error", "message": "未找到电源控制中枢，无法执行关机/重启"}
+
     # 1. 人脸视线追踪开关
     if "face" in act or "track" in act or "注视" in act or "人脸" in act or "摄像头" in act:
         enable = val_str in ["true", "1", "on", "yes", "开启", "打开", "开"]
